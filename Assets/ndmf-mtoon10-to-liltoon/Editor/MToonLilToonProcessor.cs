@@ -1,0 +1,396 @@
+using System.Collections.Generic;
+using System.Linq;
+using UnityEngine;
+
+namespace NdmfMToon10ToLilToon
+{
+    internal static class MToonLilToonProcessor
+    {
+        internal static void ApplyOnBuild(MToonLilToonComponent component)
+        {
+            var renderer = component.GetComponent<Renderer>();
+            if (renderer == null || component.lilToonShader == null) return;
+
+            var report = new ConversionReport();
+            var original = renderer.sharedMaterials;
+            var result = new List<Material>(original.Length);
+            var resultSourceIndices = new List<int>(original.Length);
+            var transparentRanks = BuildTransparentRanks(original);
+
+            report.ScannedMaterialCount = original.Length;
+
+            var selectedForMerge = component.enableHairMerge
+                ? component.hairSelections.Where(s => s.selected && s.material != null).Select(s => s.material).ToHashSet()
+                : new HashSet<Material>();
+
+            RenderType? mergeType = selectedForMerge.Count > 0
+                ? RenderTypeResolver.ResolveMergeType(selectedForMerge)
+                : null;
+            var mergedMaterialCreated = false;
+            Material mergedMaterial = null;
+            var mergedIndices = new List<int>();
+            var mergedRects = new List<Rect>();
+
+            for (var i = 0; i < original.Length; i++)
+            {
+                var source = original[i];
+                if (source == null)
+                {
+                    result.Add(null);
+                    resultSourceIndices.Add(i);
+                    report.SkippedMaterialCount++;
+                    continue;
+                }
+
+                var mergeExcluded = mergeType.HasValue
+                    && selectedForMerge.Contains(source)
+                    && RenderTypeResolver.ResolveFromMaterial(source) != mergeType.Value;
+                if (mergeExcluded)
+                {
+                    report.Warnings.Add(new ConversionWarning($"{source.name}: skipped hair merge due to render type mismatch"));
+                }
+
+                var canMerge = !mergeExcluded && mergeType.HasValue && selectedForMerge.Contains(source);
+                if (MToonToLilToonMapper.TryConvert(source, component.lilToonShader, component.globalOverrides, out var converted, report))
+                {
+                    result.Add(converted);
+                    report.ConvertedMaterialCount++;
+                    if (canMerge)
+                    {
+                        mergedIndices.Add(i);
+                    }
+                    resultSourceIndices.Add(i);
+                }
+                else
+                {
+                    result.Add(source);
+                    report.SkippedMaterialCount++;
+                    report.Warnings.Add(new ConversionWarning($"{source.name}: skipped (not convertible)"));
+                    resultSourceIndices.Add(i);
+                }
+            }
+
+            if (mergedIndices.Count >= 2
+                && TryMergeHairMaterials(original, mergedIndices, component.lilToonShader, component.globalOverrides, report, out mergedMaterial, out mergedRects))
+            {
+                mergedMaterialCreated = true;
+                var mergedRepresentativeIndex = mergedIndices
+                    .OrderBy(i => transparentRanks.TryGetValue(i, out var rank) ? rank : int.MaxValue)
+                    .ThenBy(i => i)
+                    .First();
+                ApplyMergedMaterialAndMesh(renderer, result, resultSourceIndices, mergedIndices, mergedRepresentativeIndex, mergedMaterial, mergedRects, report);
+            }
+
+            if (!mergedMaterialCreated && mergedIndices.Count >= 2)
+            {
+                report.Warnings.Add(new ConversionWarning("hair merge/atlas failed, fallback to per-material conversion"));
+            }
+
+            ReindexTransparentQueues(result, resultSourceIndices, transparentRanks);
+            renderer.sharedMaterials = result.ToArray();
+            component.scannedMaterialCount = report.ScannedMaterialCount;
+            component.convertedMaterialCount = report.ConvertedMaterialCount;
+            component.skippedMaterialCount = report.SkippedMaterialCount;
+            component.warnings = report.Warnings.Select(w => w.Message).ToList();
+            component.unsupportedProperties = report.UnsupportedPropertySummary.Select(kv => $"{kv.Key}:{kv.Value}").ToList();
+        }
+
+        private static bool TryMergeHairMaterials(
+            IReadOnlyList<Material> original,
+            IReadOnlyList<int> mergedIndices,
+            Shader lilToonShader,
+            LilToonGlobalOverrides overrides,
+            ConversionReport report,
+            out Material mergedMaterial,
+            out List<Rect> atlasRects)
+        {
+            mergedMaterial = null;
+            atlasRects = null;
+
+            if (!MToonToLilToonMapper.TryConvert(original[mergedIndices[0]], lilToonShader, overrides, out mergedMaterial, report))
+            {
+                return false;
+            }
+
+            var atlasTextures = new List<Texture2D>();
+            for (var i = 0; i < mergedIndices.Count; i++)
+            {
+                var source = original[mergedIndices[i]];
+                Texture texture = null;
+                if (source != null)
+                {
+                    if (source.HasProperty("_BaseMap")) texture = source.GetTexture("_BaseMap");
+                    else if (source.HasProperty("_MainTex")) texture = source.GetTexture("_MainTex");
+                }
+
+                atlasTextures.Add(ToReadableTexture(texture));
+            }
+
+            if (atlasTextures.All(t => t == null))
+            {
+                atlasRects = mergedIndices.Select(_ => new Rect(0f, 0f, 1f, 1f)).ToList();
+                return true;
+            }
+
+            var fallback = NewSolidTexture(Color.white);
+            var atlasMaxSize = ResolveAtlasMaxSize(atlasTextures, mergedIndices.Count);
+            var packTextures = PrepareBaseAtlasTextures(atlasTextures, fallback, atlasMaxSize, mergedIndices.Count);
+            var atlas = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+            atlasRects = atlas.PackTextures(packTextures, 2, atlasMaxSize, false).ToList();
+            mergedMaterial.SetTexture("_MainTex", atlas);
+
+            BakeOptionalAtlas(new[] { "_ShadowColorTex", "_Shadow1stColorTex" }, original, mergedIndices, mergedMaterial, new[] { "_ShadeMap", "_ShadeMultiplyTexture" }, atlas.width, atlas.height, atlasRects);
+            BakeOptionalAtlas(new[] { "_EmissionMap" }, original, mergedIndices, mergedMaterial, new[] { "_EmissiveMap", "_EmissionMap" }, atlas.width, atlas.height, atlasRects);
+            BakeOptionalAtlas(new[] { "_BumpMap" }, original, mergedIndices, mergedMaterial, new[] { "_NormalMap", "_BumpMap" }, atlas.width, atlas.height, atlasRects);
+            BakeOptionalAtlas(new[] { "_OutlineMask", "_OutlineTex" }, original, mergedIndices, mergedMaterial, new[] { "_OutlineWidthMultiplyTexture", "_OutlineMask" }, atlas.width, atlas.height, atlasRects);
+
+            return true;
+        }
+
+        private static Texture2D[] PrepareBaseAtlasTextures(IReadOnlyList<Texture2D> sourceTextures, Texture2D fallback, int atlasSize, int textureCount)
+        {
+            var prepared = sourceTextures.Select(t => t ?? fallback).ToArray();
+            if (textureCount < 22) return prepared;
+
+            var maxWidth = prepared.Max(t => t.width);
+            var maxHeight = prepared.Max(t => t.height);
+            const int columns = 8;
+            const int rows = 4;
+            const int padding = 2;
+
+            var scaleX = (atlasSize - (columns - 1) * padding) / (float)(columns * maxWidth);
+            var scaleY = (atlasSize - (rows - 1) * padding) / (float)(rows * maxHeight);
+            var scale = Mathf.Min(scaleX, scaleY, 1f);
+            if (scale >= 0.999f) return prepared;
+
+            var resized = new Texture2D[prepared.Length];
+            for (var i = 0; i < prepared.Length; i++)
+            {
+                resized[i] = ResizeTexture(prepared[i], Mathf.Max(1, Mathf.RoundToInt(prepared[i].width * scale)), Mathf.Max(1, Mathf.RoundToInt(prepared[i].height * scale)));
+            }
+
+            return resized;
+        }
+
+        private static void BakeOptionalAtlas(IReadOnlyList<string> destinationProperties, IReadOnlyList<Material> original, IReadOnlyList<int> mergedIndices, Material mergedMaterial, IReadOnlyList<string> sourceProperties, int atlasWidth, int atlasHeight, IReadOnlyList<Rect> rects)
+        {
+            var destinationProperty = destinationProperties.FirstOrDefault(mergedMaterial.HasProperty);
+            if (string.IsNullOrEmpty(destinationProperty)) return;
+
+            var textures = new List<Texture2D>();
+            for (var i = 0; i < mergedIndices.Count; i++)
+            {
+                var source = original[mergedIndices[i]];
+                Texture texture = null;
+                if (source != null)
+                {
+                    var sourceProperty = sourceProperties.FirstOrDefault(source.HasProperty);
+                    if (!string.IsNullOrEmpty(sourceProperty))
+                    {
+                        texture = source.GetTexture(sourceProperty);
+                    }
+                }
+                textures.Add(ToReadableTexture(texture));
+            }
+
+            if (textures.All(t => t == null)) return;
+            var fallback = NewSolidTexture(Color.white);
+            var atlas = new Texture2D(atlasWidth, atlasHeight, TextureFormat.RGBA32, false);
+            atlas.SetPixels(Enumerable.Repeat(new Color(0f, 0f, 0f, 0f), atlasWidth * atlasHeight).ToArray());
+            for (var i = 0; i < textures.Count && i < rects.Count; i++)
+            {
+                var src = textures[i] ?? fallback;
+                var rect = rects[i];
+                var pixelWidth = Mathf.Max(1, Mathf.RoundToInt(rect.width * atlasWidth));
+                var pixelHeight = Mathf.Max(1, Mathf.RoundToInt(rect.height * atlasHeight));
+                var pixelX = Mathf.RoundToInt(rect.x * atlasWidth);
+                var pixelY = Mathf.RoundToInt(rect.y * atlasHeight);
+                var resized = ResizeTexture(src, pixelWidth, pixelHeight);
+                atlas.SetPixels(pixelX, pixelY, pixelWidth, pixelHeight, resized.GetPixels());
+            }
+            atlas.Apply();
+            mergedMaterial.SetTexture(destinationProperty, atlas);
+        }
+
+        private static int ResolveAtlasMaxSize(IReadOnlyList<Texture2D> textures, int textureCount)
+        {
+            if (textureCount >= 22) return 4096;
+
+            var maxWidth = 1;
+            var maxHeight = 1;
+            for (var i = 0; i < textures.Count; i++)
+            {
+                var texture = textures[i];
+                if (texture == null) continue;
+                if (texture.width > maxWidth) maxWidth = texture.width;
+                if (texture.height > maxHeight) maxHeight = texture.height;
+            }
+
+            var width = maxWidth * 7;
+            var height = maxHeight * 3;
+            var required = Mathf.NextPowerOfTwo(Mathf.Max(width, height));
+            return Mathf.Clamp(required, 1024, 16384);
+        }
+
+        private static Texture2D ResizeTexture(Texture2D source, int width, int height)
+        {
+            var rt = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear);
+            var current = RenderTexture.active;
+            Graphics.Blit(source, rt);
+            RenderTexture.active = rt;
+            var resized = new Texture2D(width, height, TextureFormat.RGBA32, false);
+            resized.ReadPixels(new Rect(0, 0, width, height), 0, 0);
+            resized.Apply();
+            RenderTexture.active = current;
+            RenderTexture.ReleaseTemporary(rt);
+            return resized;
+        }
+
+        private static Texture2D ToReadableTexture(Texture texture)
+        {
+            if (texture == null) return null;
+            var width = texture.width;
+            var height = texture.height;
+            var rt = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear);
+            var current = RenderTexture.active;
+            Graphics.Blit(texture, rt);
+            RenderTexture.active = rt;
+            var readable = new Texture2D(width, height, TextureFormat.RGBA32, false);
+            readable.ReadPixels(new Rect(0, 0, width, height), 0, 0);
+            readable.Apply();
+            RenderTexture.active = current;
+            RenderTexture.ReleaseTemporary(rt);
+            return readable;
+        }
+
+        private static Texture2D NewSolidTexture(Color color)
+        {
+            var texture = new Texture2D(4, 4, TextureFormat.RGBA32, false);
+            var colors = Enumerable.Repeat(color, 16).ToArray();
+            texture.SetPixels(colors);
+            texture.Apply();
+            return texture;
+        }
+
+        private static void ApplyMergedMaterialAndMesh(Renderer renderer, List<Material> materials, List<int> materialSourceIndices, IReadOnlyList<int> mergedIndices, int mergedRepresentativeSourceIndex, Material mergedMaterial, IReadOnlyList<Rect> rects, ConversionReport report)
+        {
+            var mergedIndexSet = mergedIndices.ToHashSet();
+            var newMaterials = new List<Material> { mergedMaterial };
+            var newSourceIndices = new List<int> { mergedRepresentativeSourceIndex };
+
+            var mesh = renderer switch
+            {
+                SkinnedMeshRenderer skinned => skinned.sharedMesh,
+                MeshRenderer _ => renderer.GetComponent<MeshFilter>()?.sharedMesh,
+                _ => null
+            };
+            if (mesh == null)
+            {
+                for (var i = 0; i < materials.Count; i++)
+                {
+                    if (mergedIndexSet.Contains(i)) continue;
+                    newMaterials.Add(materials[i]);
+                    if (i < materialSourceIndices.Count) newSourceIndices.Add(materialSourceIndices[i]);
+                }
+                materials.Clear();
+                materials.AddRange(newMaterials);
+                materialSourceIndices.Clear();
+                materialSourceIndices.AddRange(newSourceIndices);
+                return;
+            }
+
+            var meshCopy = Object.Instantiate(mesh);
+            var uv = meshCopy.uv;
+            for (var i = 0; i < mergedIndices.Count && i < rects.Count; i++)
+            {
+                var subMeshIndex = mergedIndices[i];
+                if (subMeshIndex < 0 || subMeshIndex >= meshCopy.subMeshCount) continue;
+                var rect = rects[i];
+                var triangles = meshCopy.GetTriangles(subMeshIndex);
+                for (var t = 0; t < triangles.Length; t++)
+                {
+                    var vertexIndex = triangles[t];
+                    var src = uv[vertexIndex];
+                    uv[vertexIndex] = new Vector2(rect.x + src.x * rect.width, rect.y + src.y * rect.height);
+                }
+            }
+            meshCopy.uv = uv;
+
+            var newSubMeshTriangles = new List<int[]>();
+            var mergedTriangles = new List<int>();
+            for (var i = 0; i < mesh.subMeshCount; i++)
+            {
+                if (mergedIndexSet.Contains(i))
+                {
+                    mergedTriangles.AddRange(meshCopy.GetTriangles(i));
+                    continue;
+                }
+
+                newSubMeshTriangles.Add(meshCopy.GetTriangles(i));
+                if (i >= 0 && i < materials.Count)
+                {
+                    newMaterials.Add(materials[i]);
+                    if (i < materialSourceIndices.Count) newSourceIndices.Add(materialSourceIndices[i]);
+                }
+            }
+
+            var firstOutputIndex = 0;
+            meshCopy.subMeshCount = newSubMeshTriangles.Count + 1;
+            meshCopy.SetTriangles(mergedTriangles.ToArray(), firstOutputIndex, false);
+            for (var i = 0; i < newSubMeshTriangles.Count; i++)
+            {
+                meshCopy.SetTriangles(newSubMeshTriangles[i], i + 1, false);
+            }
+
+            switch (renderer)
+            {
+                case SkinnedMeshRenderer skinned:
+                    skinned.sharedMesh = meshCopy;
+                    break;
+                case MeshRenderer meshRenderer:
+                    var filter = meshRenderer.GetComponent<MeshFilter>();
+                    if (filter != null) filter.sharedMesh = meshCopy;
+                    break;
+            }
+
+            materials.Clear();
+            materials.AddRange(newMaterials);
+            materialSourceIndices.Clear();
+            materialSourceIndices.AddRange(newSourceIndices);
+            report.Warnings.Add(new ConversionWarning("hair materials merged with atlas"));
+        }
+
+        private static Dictionary<int, int> BuildTransparentRanks(IReadOnlyList<Material> original)
+        {
+            var ranked = new List<(int index, int queue)>();
+            for (var i = 0; i < original.Count; i++)
+            {
+                var material = original[i];
+                if (material == null) continue;
+                if (RenderTypeResolver.ResolveFromMaterial(material) != RenderType.Transparent) continue;
+                ranked.Add((i, material.renderQueue));
+            }
+
+            ranked = ranked.OrderBy(p => p.queue).ThenBy(p => p.index).ToList();
+            var result = new Dictionary<int, int>(ranked.Count);
+            for (var i = 0; i < ranked.Count; i++)
+            {
+                result[ranked[i].index] = i;
+            }
+            return result;
+        }
+
+        private static void ReindexTransparentQueues(IReadOnlyList<Material> materials, IReadOnlyList<int> sourceIndices, IReadOnlyDictionary<int, int> transparentRanks)
+        {
+            for (var i = 0; i < materials.Count; i++)
+            {
+                var material = materials[i];
+                if (material == null) continue;
+                if (i >= sourceIndices.Count) continue;
+                var sourceIndex = sourceIndices[i];
+                if (!transparentRanks.TryGetValue(sourceIndex, out var rank)) continue;
+                material.renderQueue = 2460 + rank;
+            }
+        }
+    }
+}
