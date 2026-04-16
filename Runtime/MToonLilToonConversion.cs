@@ -212,7 +212,7 @@ namespace NdmfMToon10ToLilToon
                 ApplyTransparentMode(converted, renderType);
                 ApplyTransparentZWrite(converted, renderType, transparentWithZWrite);
                 ApplyRenderTypeTag(converted, renderType);
-                TryFinalizeLilToonMaterial(converted, renderType, report);
+                TryFinalizeLilToonMaterial(converted, report);
                 // lilToon 側セットアップで値が初期化される場合があるため、最後に再適用する。
                 ApplyOutlineState(source, converted);
                 ApplyShadowState(source, converted);
@@ -679,7 +679,7 @@ namespace NdmfMToon10ToLilToon
             return false;
         }
 
-        private static void TryFinalizeLilToonMaterial(Material material, RenderType renderType, ConversionReport report)
+        private static void TryFinalizeLilToonMaterial(Material material, ConversionReport report)
         {
             if (material == null) return;
 
@@ -696,13 +696,6 @@ namespace NdmfMToon10ToLilToon
                     .ToArray();
                 if (methods.Length == 0) return;
 
-                var mode = renderType switch
-                {
-                    RenderType.Opaque => 0,
-                    RenderType.Cutout => 1,
-                    _ => 2,
-                };
-
                 foreach (var method in methods)
                 {
                     var parameters = method.GetParameters();
@@ -710,22 +703,6 @@ namespace NdmfMToon10ToLilToon
                     {
                         method.Invoke(null, new object[] { material });
                         return;
-                    }
-
-                    if (parameters.Length == 2 && parameters[0].ParameterType == typeof(Material))
-                    {
-                        if (parameters[1].ParameterType == typeof(int))
-                        {
-                            method.Invoke(null, new object[] { material, mode });
-                            return;
-                        }
-
-                        if (parameters[1].ParameterType.IsEnum)
-                        {
-                            var enumValue = Enum.ToObject(parameters[1].ParameterType, mode);
-                            method.Invoke(null, new[] { (object)material, enumValue });
-                            return;
-                        }
                     }
                 }
             }
