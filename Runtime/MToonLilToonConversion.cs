@@ -108,6 +108,12 @@ namespace NdmfMToon10ToLilToon
                 if (blendMode >= 2) return RenderType.Transparent;
             }
 
+            if (material.IsKeywordEnabled("_ALPHATEST_ON")) return RenderType.Cutout;
+            if (material.IsKeywordEnabled("_ALPHABLEND_ON")) return RenderType.Transparent;
+
+            if (material.renderQueue >= (int)RenderQueue.Transparent) return RenderType.Transparent;
+            if (material.renderQueue >= (int)RenderQueue.AlphaTest) return RenderType.Cutout;
+
             return RenderType.Opaque;
         }
 
@@ -181,7 +187,9 @@ namespace NdmfMToon10ToLilToon
             {
                 var renderType = RenderTypeResolver.ResolveFromMaterial(source);
                 var transparentWithZWrite = IsTransparentWithZWrite(source, renderType);
-                converted = new Material(lilToonShader)
+                var hasOutline = HasOutline(source);
+                var destinationShader = ResolveLilToonBakedShader(lilToonShader, renderType, transparentWithZWrite, hasOutline);
+                converted = new Material(destinationShader)
                 {
                     name = $"{source.name}_lilToon",
                 };
@@ -189,18 +197,24 @@ namespace NdmfMToon10ToLilToon
                 CopyColor(source, converted, new[] { "_BaseColor", "_Color" }, new[] { "_Color", "_BaseColor" }, report);
                 CopyTexture(source, converted, new[] { "_BaseMap", "_MainTex" }, new[] { "_MainTex", "_BaseMap" }, report);
                 CopyColor(source, converted, new[] { "_ShadeColor", "_ShadeColorFactor" }, new[] { "_ShadowColor", "_Shadow1stColor" }, report);
-                CopyTexture(source, converted, new[] { "_ShadeMap", "_ShadeMultiplyTexture", "_ShadeColorTexture" }, new[] { "_ShadowColorTex", "_Shadow1stColorTex" }, report);
-                CopyFloat(source, converted, new[] { "_ShadingShiftFactor" }, new[] { "_ShadowBorder" }, report);
-                CopyFloat(source, converted, new[] { "_ShadingToonyFactor" }, new[] { "_ShadowBlur" }, report);
+                ApplyShadeTextureMapping(source, converted, report);
+                ApplyShadingFactorMapping(source, converted);
                 CopyTexture(source, converted, new[] { "_NormalMap", "_BumpMap" }, new[] { "_BumpMap", "_NormalMap" }, report);
                 CopyColor(source, converted, new[] { "_EmissiveFactor", "_EmissionColor" }, new[] { "_EmissionColor" }, report);
                 CopyTexture(source, converted, new[] { "_EmissiveMap", "_EmissionMap" }, new[] { "_EmissionMap" }, report);
+                CopyColor(source, converted, new[] { "_OutlineColorFactor", "_OutlineColor" }, new[] { "_OutlineColor" }, report);
+                CopyTexture(source, converted, new[] { "_OutlineWidthMultiplyTexture", "_OutlineMask" }, new[] { "_OutlineWidthMask", "_OutlineMask" }, report);
 
                 ApplyRenderState(source, converted, report);
+                ApplyOutlineState(source, converted);
+                ApplyShadowState(source, converted);
                 ApplyFallback(source, converted, renderType);
-                ApplyRenderQueue(converted, renderType);
+                ApplyRenderQueue(source, converted, renderType);
                 ApplyTransparentMode(converted, renderType);
                 ApplyTransparentZWrite(converted, renderType, transparentWithZWrite);
+                ApplyRenderTypeTag(converted, renderType);
+                ApplyOutlineState(source, converted);
+                ApplyShadowState(source, converted);
                 ApplyLilToonOverrides(converted, overrides);
                 ApplyShadow2OpacityZero(converted);
 
@@ -231,6 +245,107 @@ namespace NdmfMToon10ToLilToon
             return source.HasProperty("_ZWrite") && source.GetFloat("_ZWrite") > 0.5f;
         }
 
+        private static Shader ResolveLilToonBakedShader(Shader fallbackShader, RenderType renderType, bool transparentWithZWrite, bool hasOutline)
+        {
+            string hiddenShaderName;
+            switch (renderType)
+            {
+                case RenderType.Opaque:
+                    hiddenShaderName = hasOutline ? "Hidden/lilToonOutline" : "Hidden/lilToon";
+                    break;
+                case RenderType.Cutout:
+                    hiddenShaderName = hasOutline ? "Hidden/lilToonCutoutOutline" : "Hidden/lilToonCutout";
+                    break;
+                case RenderType.Transparent:
+                    hiddenShaderName = transparentWithZWrite
+                        ? (hasOutline ? "Hidden/lilToonTransparentOutlineZWrite" : "Hidden/lilToonTransparentZWrite")
+                        : (hasOutline ? "Hidden/lilToonTransparentOutline" : "Hidden/lilToonTransparent");
+                    break;
+                default:
+                    hiddenShaderName = hasOutline ? "Hidden/lilToonOutline" : "Hidden/lilToon";
+                    break;
+            }
+
+            var hidden = Shader.Find(hiddenShaderName);
+            if (hidden == null && hasOutline)
+            {
+                var nonOutlineName = hiddenShaderName
+                    .Replace("OutlineZWrite", "ZWrite")
+                    .Replace("Outline", string.Empty);
+                hidden = Shader.Find(nonOutlineName);
+            }
+            return hidden != null ? hidden : fallbackShader;
+        }
+
+        private static void ApplyShadingFactorMapping(Material source, Material destination)
+        {
+            if (source == null || destination == null) return;
+
+            if (source.HasProperty("_ShadingShiftFactor"))
+            {
+                // MToon: -1 で影が覆い尽くす / +1 で影が消える（レンジ -1..1）
+                // lilToon: 1 で影が覆い尽くす / 0 で影が消える（レンジ 0..1）
+                var shift = Mathf.Clamp(source.GetFloat("_ShadingShiftFactor"), -1f, 1f);
+                SetIfExists(destination, "_ShadowBorder", (1f - shift) * 0.5f);
+            }
+
+            if (source.HasProperty("_ShadingToonyFactor"))
+            {
+                // MToon: 値が大きいほどくっきり
+                // lilToon _ShadowBlur: 値が大きいほどぼかし
+                var toony = Mathf.Clamp01(source.GetFloat("_ShadingToonyFactor"));
+                SetIfExists(destination, "_ShadowBlur", 1f - toony);
+            }
+        }
+
+        private static void ApplyShadeTextureMapping(Material source, Material destination, ConversionReport report)
+        {
+            if (source == null || destination == null) return;
+
+            if (!TryFindExistingProperty(source, new[] { "_ShadeMap", "_ShadeMultiplyTexture", "_ShadeColorTexture" }, out var shadeProp))
+            {
+                ApplyShadowTextureUsage(destination, false);
+                return;
+            }
+
+            if (!TryFindExistingProperty(destination, new[] { "_ShadowColorTex", "_Shadow1stColorTex" }, out var destinationShadeProp))
+            {
+                report?.RegisterUnsupported(shadeProp);
+                return;
+            }
+
+            var shadeTex = source.GetTexture(shadeProp);
+            if (shadeTex == null)
+            {
+                destination.SetTexture(destinationShadeProp, null);
+                ApplyShadowTextureUsage(destination, false);
+                return;
+            }
+
+            Texture baseTex = null;
+            if (source.HasProperty("_BaseMap")) baseTex = source.GetTexture("_BaseMap");
+            else if (source.HasProperty("_MainTex")) baseTex = source.GetTexture("_MainTex");
+
+            // MToon 側で shade テクスチャが base と同一の場合、
+            // lilToon では乗算が強く出て影が濃くなりやすいので転送しない。
+            if (baseTex != null && shadeTex == baseTex)
+            {
+                destination.SetTexture(destinationShadeProp, null);
+                ApplyShadowTextureUsage(destination, false);
+                return;
+            }
+
+            destination.SetTexture(destinationShadeProp, shadeTex);
+            ApplyShadowTextureUsage(destination, true);
+        }
+
+        private static void ApplyShadowTextureUsage(Material destination, bool enabled)
+        {
+            if (destination == null) return;
+            SetIfExists(destination, "_UseShadowColorTex", enabled ? 1f : 0f);
+            SetIfExists(destination, "_UseShadow1stColorTex", enabled ? 1f : 0f);
+        }
+
         private static void ApplyLilToonOverrides(Material material, LilToonGlobalOverrides overrides)
         {
             if (overrides == null) return;
@@ -240,6 +355,82 @@ namespace NdmfMToon10ToLilToon
             SetIfExists(material, "_DistanceFade", overrides.distanceFadeStrength);
             SetIfExists(material, "_BacklightColor", overrides.backlightColor);
             SetIfExists(material, "_BacklightStrength", overrides.backlightStrength);
+        }
+
+        private static void ApplyShadowState(Material source, Material destination)
+        {
+            if (source == null || destination == null) return;
+
+            var useShadow = true;
+            if (source.HasProperty("_ReceiveShadowRate"))
+            {
+                useShadow = source.GetFloat("_ReceiveShadowRate") > 0.001f;
+            }
+
+            SetIfExists(destination, "_UseShadow", useShadow ? 1f : 0f);
+            SetIfExists(destination, "_ReceiveShadowRate", useShadow ? 1f : 0f);
+            SetIfExists(destination, "_ShadowEnvStrength", 0.5f);
+        }
+
+        private static void ApplyOutlineState(Material source, Material destination)
+        {
+            if (source == null || destination == null) return;
+
+            var useOutline = HasOutline(source);
+            if (useOutline)
+            {
+                // Inspector での OFF->ON トグルと同等の状態遷移を先に入れる。
+                SetIfExists(destination, "_UseOutline", 0f);
+                SetIfExists(destination, "_OutlineEnable", 0f);
+                destination.DisableKeyword("_OUTLINE_ON");
+                destination.SetShaderPassEnabled("Outline", false);
+
+                SetIfExists(destination, "_UseOutline", 1f);
+                SetIfExists(destination, "_OutlineEnable", 1f);
+                destination.EnableKeyword("_OUTLINE_ON");
+                destination.SetShaderPassEnabled("Outline", true);
+            }
+            else
+            {
+                SetIfExists(destination, "_UseOutline", 0f);
+                SetIfExists(destination, "_OutlineEnable", 0f);
+                destination.DisableKeyword("_OUTLINE_ON");
+                destination.SetShaderPassEnabled("Outline", false);
+            }
+
+            if (!useOutline)
+            {
+                SetIfExists(destination, "_OutlineWidth", 0f);
+                return;
+            }
+
+            var sourceWidth = 0f;
+            if (source.HasProperty("_OutlineWidthFactor")) sourceWidth = source.GetFloat("_OutlineWidthFactor");
+            else if (source.HasProperty("_OutlineWidth")) sourceWidth = source.GetFloat("_OutlineWidth");
+
+            // MToon と lilToon で輪郭線の幅スケールが大きく異なるため補正する。
+            SetIfExists(destination, "_OutlineWidth", sourceWidth * 80f);
+            SetIfExists(destination, "_OutlineCull", (float)CullMode.Front);
+
+            var sourceMainTex = source.HasProperty("_BaseMap")
+                ? source.GetTexture("_BaseMap")
+                : source.HasProperty("_MainTex")
+                    ? source.GetTexture("_MainTex")
+                    : null;
+            if (sourceMainTex == null) return;
+
+            // MToon には _OutlineTex がないため、常にメインテクスチャを割り当てる。
+            if (destination.HasProperty("_OutlineTex"))
+            {
+                destination.SetTexture("_OutlineTex", sourceMainTex);
+            }
+
+            if (!source.HasProperty("_OutlineWidthMultiplyTexture")) return;
+            var sourceOutlineWidthMask = source.GetTexture("_OutlineWidthMultiplyTexture");
+            if (sourceOutlineWidthMask == null) return;
+
+            SetTextureIfExists(destination, "_OutlineWidthMask", sourceOutlineWidthMask);
+            SetTextureIfExists(destination, "_OutlineMask", sourceOutlineWidthMask);
         }
 
         private static void ApplyFallback(Material source, Material destination, RenderType renderType)
@@ -255,17 +446,42 @@ namespace NdmfMToon10ToLilToon
             destination.SetOverrideTag("VRCFallback", fallback);
         }
 
-        private static void ApplyRenderQueue(Material destination, RenderType renderType)
+        private static void ApplyRenderQueue(Material source, Material destination, RenderType renderType)
         {
-            if (renderType == RenderType.Transparent)
+            var queueOffset = ResolveRenderQueueOffset(source, renderType);
+
+            switch (renderType)
             {
-                destination.renderQueue = 2460;
-                return;
+                case RenderType.Opaque:
+                    destination.renderQueue = (int)RenderQueue.Geometry;
+                    return;
+                case RenderType.Cutout:
+                    destination.renderQueue = (int)RenderQueue.AlphaTest;
+                    return;
+                case RenderType.Transparent:
+                    // VRChat アバター向け運用では 2460 開始の帯を使い、
+                    // 個々のマテリアルは後段の ReindexTransparentQueues で詰めて再採番する。
+                    destination.renderQueue = 2460 + queueOffset;
+                    return;
+            }
+        }
+
+        private static int ResolveRenderQueueOffset(Material source, RenderType renderType)
+        {
+            if (source == null || renderType != RenderType.Transparent) return 0;
+
+            var offset = 0;
+            if (source.HasProperty("_RenderQueueOffsetNumber"))
+            {
+                offset = Mathf.RoundToInt(source.GetFloat("_RenderQueueOffsetNumber"));
+            }
+            else if (source.HasProperty("_RenderQueueOffset"))
+            {
+                offset = Mathf.RoundToInt(source.GetFloat("_RenderQueueOffset"));
             }
 
-            destination.renderQueue = renderType == RenderType.Cutout
-                ? (int)RenderQueue.AlphaTest
-                : (int)RenderQueue.Geometry;
+            // VRoid 等で不適切な queue 値が入っていても、offset は安全側で小さく保つ。
+            return Mathf.Clamp(offset, -9, 9);
         }
 
         private static bool HasOutline(Material source)
@@ -294,9 +510,12 @@ namespace NdmfMToon10ToLilToon
         private static void ApplyRenderState(Material source, Material destination, ConversionReport report)
         {
             CopyFloat(source, destination, new[] { "_AlphaCutoff", "_Cutoff" }, new[] { "_Cutoff" }, report);
-            CopyFloat(source, destination, new[] { "_CullMode", "_Cull" }, new[] { "_Cull" }, report);
+            ApplyCullState(source, destination, report);
             CopyFloat(source, destination, new[] { "_SrcBlend" }, new[] { "_SrcBlend" }, report);
             CopyFloat(source, destination, new[] { "_DstBlend" }, new[] { "_DstBlend" }, report);
+            CopyFloat(source, destination, new[] { "_ZWrite" }, new[] { "_ZWrite" }, report);
+            CopyFloat(source, destination, new[] { "_ZTest" }, new[] { "_ZTest" }, report);
+            CopyFloat(source, destination, new[] { "_ColorMask" }, new[] { "_ColorMask" }, report);
 
             if (source.HasProperty("_BaseMap"))
             {
@@ -311,6 +530,37 @@ namespace NdmfMToon10ToLilToon
             var renderType = RenderTypeResolver.ResolveFromMaterial(source);
             ApplyAlphaMode(source, destination, renderType);
             ApplyBlendSetup(destination, renderType);
+        }
+
+        private static void ApplyCullState(Material source, Material destination, ConversionReport report)
+        {
+            if (source == null || destination == null) return;
+
+            // MToon10 は glTF doubleSided 由来で _DoubleSided を利用することがある。
+            // この値が true の場合は lilToon 側を Cull Off に揃える。
+            if (source.HasProperty("_DoubleSided"))
+            {
+                var doubleSided = source.GetFloat("_DoubleSided") > 0.5f;
+                var cull = doubleSided ? (float)CullMode.Off : (float)CullMode.Back;
+                SetIfExists(destination, "_Cull", cull);
+                return;
+            }
+
+            if (TryFindExistingProperty(source, new[] { "_CullMode", "_Cull" }, out var sourceCull))
+            {
+                var cull = source.GetFloat(sourceCull);
+                SetIfExists(destination, "_Cull", cull);
+                return;
+            }
+
+            // 旧式 MToon では culling が keyword で制御される場合がある。
+            if (source.IsKeywordEnabled("_CULL_OFF"))
+            {
+                SetIfExists(destination, "_Cull", (float)CullMode.Off);
+                return;
+            }
+
+            report?.RegisterUnsupported("CullMode");
         }
 
         private static void ApplyShadow2OpacityZero(Material destination)
@@ -366,10 +616,24 @@ namespace NdmfMToon10ToLilToon
         private static void SetIfExists(Material material, string propertyName, float value)
         {
             if (!material.HasProperty(propertyName)) return;
-            if (TryGetPropertyType(material, propertyName, out var propertyType)
-                && propertyType != ShaderPropertyType.Float
-                && propertyType != ShaderPropertyType.Range) return;
+            if (TryGetPropertyType(material, propertyName, out var propertyType) && !IsNumericPropertyType(propertyType)) return;
             material.SetFloat(propertyName, value);
+        }
+
+        private static void SetTextureIfExists(Material material, string propertyName, Texture texture)
+        {
+            if (material == null || texture == null) return;
+            if (!material.HasProperty(propertyName)) return;
+            material.SetTexture(propertyName, texture);
+        }
+
+        private static bool IsNumericPropertyType(ShaderPropertyType propertyType)
+        {
+            // Unity バージョン差で ShaderPropertyType.Int が存在しない場合があるため、
+            // enum 比較ではなく名前比較で Int を許可する。
+            return propertyType == ShaderPropertyType.Float
+                || propertyType == ShaderPropertyType.Range
+                || propertyType.ToString() == "Int";
         }
 
         private static void ApplyAlphaMode(Material source, Material destination, RenderType renderType)
@@ -386,17 +650,23 @@ namespace NdmfMToon10ToLilToon
                     destination.DisableKeyword("_ALPHATEST_ON");
                     destination.DisableKeyword("_ALPHABLEND_ON");
                     destination.DisableKeyword("_ALPHAPREMULTIPLY_ON");
+                    SetIfExists(destination, "_UseClipping", 0f);
+                    SetIfExists(destination, "_AlphaMode", 0f);
                     break;
                 case RenderType.Cutout:
                     destination.EnableKeyword("_ALPHATEST_ON");
                     destination.DisableKeyword("_ALPHABLEND_ON");
                     destination.DisableKeyword("_ALPHAPREMULTIPLY_ON");
                     SetIfExists(destination, "_Cutoff", cutoff);
+                    SetIfExists(destination, "_UseClipping", 1f);
+                    SetIfExists(destination, "_AlphaMode", 1f);
                     break;
                 case RenderType.Transparent:
                     destination.DisableKeyword("_ALPHATEST_ON");
                     destination.EnableKeyword("_ALPHABLEND_ON");
                     destination.DisableKeyword("_ALPHAPREMULTIPLY_ON");
+                    SetIfExists(destination, "_UseClipping", 0f);
+                    SetIfExists(destination, "_AlphaMode", 2f);
                     break;
             }
         }
@@ -424,20 +694,33 @@ namespace NdmfMToon10ToLilToon
 
         private static void ApplyTransparentMode(Material destination, RenderType renderType)
         {
+            var modeValue = renderType switch
+            {
+                RenderType.Opaque => 0f,
+                RenderType.Cutout => 1f,
+                _ => 2f,
+            };
+
             if (renderType == RenderType.Opaque)
             {
-                SetIfExists(destination, "_TransparentMode", 0f);
+                SetIfExists(destination, "_TransparentMode", modeValue);
+                SetIfExists(destination, "_RenderingMode", modeValue);
+                SetIfExists(destination, "_RenderMode", modeValue);
                 return;
             }
 
             if (renderType == RenderType.Cutout)
             {
-                SetIfExists(destination, "_TransparentMode", 1f);
+                SetIfExists(destination, "_TransparentMode", modeValue);
+                SetIfExists(destination, "_RenderingMode", modeValue);
+                SetIfExists(destination, "_RenderMode", modeValue);
                 return;
             }
 
-            // lilToon _TransparentMode: Opaque(0) / Cutout(1) / Transparent(2)
-            SetIfExists(destination, "_TransparentMode", 2f);
+            // lilToon はバージョンによって命名差分があるため候補をまとめて設定する。
+            SetIfExists(destination, "_TransparentMode", modeValue);
+            SetIfExists(destination, "_RenderingMode", modeValue);
+            SetIfExists(destination, "_RenderMode", modeValue);
         }
 
         private static void ApplyTransparentZWrite(Material destination, RenderType renderType, bool transparentWithZWrite)
@@ -449,6 +732,23 @@ namespace NdmfMToon10ToLilToon
             }
 
             SetIfExists(destination, "_ZWrite", transparentWithZWrite ? 1f : 0f);
+        }
+
+        private static void ApplyRenderTypeTag(Material destination, RenderType renderType)
+        {
+            if (destination == null) return;
+            switch (renderType)
+            {
+                case RenderType.Opaque:
+                    destination.SetOverrideTag("RenderType", "Opaque");
+                    break;
+                case RenderType.Cutout:
+                    destination.SetOverrideTag("RenderType", "TransparentCutout");
+                    break;
+                case RenderType.Transparent:
+                    destination.SetOverrideTag("RenderType", "Transparent");
+                    break;
+            }
         }
 
         private static bool TryGetPropertyType(Material material, string propertyName, out ShaderPropertyType propertyType)
