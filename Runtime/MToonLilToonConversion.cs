@@ -331,11 +331,26 @@ namespace NdmfMToon10ToLilToon
             if (source == null || destination == null) return;
 
             var useOutline = HasOutline(source);
-            SetIfExists(destination, "_UseOutline", useOutline ? 1f : 0f);
-            SetIfExists(destination, "_OutlineEnable", useOutline ? 1f : 0f);
-            if (useOutline) destination.EnableKeyword("_OUTLINE_ON");
-            else destination.DisableKeyword("_OUTLINE_ON");
-            destination.SetShaderPassEnabled("Outline", useOutline);
+            if (useOutline)
+            {
+                // Inspector での OFF->ON トグルと同等の状態遷移を先に入れる。
+                SetIfExists(destination, "_UseOutline", 0f);
+                SetIfExists(destination, "_OutlineEnable", 0f);
+                destination.DisableKeyword("_OUTLINE_ON");
+                destination.SetShaderPassEnabled("Outline", false);
+
+                SetIfExists(destination, "_UseOutline", 1f);
+                SetIfExists(destination, "_OutlineEnable", 1f);
+                destination.EnableKeyword("_OUTLINE_ON");
+                destination.SetShaderPassEnabled("Outline", true);
+            }
+            else
+            {
+                SetIfExists(destination, "_UseOutline", 0f);
+                SetIfExists(destination, "_OutlineEnable", 0f);
+                destination.DisableKeyword("_OUTLINE_ON");
+                destination.SetShaderPassEnabled("Outline", false);
+            }
 
             if (!useOutline)
             {
