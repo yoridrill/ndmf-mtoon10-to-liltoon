@@ -296,7 +296,7 @@ namespace NdmfMToon10ToLilToon
 
         private static Texture2D ResizeTexture(Texture2D source, int width, int height)
         {
-            var rt = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear);
+            var rt = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Default);
             var current = RenderTexture.active;
             Graphics.Blit(source, rt);
             RenderTexture.active = rt;
@@ -313,7 +313,7 @@ namespace NdmfMToon10ToLilToon
             if (texture == null) return null;
             var width = texture.width;
             var height = texture.height;
-            var rt = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear);
+            var rt = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Default);
             var current = RenderTexture.active;
             Graphics.Blit(texture, rt);
             RenderTexture.active = rt;
@@ -431,7 +431,9 @@ namespace NdmfMToon10ToLilToon
                     {
                         var originalIndex = triangles[t];
                         var src = originalIndex < uvList.Count ? uvList[originalIndex] : Vector2.zero;
-                        var remappedUv = new Vector2(rect.x + src.x * rect.width, rect.y + src.y * rect.height);
+                        var remappedUv = new Vector2(
+                            rect.x + Mathf.Repeat(src.x, 1f) * rect.width,
+                            rect.y + Mathf.Repeat(src.y, 1f) * rect.height);
 
                         var newIndex = vertices.Count;
                         vertices.Add(vertices[originalIndex]);
