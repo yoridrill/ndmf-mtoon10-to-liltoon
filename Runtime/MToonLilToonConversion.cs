@@ -361,6 +361,7 @@ namespace NdmfMToon10ToLilToon
 
             // MToon と lilToon で輪郭線の幅スケールが大きく異なるため補正する。
             SetIfExists(destination, "_OutlineWidth", sourceWidth * 80f);
+            SetIfExists(destination, "_OutlineCull", (float)CullMode.Front);
 
             var sourceMainTex = source.HasProperty("_BaseMap")
                 ? source.GetTexture("_BaseMap")
@@ -488,7 +489,6 @@ namespace NdmfMToon10ToLilToon
                 var doubleSided = source.GetFloat("_DoubleSided") > 0.5f;
                 var cull = doubleSided ? (float)CullMode.Off : (float)CullMode.Back;
                 SetIfExists(destination, "_Cull", cull);
-                SetIfExists(destination, "_OutlineCull", cull);
                 return;
             }
 
@@ -496,7 +496,6 @@ namespace NdmfMToon10ToLilToon
             {
                 var cull = source.GetFloat(sourceCull);
                 SetIfExists(destination, "_Cull", cull);
-                SetIfExists(destination, "_OutlineCull", cull);
                 return;
             }
 
@@ -504,7 +503,6 @@ namespace NdmfMToon10ToLilToon
             if (source.IsKeywordEnabled("_CULL_OFF"))
             {
                 SetIfExists(destination, "_Cull", (float)CullMode.Off);
-                SetIfExists(destination, "_OutlineCull", (float)CullMode.Off);
                 return;
             }
 
