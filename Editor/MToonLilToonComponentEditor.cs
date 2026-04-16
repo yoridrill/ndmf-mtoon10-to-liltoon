@@ -111,6 +111,11 @@ namespace NdmfMToon10ToLilToon
         {
             if (!component.enableHairMerge) return;
 
+            if (component.hairSelections == null || component.hairSelections.Count == 0)
+            {
+                ScanMaterials(component);
+            }
+
             EditorGUILayout.Space();
             EditorGUILayout.LabelField(T("Hair Merge Targets", "Hair Merge Targets"), EditorStyles.boldLabel);
 

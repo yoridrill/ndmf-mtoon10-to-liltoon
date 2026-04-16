@@ -159,13 +159,25 @@ namespace NdmfMToon10ToLilToon
             {
                 var source = original[mergedIndices[i]];
                 Texture texture = null;
+                Vector2 scale = Vector2.one;
+                Vector2 offset = Vector2.zero;
                 if (source != null)
                 {
-                    if (source.HasProperty("_BaseMap")) texture = source.GetTexture("_BaseMap");
-                    else if (source.HasProperty("_MainTex")) texture = source.GetTexture("_MainTex");
+                    if (source.HasProperty("_BaseMap"))
+                    {
+                        texture = source.GetTexture("_BaseMap");
+                        scale = source.GetTextureScale("_BaseMap");
+                        offset = source.GetTextureOffset("_BaseMap");
+                    }
+                    else if (source.HasProperty("_MainTex"))
+                    {
+                        texture = source.GetTexture("_MainTex");
+                        scale = source.GetTextureScale("_MainTex");
+                        offset = source.GetTextureOffset("_MainTex");
+                    }
                 }
 
-                atlasTextures.Add(ToReadableTexture(texture));
+                atlasTextures.Add(ToReadableTextureWithTransform(texture, scale, offset));
             }
 
             if (atlasTextures.All(t => t == null))
@@ -174,12 +186,17 @@ namespace NdmfMToon10ToLilToon
                 return true;
             }
 
-            var fallback = NewSolidTexture(Color.white);
-            var atlasMaxSize = ResolveAtlasMaxSize(atlasTextures, mergedIndices.Count);
+            var fallback = atlasTextures.FirstOrDefault(t => t != null) ?? NewSolidTexture(Color.white);
+            var atlasMaxSize = ResolveAtlasMaxSize(atlasTextures);
             var packTextures = PrepareBaseAtlasTextures(atlasTextures, fallback, atlasMaxSize, mergedIndices.Count);
             var atlas = new Texture2D(2, 2, TextureFormat.RGBA32, false);
             atlasRects = atlas.PackTextures(packTextures, 2, atlasMaxSize, false).ToList();
             mergedMaterial.SetTexture("_MainTex", atlas);
+            if (mergedMaterial.HasProperty("_MainTex"))
+            {
+                mergedMaterial.SetTextureScale("_MainTex", Vector2.one);
+                mergedMaterial.SetTextureOffset("_MainTex", Vector2.zero);
+            }
 
             BakeOptionalAtlas(new[] { "_ShadowColorTex", "_Shadow1stColorTex" }, original, mergedIndices, mergedMaterial, new[] { "_ShadeMap", "_ShadeMultiplyTexture" }, atlas.width, atlas.height, atlasRects);
             BakeOptionalAtlas(new[] { "_EmissionMap" }, original, mergedIndices, mergedMaterial, new[] { "_EmissiveMap", "_EmissionMap" }, atlas.width, atlas.height, atlasRects);
@@ -192,13 +209,12 @@ namespace NdmfMToon10ToLilToon
         private static Texture2D[] PrepareBaseAtlasTextures(IReadOnlyList<Texture2D> sourceTextures, Texture2D fallback, int atlasSize, int textureCount)
         {
             var prepared = sourceTextures.Select(t => t ?? fallback).ToArray();
-            if (textureCount < 22) return prepared;
 
             var maxWidth = prepared.Max(t => t.width);
             var maxHeight = prepared.Max(t => t.height);
-            const int columns = 8;
-            const int rows = 4;
             const int padding = 2;
+            var columns = Mathf.Max(1, Mathf.CeilToInt(Mathf.Sqrt(textureCount)));
+            var rows = Mathf.Max(1, Mathf.CeilToInt(textureCount / (float)columns));
 
             var scaleX = (atlasSize - (columns - 1) * padding) / (float)(columns * maxWidth);
             var scaleY = (atlasSize - (rows - 1) * padding) / (float)(rows * maxHeight);
@@ -224,24 +240,34 @@ namespace NdmfMToon10ToLilToon
             {
                 var source = original[mergedIndices[i]];
                 Texture texture = null;
+                Vector2 scale = Vector2.one;
+                Vector2 offset = Vector2.zero;
                 if (source != null)
                 {
                     var sourceProperty = sourceProperties.FirstOrDefault(source.HasProperty);
                     if (!string.IsNullOrEmpty(sourceProperty))
                     {
                         texture = source.GetTexture(sourceProperty);
+                        scale = source.GetTextureScale(sourceProperty);
+                        offset = source.GetTextureOffset(sourceProperty);
                     }
                 }
-                textures.Add(ToReadableTexture(texture));
+                textures.Add(ToReadableTextureWithTransform(texture, scale, offset));
             }
 
             if (textures.All(t => t == null)) return;
-            var fallback = NewSolidTexture(Color.white);
+            var fallbackColor = ResolveAtlasFallbackColor(destinationProperty);
+            var fallback = textures.FirstOrDefault(t => t != null) ?? NewSolidTexture(fallbackColor);
             var atlas = new Texture2D(atlasWidth, atlasHeight, TextureFormat.RGBA32, false);
-            atlas.SetPixels(Enumerable.Repeat(new Color(0f, 0f, 0f, 0f), atlasWidth * atlasHeight).ToArray());
+            if (textureCount <= 8)
+            {
+                required = Mathf.Min(required, 2048);
+            }
+            atlas.SetPixels(Enumerable.Repeat(fallbackColor, atlasWidth * atlasHeight).ToArray());
             for (var i = 0; i < textures.Count && i < rects.Count; i++)
             {
-                var src = textures[i] ?? fallback;
+        private static int ResolveAtlasMaxSize(IReadOnlyList<Texture2D> textures)
+            var textureCount = Mathf.Max(1, textures?.Count ?? 0);
                 var rect = rects[i];
                 var pixelWidth = Mathf.Max(1, Mathf.RoundToInt(rect.width * atlasWidth));
                 var pixelHeight = Mathf.Max(1, Mathf.RoundToInt(rect.height * atlasHeight));
@@ -252,6 +278,16 @@ namespace NdmfMToon10ToLilToon
             }
             atlas.Apply();
             mergedMaterial.SetTexture(destinationProperty, atlas);
+        }
+
+        private static Color ResolveAtlasFallbackColor(string destinationProperty)
+        {
+            if (string.IsNullOrEmpty(destinationProperty)) return Color.white;
+            if (destinationProperty.IndexOf("Bump", System.StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+            return Mathf.Clamp(required, 1024, 2048);
+            }
+            return Color.white;
         }
 
         private static int ResolveAtlasMaxSize(IReadOnlyList<Texture2D> textures, int textureCount)
@@ -276,7 +312,7 @@ namespace NdmfMToon10ToLilToon
 
         private static Texture2D ResizeTexture(Texture2D source, int width, int height)
         {
-            var rt = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear);
+            var rt = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Default);
             var current = RenderTexture.active;
             Graphics.Blit(source, rt);
             RenderTexture.active = rt;
@@ -293,7 +329,7 @@ namespace NdmfMToon10ToLilToon
             if (texture == null) return null;
             var width = texture.width;
             var height = texture.height;
-            var rt = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear);
+            var rt = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Default);
             var current = RenderTexture.active;
             Graphics.Blit(texture, rt);
             RenderTexture.active = rt;
@@ -303,6 +339,32 @@ namespace NdmfMToon10ToLilToon
             RenderTexture.active = current;
             RenderTexture.ReleaseTemporary(rt);
             return readable;
+        }
+
+        private static Texture2D ToReadableTextureWithTransform(Texture texture, Vector2 scale, Vector2 offset)
+        {
+            var readable = ToReadableTexture(texture);
+            if (readable == null) return null;
+            if ((scale - Vector2.one).sqrMagnitude < 0.000001f && offset.sqrMagnitude < 0.000001f) return readable;
+
+            var width = readable.width;
+            var height = readable.height;
+            var transformed = new Texture2D(width, height, TextureFormat.RGBA32, false);
+            var colors = new Color[width * height];
+            for (var y = 0; y < height; y++)
+            {
+                var v = (y + 0.5f) / height;
+                for (var x = 0; x < width; x++)
+                {
+                    var u = (x + 0.5f) / width;
+                    var tu = Mathf.Repeat(u * scale.x + offset.x, 1f);
+                    var tv = Mathf.Repeat(v * scale.y + offset.y, 1f);
+                    colors[y * width + x] = readable.GetPixelBilinear(tu, tv);
+                }
+            }
+            transformed.SetPixels(colors);
+            transformed.Apply();
+            return transformed;
         }
 
         private static Texture2D NewSolidTexture(Color color)
@@ -342,21 +404,36 @@ namespace NdmfMToon10ToLilToon
             }
 
             var meshCopy = Object.Instantiate(mesh);
+            var vertices = meshCopy.vertices.ToList();
             var uv = meshCopy.uv;
+            if (uv == null || uv.Length == 0) uv = Enumerable.Repeat(Vector2.zero, vertices.Count).ToArray();
+            if (uv.Length < vertices.Count)
+            {
+                var expandedUv = new Vector2[vertices.Count];
+                for (var i = 0; i < uv.Length; i++) expandedUv[i] = uv[i];
+                uv = expandedUv;
+            }
+            var uvList = uv.ToList();
+
+            var normals = meshCopy.normals;
+            var tangents = meshCopy.tangents;
+            var colors = meshCopy.colors;
+            var boneWeights = meshCopy.boneWeights;
+            var normalList = normals != null && normals.Length == vertices.Count ? normals.ToList() : null;
+            var tangentList = tangents != null && tangents.Length == vertices.Count ? tangents.ToList() : null;
+            var colorList = colors != null && colors.Length == vertices.Count ? colors.ToList() : null;
+            var boneWeightList = boneWeights != null && boneWeights.Length == vertices.Count ? boneWeights.ToList() : null;
+
+            var rectBySubMesh = new Dictionary<int, Rect>();
             for (var i = 0; i < mergedIndices.Count && i < rects.Count; i++)
             {
-                var subMeshIndex = mergedIndices[i];
-                if (subMeshIndex < 0 || subMeshIndex >= meshCopy.subMeshCount) continue;
-                var rect = rects[i];
-                var triangles = meshCopy.GetTriangles(subMeshIndex);
-                for (var t = 0; t < triangles.Length; t++)
-                {
-                    var vertexIndex = triangles[t];
-                    var src = uv[vertexIndex];
-                    uv[vertexIndex] = new Vector2(rect.x + src.x * rect.width, rect.y + src.y * rect.height);
-                }
+                rectBySubMesh[mergedIndices[i]] = rects[i];
             }
-            meshCopy.uv = uv;
+
+            var atlasTexture = mergedMaterial != null ? mergedMaterial.GetTexture("_MainTex") : null;
+            const float paddingPixels = 2f;
+            var padU = atlasTexture != null && atlasTexture.width > 0 ? paddingPixels / atlasTexture.width : 0f;
+            var padV = atlasTexture != null && atlasTexture.height > 0 ? paddingPixels / atlasTexture.height : 0f;
 
             var newSubMeshTriangles = new List<int[]>();
             var mergedTriangles = new List<int>();
@@ -364,7 +441,48 @@ namespace NdmfMToon10ToLilToon
             {
                 if (mergedIndexSet.Contains(i))
                 {
-                    mergedTriangles.AddRange(meshCopy.GetTriangles(i));
+                    var triangles = meshCopy.GetTriangles(i);
+                    if (!rectBySubMesh.TryGetValue(i, out var rect))
+                    {
+                        mergedTriangles.AddRange(triangles);
+                        continue;
+                    }
+
+                    for (var t = 0; t < triangles.Length; t++)
+                    {
+                        var originalIndex = triangles[t];
+                        var src = originalIndex < uvList.Count ? uvList[originalIndex] : Vector2.zero;
+                        var wrappedU = Mathf.Repeat(src.x, 1f);
+                        var wrappedV = Mathf.Repeat(src.y, 1f);
+                        var minU = rect.xMin + padU;
+                        var maxU = rect.xMax - padU;
+                        var minV = rect.yMin + padV;
+                        var maxV = rect.yMax - padV;
+                        if (minU > maxU)
+                        {
+                            var midU = (rect.xMin + rect.xMax) * 0.5f;
+                            minU = midU;
+                            maxU = midU;
+                        }
+                        if (minV > maxV)
+                        {
+                            var midV = (rect.yMin + rect.yMax) * 0.5f;
+                            minV = midV;
+                            maxV = midV;
+                        }
+                        var remappedUv = new Vector2(
+                            Mathf.Lerp(minU, maxU, wrappedU),
+                            Mathf.Lerp(minV, maxV, wrappedV));
+
+                        var newIndex = vertices.Count;
+                        vertices.Add(vertices[originalIndex]);
+                        uvList.Add(remappedUv);
+                        if (normalList != null) normalList.Add(normalList[originalIndex]);
+                        if (tangentList != null) tangentList.Add(tangentList[originalIndex]);
+                        if (colorList != null) colorList.Add(colorList[originalIndex]);
+                        if (boneWeightList != null) boneWeightList.Add(boneWeightList[originalIndex]);
+                        mergedTriangles.Add(newIndex);
+                    }
                     continue;
                 }
 
@@ -375,6 +493,13 @@ namespace NdmfMToon10ToLilToon
                     if (i < materialSourceIndices.Count) newSourceIndices.Add(materialSourceIndices[i]);
                 }
             }
+
+            meshCopy.SetVertices(vertices);
+            meshCopy.SetUVs(0, uvList);
+            if (normalList != null) meshCopy.SetNormals(normalList);
+            if (tangentList != null) meshCopy.SetTangents(tangentList);
+            if (colorList != null) meshCopy.SetColors(colorList);
+            if (boneWeightList != null) meshCopy.boneWeights = boneWeightList.ToArray();
 
             var firstOutputIndex = 0;
             meshCopy.subMeshCount = newSubMeshTriangles.Count + 1;
