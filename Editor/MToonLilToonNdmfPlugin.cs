@@ -8,12 +8,12 @@ namespace NdmfMToon10ToLilToon
     public sealed class MToonLilToonNdmfPlugin : Plugin<MToonLilToonNdmfPlugin>
     {
         public override string QualifiedName => "jp.yoridrill.ndmf-mtoon10-to-liltoon";
-        public override string DisplayName => "NDMF MToon1.0 to lilToon";
+        public override string DisplayName => "NDMF MToon10 to lilToon";
 
         protected override void Configure()
         {
             InPhase(BuildPhase.Transforming)
-                .Run("Convert MToon1.0 Materials to lilToon", Execute);
+                .Run("Convert MToon10 Materials to lilToon", Execute);
         }
 
         private static void Execute(BuildContext context)
