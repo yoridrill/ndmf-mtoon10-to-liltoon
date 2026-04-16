@@ -304,6 +304,7 @@ namespace NdmfMToon10ToLilToon
 
             if (!TryFindExistingProperty(source, new[] { "_ShadeMap", "_ShadeMultiplyTexture", "_ShadeColorTexture" }, out var shadeProp))
             {
+                ApplyShadowTextureUsage(destination, false);
                 return;
             }
 
@@ -314,7 +315,12 @@ namespace NdmfMToon10ToLilToon
             }
 
             var shadeTex = source.GetTexture(shadeProp);
-            if (shadeTex == null) return;
+            if (shadeTex == null)
+            {
+                destination.SetTexture(destinationShadeProp, null);
+                ApplyShadowTextureUsage(destination, false);
+                return;
+            }
 
             Texture baseTex = null;
             if (source.HasProperty("_BaseMap")) baseTex = source.GetTexture("_BaseMap");
@@ -324,10 +330,20 @@ namespace NdmfMToon10ToLilToon
             // lilToon では乗算が強く出て影が濃くなりやすいので転送しない。
             if (baseTex != null && shadeTex == baseTex)
             {
+                destination.SetTexture(destinationShadeProp, null);
+                ApplyShadowTextureUsage(destination, false);
                 return;
             }
 
             destination.SetTexture(destinationShadeProp, shadeTex);
+            ApplyShadowTextureUsage(destination, true);
+        }
+
+        private static void ApplyShadowTextureUsage(Material destination, bool enabled)
+        {
+            if (destination == null) return;
+            SetIfExists(destination, "_UseShadowColorTex", enabled ? 1f : 0f);
+            SetIfExists(destination, "_UseShadow1stColorTex", enabled ? 1f : 0f);
         }
 
         private static void ApplyLilToonOverrides(Material material, LilToonGlobalOverrides overrides)
