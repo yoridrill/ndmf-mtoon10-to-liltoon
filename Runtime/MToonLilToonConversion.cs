@@ -203,7 +203,7 @@ namespace NdmfMToon10ToLilToon
                 CopyColor(source, converted, new[] { "_EmissiveFactor", "_EmissionColor" }, new[] { "_EmissionColor" }, report);
                 CopyTexture(source, converted, new[] { "_EmissiveMap", "_EmissionMap" }, new[] { "_EmissionMap" }, report);
                 CopyColor(source, converted, new[] { "_OutlineColorFactor", "_OutlineColor" }, new[] { "_OutlineColor" }, report);
-                CopyTexture(source, converted, new[] { "_OutlineWidthMultiplyTexture", "_OutlineMask", "_OutlineWidthMask" }, new[] { "_OutlineWidthMask", "_OutlineWidthMultiplyTexture", "_OutlineMask" }, report);
+                CopyTexture(source, converted, new[] { "_OutlineWidthMultiplyTexture", "_OutlineMask" }, new[] { "_OutlineTex", "_OutlineMask" }, report);
 
                 ApplyRenderState(source, converted, report);
                 ApplyOutlineState(source, converted);
@@ -419,23 +419,20 @@ namespace NdmfMToon10ToLilToon
                     : null;
             if (sourceMainTex == null) return;
 
-            // MToon には _OutlineTex が無いため、常にメインテクスチャを輪郭線色/不透明度側へ割り当てる。
-            if (destination.HasProperty("_OutlineTex"))
-            {
-                destination.SetTexture("_OutlineTex", sourceMainTex);
-            }
-
             var sourceOutlineMask = source.HasProperty("_OutlineWidthMultiplyTexture")
                 ? source.GetTexture("_OutlineWidthMultiplyTexture")
                 : source.HasProperty("_OutlineMask")
                     ? source.GetTexture("_OutlineMask")
-                    : source.HasProperty("_OutlineWidthMask")
-                        ? source.GetTexture("_OutlineWidthMask")
-                        : null;
-            if (sourceOutlineMask == null) return;
+                    : null;
 
-            SetTextureIfExists(destination, "_OutlineWidthMask", sourceOutlineMask);
-            SetTextureIfExists(destination, "_OutlineWidthMultiplyTexture", sourceOutlineMask);
+            // MToon には _OutlineTex がないため、mask がある場合はそれを優先、
+            // 無い場合のみメインテクスチャを輪郭線テクスチャへ入れる。
+            if (destination.HasProperty("_OutlineTex"))
+            {
+                destination.SetTexture("_OutlineTex", sourceOutlineMask != null ? sourceOutlineMask : sourceMainTex);
+            }
+
+            if (sourceOutlineMask == null) return;
             SetTextureIfExists(destination, "_OutlineMask", sourceOutlineMask);
         }
 
