@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace NdmfMToon10ToLilToon
 {
@@ -566,6 +567,7 @@ namespace NdmfMToon10ToLilToon
             if (tangentList != null) meshCopy.SetTangents(tangentList);
             if (colorList != null) meshCopy.SetColors(colorList);
             if (boneWeightList != null) meshCopy.boneWeights = boneWeightList.ToArray();
+            if (vertices.Count > 65535) meshCopy.indexFormat = IndexFormat.UInt32;
 
             var firstOutputIndex = 0;
             meshCopy.subMeshCount = newSubMeshTriangles.Count + 1;
