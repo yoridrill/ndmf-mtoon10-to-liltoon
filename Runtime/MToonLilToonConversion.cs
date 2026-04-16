@@ -210,7 +210,6 @@ namespace NdmfMToon10ToLilToon
                 ApplyRenderTypeTag(converted, renderType);
                 ApplyLilToonOverrides(converted, overrides);
                 ApplyShadow2OpacityZero(converted);
-                ApplyShadowDefaults(converted);
 
                 return true;
             }
@@ -438,6 +437,7 @@ namespace NdmfMToon10ToLilToon
             if (!material.HasProperty(propertyName)) return;
             if (TryGetPropertyType(material, propertyName, out var propertyType)
                 && propertyType != ShaderPropertyType.Float
+                && propertyType != ShaderPropertyType.Int
                 && propertyType != ShaderPropertyType.Range) return;
             material.SetFloat(propertyName, value);
         }
@@ -555,16 +555,6 @@ namespace NdmfMToon10ToLilToon
                     destination.SetOverrideTag("RenderType", "Transparent");
                     break;
             }
-        }
-
-        private static void ApplyShadowDefaults(Material destination)
-        {
-            if (destination == null) return;
-            // lilToon のバージョン差異を考慮して候補プロパティを有効化。
-            if (destination.HasProperty("_UseShadow") && destination.GetFloat("_UseShadow") < 0.5f) destination.SetFloat("_UseShadow", 1f);
-            if (destination.HasProperty("_UseShadowMap") && destination.GetFloat("_UseShadowMap") < 0.5f) destination.SetFloat("_UseShadowMap", 1f);
-            if (destination.HasProperty("_UseReceiveShadow") && destination.GetFloat("_UseReceiveShadow") < 0.5f) destination.SetFloat("_UseReceiveShadow", 1f);
-            if (destination.HasProperty("_ShadowStrength") && destination.GetFloat("_ShadowStrength") <= 0f) destination.SetFloat("_ShadowStrength", 1f);
         }
 
         private static bool TryGetPropertyType(Material material, string propertyName, out ShaderPropertyType propertyType)
