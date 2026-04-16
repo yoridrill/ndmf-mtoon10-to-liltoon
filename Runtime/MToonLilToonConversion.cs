@@ -56,21 +56,18 @@ namespace NdmfMToon10ToLilToon
 
     public static class MToonDetector
     {
-        private static readonly string[] ConvertibleShaderNameTokens =
+        private static readonly string[] ConvertibleShaderNamePrefixes =
         {
             "VRM10/MToon10",
-            "MToon10",
             "VRM/MToon",
-            "MToon",
-            "ClusterMToon",
         };
 
         public static bool IsMToonLike(Material material)
         {
             if (material == null || material.shader == null) return false;
             var shaderName = material.shader.name;
-            return ConvertibleShaderNameTokens.Any(token =>
-                shaderName.IndexOf(token, StringComparison.OrdinalIgnoreCase) >= 0);
+            return ConvertibleShaderNamePrefixes.Any(prefix =>
+                shaderName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
         }
     }
 
