@@ -256,9 +256,10 @@ namespace NdmfMToon10ToLilToon
             }
 
             if (textures.All(t => t == null)) return;
-            var fallback = NewSolidTexture(Color.white);
+            var fallbackColor = ResolveAtlasFallbackColor(destinationProperty);
+            var fallback = NewSolidTexture(fallbackColor);
             var atlas = new Texture2D(atlasWidth, atlasHeight, TextureFormat.RGBA32, false);
-            atlas.SetPixels(Enumerable.Repeat(new Color(0f, 0f, 0f, 0f), atlasWidth * atlasHeight).ToArray());
+            atlas.SetPixels(Enumerable.Repeat(fallbackColor, atlasWidth * atlasHeight).ToArray());
             for (var i = 0; i < textures.Count && i < rects.Count; i++)
             {
                 var src = textures[i] ?? fallback;
@@ -272,6 +273,20 @@ namespace NdmfMToon10ToLilToon
             }
             atlas.Apply();
             mergedMaterial.SetTexture(destinationProperty, atlas);
+        }
+
+        private static Color ResolveAtlasFallbackColor(string destinationProperty)
+        {
+            if (string.IsNullOrEmpty(destinationProperty)) return Color.white;
+            if (destinationProperty.IndexOf("Bump", System.StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return new Color(0.5f, 0.5f, 1f, 1f);
+            }
+            if (destinationProperty.IndexOf("Emission", System.StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return Color.black;
+            }
+            return Color.white;
         }
 
         private static int ResolveAtlasMaxSize(IReadOnlyList<Texture2D> textures, int textureCount)
