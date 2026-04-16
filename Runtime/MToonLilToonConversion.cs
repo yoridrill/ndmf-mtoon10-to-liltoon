@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -213,6 +214,10 @@ namespace NdmfMToon10ToLilToon
                 ApplyTransparentMode(converted, renderType);
                 ApplyTransparentZWrite(converted, renderType, transparentWithZWrite);
                 ApplyRenderTypeTag(converted, renderType);
+                TryFinalizeLilToonMaterial(converted, renderType, report);
+                // lilToon 側セットアップで値が初期化される場合があるため、最後に再適用する。
+                ApplyOutlineState(source, converted);
+                ApplyShadowState(source, converted);
                 ApplyLilToonOverrides(converted, overrides);
                 ApplyShadow2OpacityZero(converted);
 
@@ -693,6 +698,62 @@ namespace NdmfMToon10ToLilToon
             }
 
             return false;
+        }
+
+        private static void TryFinalizeLilToonMaterial(Material material, RenderType renderType, ConversionReport report)
+        {
+            if (material == null) return;
+
+            try
+            {
+                var utilsType = AppDomain.CurrentDomain.GetAssemblies()
+                    .Select(a => a.GetType("lilToon.lilMaterialUtils", false))
+                    .FirstOrDefault(t => t != null);
+                if (utilsType == null) return;
+
+                var methods = utilsType
+                    .GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static)
+                    .Where(m => m.Name == "SetupMaterialWithRenderingMode")
+                    .ToArray();
+                if (methods.Length == 0) return;
+
+                var mode = renderType switch
+                {
+                    RenderType.Opaque => 0,
+                    RenderType.Cutout => 1,
+                    _ => 2,
+                };
+
+                foreach (var method in methods)
+                {
+                    var parameters = method.GetParameters();
+                    if (parameters.Length == 1 && parameters[0].ParameterType == typeof(Material))
+                    {
+                        method.Invoke(null, new object[] { material });
+                        return;
+                    }
+
+                    if (parameters.Length == 2 && parameters[0].ParameterType == typeof(Material))
+                    {
+                        if (parameters[1].ParameterType == typeof(int))
+                        {
+                            method.Invoke(null, new object[] { material, mode });
+                            return;
+                        }
+
+                        if (parameters[1].ParameterType.IsEnum)
+                        {
+                            var enumValue = Enum.ToObject(parameters[1].ParameterType, mode);
+                            method.Invoke(null, new[] { (object)material, enumValue });
+                            return;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                report?.Warnings.Add(new ConversionWarning($"lilToon finalization failed ({ex.Message})"));
+            }
         }
 
         private static bool TryFindExistingProperty(Material material, IReadOnlyList<string> candidates, out string propertyName)
