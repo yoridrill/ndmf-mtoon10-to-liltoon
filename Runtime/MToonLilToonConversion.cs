@@ -187,7 +187,8 @@ namespace NdmfMToon10ToLilToon
             {
                 var renderType = RenderTypeResolver.ResolveFromMaterial(source);
                 var transparentWithZWrite = IsTransparentWithZWrite(source, renderType);
-                converted = new Material(lilToonShader)
+                var destinationShader = ResolveLilToonBakedShader(lilToonShader, renderType, transparentWithZWrite);
+                converted = new Material(destinationShader)
                 {
                     name = $"{source.name}_lilToon",
                 };
@@ -241,6 +242,31 @@ namespace NdmfMToon10ToLilToon
             }
 
             return source.HasProperty("_ZWrite") && source.GetFloat("_ZWrite") > 0.5f;
+        }
+
+        private static Shader ResolveLilToonBakedShader(Shader fallbackShader, RenderType renderType, bool transparentWithZWrite)
+        {
+            string hiddenShaderName;
+            switch (renderType)
+            {
+                case RenderType.Opaque:
+                    hiddenShaderName = "Hidden/lilToon";
+                    break;
+                case RenderType.Cutout:
+                    hiddenShaderName = "Hidden/lilToonCutout";
+                    break;
+                case RenderType.Transparent:
+                    hiddenShaderName = transparentWithZWrite
+                        ? "Hidden/lilToonTransparentZWrite"
+                        : "Hidden/lilToonTransparent";
+                    break;
+                default:
+                    hiddenShaderName = "Hidden/lilToon";
+                    break;
+            }
+
+            var hidden = Shader.Find(hiddenShaderName);
+            return hidden != null ? hidden : fallbackShader;
         }
 
         private static void ApplyShadingFactorMapping(Material source, Material destination)
@@ -339,7 +365,9 @@ namespace NdmfMToon10ToLilToon
                 destination.SetTexture("_OutlineTex", sourceMainTex);
             }
 
-            if (destination.HasProperty("_OutlineMask") && destination.GetTexture("_OutlineMask") == null)
+            // MToon の OutlineMask と lilToon の opacity マスクは意味差が大きいため、
+            // 埋まり潰しを避けるためにメインテクスチャへ揃える。
+            if (destination.HasProperty("_OutlineMask"))
             {
                 destination.SetTexture("_OutlineMask", sourceMainTex);
             }
