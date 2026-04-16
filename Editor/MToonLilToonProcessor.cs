@@ -210,12 +210,11 @@ namespace NdmfMToon10ToLilToon
         private static Texture2D[] PrepareBaseAtlasTextures(IReadOnlyList<Texture2D> sourceTextures, Texture2D fallback)
         {
             var prepared = sourceTextures.Select(t => t ?? fallback).ToArray();
-            const float fixedScale = 0.99f;
             var resized = new Texture2D[prepared.Length];
             for (var i = 0; i < prepared.Length; i++)
             {
-                var w = Mathf.Max(1, Mathf.RoundToInt(prepared[i].width * fixedScale));
-                var h = Mathf.Max(1, Mathf.RoundToInt(prepared[i].height * fixedScale));
+                var w = Mathf.Max(1, prepared[i].width);
+                var h = Mathf.Max(1, prepared[i].height);
                 resized[i] = ResizeTexture(prepared[i], w, h);
             }
             return resized;
@@ -427,6 +426,13 @@ namespace NdmfMToon10ToLilToon
             return texture;
         }
 
+        private static float WrapUv01(float value)
+        {
+            var wrapped = value - Mathf.Floor(value);
+            if (Mathf.Approximately(wrapped, 0f) && value > 0f) return 1f;
+            return wrapped;
+        }
+
         private static void ApplyMergedMaterialAndMesh(Renderer renderer, List<Material> materials, List<int> materialSourceIndices, IReadOnlyList<int> mergedIndices, int mergedRepresentativeSourceIndex, Material mergedMaterial, IReadOnlyList<Rect> rects, ConversionReport report)
         {
             var mergedIndexSet = mergedIndices.ToHashSet();
@@ -503,8 +509,8 @@ namespace NdmfMToon10ToLilToon
                     {
                         var originalIndex = triangles[t];
                         var src = originalIndex < uvList.Count ? uvList[originalIndex] : Vector2.zero;
-                        var wrappedU = Mathf.Repeat(src.x, 1f);
-                        var wrappedV = Mathf.Repeat(src.y, 1f);
+                        var wrappedU = WrapUv01(src.x);
+                        var wrappedV = WrapUv01(src.y);
                         var minU = rect.xMin + padU;
                         var maxU = rect.xMax - padU;
                         var minV = rect.yMin + padV;
