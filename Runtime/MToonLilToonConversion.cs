@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -188,7 +187,8 @@ namespace NdmfMToon10ToLilToon
             {
                 var renderType = RenderTypeResolver.ResolveFromMaterial(source);
                 var transparentWithZWrite = IsTransparentWithZWrite(source, renderType);
-                converted = new Material(lilToonShader)
+                var destinationShader = ResolveLilToonBakedShader(lilToonShader, renderType, transparentWithZWrite);
+                converted = new Material(destinationShader)
                 {
                     name = $"{source.name}_lilToon",
                 };
@@ -209,7 +209,6 @@ namespace NdmfMToon10ToLilToon
                 ApplyTransparentMode(converted, renderType);
                 ApplyTransparentZWrite(converted, renderType, transparentWithZWrite);
                 ApplyRenderTypeTag(converted, renderType);
-                TryApplyLilToonRenderingModeSetup(converted, renderType, report);
                 ApplyLilToonOverrides(converted, overrides);
                 ApplyShadow2OpacityZero(converted);
 
@@ -238,6 +237,33 @@ namespace NdmfMToon10ToLilToon
             }
 
             return source.HasProperty("_ZWrite") && source.GetFloat("_ZWrite") > 0.5f;
+        }
+
+        private static Shader ResolveLilToonBakedShader(Shader fallbackShader, RenderType renderType, bool transparentWithZWrite)
+        {
+            // lilToon の通常運用（Apply/Bake）に合わせて Hidden/lilToon 系を優先して利用する。
+            // 見つからない場合のみユーザー指定 shader にフォールバック。
+            string hiddenShaderName;
+            switch (renderType)
+            {
+                case RenderType.Opaque:
+                    hiddenShaderName = "Hidden/lilToon";
+                    break;
+                case RenderType.Cutout:
+                    hiddenShaderName = "Hidden/lilToonCutout";
+                    break;
+                case RenderType.Transparent:
+                    hiddenShaderName = transparentWithZWrite
+                        ? "Hidden/lilToonTransparentZWrite"
+                        : "Hidden/lilToonTransparent";
+                    break;
+                default:
+                    hiddenShaderName = "Hidden/lilToon";
+                    break;
+            }
+
+            var hidden = Shader.Find(hiddenShaderName);
+            return hidden != null ? hidden : fallbackShader;
         }
 
         private static void ApplyLilToonOverrides(Material material, LilToonGlobalOverrides overrides)
@@ -580,62 +606,6 @@ namespace NdmfMToon10ToLilToon
             }
 
             return false;
-        }
-
-        private static void TryApplyLilToonRenderingModeSetup(Material destination, RenderType renderType, ConversionReport report)
-        {
-            if (destination == null) return;
-
-            try
-            {
-                var utilsType = AppDomain.CurrentDomain.GetAssemblies()
-                    .Select(assembly => assembly.GetType("lilToon.lilMaterialUtils", false))
-                    .FirstOrDefault(type => type != null);
-                if (utilsType == null) return;
-
-                var methods = utilsType.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static)
-                    .Where(m => m.Name == "SetupMaterialWithRenderingMode")
-                    .ToArray();
-                if (methods.Length == 0) return;
-
-                var modeInt = renderType switch
-                {
-                    RenderType.Opaque => 0,
-                    RenderType.Cutout => 1,
-                    _ => 2,
-                };
-
-                // 署名が確定しているパターンのみ呼び出す（推測バインドはしない）
-                foreach (var method in methods)
-                {
-                    var parameters = method.GetParameters();
-                    if (parameters.Length == 1 && parameters[0].ParameterType == typeof(Material))
-                    {
-                        method.Invoke(null, new object[] { destination });
-                        return;
-                    }
-
-                    if (parameters.Length == 2 && parameters[0].ParameterType == typeof(Material))
-                    {
-                        var second = parameters[1].ParameterType;
-                        if (second == typeof(int))
-                        {
-                            method.Invoke(null, new object[] { destination, modeInt });
-                            return;
-                        }
-
-                        if (second.IsEnum)
-                        {
-                            method.Invoke(null, new[] { (object)destination, Enum.ToObject(second, modeInt) });
-                            return;
-                        }
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                report?.Warnings.Add(new ConversionWarning($"lilToon rendering mode setup failed ({ex.Message})"));
-            }
         }
 
         private static bool TryFindExistingProperty(Material material, IReadOnlyList<string> candidates, out string propertyName)

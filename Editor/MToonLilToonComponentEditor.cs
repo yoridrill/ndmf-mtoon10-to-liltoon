@@ -112,20 +112,7 @@ namespace NdmfMToon10ToLilToon
             if (!component.enableHairMerge) return;
 
             EditorGUILayout.Space();
-            using (new EditorGUILayout.HorizontalScope())
-            {
-                EditorGUILayout.LabelField(T("Hair Merge Targets", "Hair Merge Targets"), EditorStyles.boldLabel);
-                if (GUILayout.Button(T("Scan", "Scan"), GUILayout.Width(80f)))
-                {
-                    ScanMaterials(component);
-                    EditorUtility.SetDirty(component);
-                }
-            }
-
-            if ((component.hairSelections == null || component.hairSelections.Count == 0))
-            {
-                ScanMaterials(component);
-            }
+            EditorGUILayout.LabelField(T("Hair Merge Targets", "Hair Merge Targets"), EditorStyles.boldLabel);
 
             if (component.hairSelections == null || component.hairSelections.Count == 0)
             {
