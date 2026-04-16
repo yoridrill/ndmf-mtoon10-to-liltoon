@@ -435,7 +435,17 @@ namespace NdmfMToon10ToLilToon
         private static void SetIfExists(Material material, string propertyName, float value)
         {
             if (!material.HasProperty(propertyName)) return;
+            if (TryGetPropertyType(material, propertyName, out var propertyType) && !IsNumericPropertyType(propertyType)) return;
             material.SetFloat(propertyName, value);
+        }
+
+        private static bool IsNumericPropertyType(ShaderPropertyType propertyType)
+        {
+            // Unity バージョン差で ShaderPropertyType.Int が存在しない場合があるため、
+            // enum 比較ではなく名前比較で Int を許可する。
+            return propertyType == ShaderPropertyType.Float
+                || propertyType == ShaderPropertyType.Range
+                || propertyType.ToString() == "Int";
         }
 
         private static void ApplyAlphaMode(Material source, Material destination, RenderType renderType)
