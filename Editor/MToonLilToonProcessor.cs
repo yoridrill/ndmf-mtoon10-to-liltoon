@@ -409,7 +409,7 @@ namespace NdmfMToon10ToLilToon
                     var u = (x + 0.5f) / width;
                     var tu = Mathf.Repeat(u * scale.x + offset.x, 1f);
                     var tv = Mathf.Repeat(v * scale.y + offset.y, 1f);
-                    colors[y * width + x] = readable.GetPixelBilinear(tu, tv);
+                    colors[y * width + x] = SampleRepeatPoint(readable, tu, tv);
                 }
             }
             transformed.SetPixels(colors);
@@ -429,8 +429,17 @@ namespace NdmfMToon10ToLilToon
         private static float WrapUv01(float value)
         {
             var wrapped = value - Mathf.Floor(value);
-            if (Mathf.Approximately(wrapped, 0f) && value > 0f) return 1f;
-            return wrapped;
+            if (Mathf.Abs(value - 1f) < 0.000001f) return 1f;
+            return Mathf.Clamp01(wrapped);
+        }
+
+        private static Color SampleRepeatPoint(Texture2D texture, float u, float v)
+        {
+            var width = texture.width;
+            var height = texture.height;
+            var x = Mathf.Clamp(Mathf.FloorToInt(Mathf.Repeat(u, 1f) * width), 0, Mathf.Max(0, width - 1));
+            var y = Mathf.Clamp(Mathf.FloorToInt(Mathf.Repeat(v, 1f) * height), 0, Mathf.Max(0, height - 1));
+            return texture.GetPixel(x, y);
         }
 
         private static void ApplyMergedMaterialAndMesh(Renderer renderer, List<Material> materials, List<int> materialSourceIndices, IReadOnlyList<int> mergedIndices, int mergedRepresentativeSourceIndex, Material mergedMaterial, IReadOnlyList<Rect> rects, ConversionReport report)
