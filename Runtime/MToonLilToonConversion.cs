@@ -187,7 +187,8 @@ namespace NdmfMToon10ToLilToon
             {
                 var renderType = RenderTypeResolver.ResolveFromMaterial(source);
                 var transparentWithZWrite = IsTransparentWithZWrite(source, renderType);
-                var destinationShader = ResolveLilToonBakedShader(lilToonShader, renderType, transparentWithZWrite);
+                var hasOutline = HasOutline(source);
+                var destinationShader = ResolveLilToonBakedShader(lilToonShader, renderType, transparentWithZWrite, hasOutline);
                 converted = new Material(destinationShader)
                 {
                     name = $"{source.name}_lilToon",
@@ -197,8 +198,7 @@ namespace NdmfMToon10ToLilToon
                 CopyTexture(source, converted, new[] { "_BaseMap", "_MainTex" }, new[] { "_MainTex", "_BaseMap" }, report);
                 CopyColor(source, converted, new[] { "_ShadeColor", "_ShadeColorFactor" }, new[] { "_ShadowColor", "_Shadow1stColor" }, report);
                 CopyTexture(source, converted, new[] { "_ShadeMap", "_ShadeMultiplyTexture", "_ShadeColorTexture" }, new[] { "_ShadowColorTex", "_Shadow1stColorTex" }, report);
-                CopyFloat(source, converted, new[] { "_ShadingShiftFactor" }, new[] { "_ShadowBorder" }, report);
-                CopyFloat(source, converted, new[] { "_ShadingToonyFactor" }, new[] { "_ShadowBlur" }, report);
+                ApplyShadingFactorMapping(source, converted);
                 CopyTexture(source, converted, new[] { "_NormalMap", "_BumpMap" }, new[] { "_BumpMap", "_NormalMap" }, report);
                 CopyColor(source, converted, new[] { "_EmissiveFactor", "_EmissionColor" }, new[] { "_EmissionColor" }, report);
                 CopyTexture(source, converted, new[] { "_EmissiveMap", "_EmissionMap" }, new[] { "_EmissionMap" }, report);
@@ -244,7 +244,7 @@ namespace NdmfMToon10ToLilToon
             return source.HasProperty("_ZWrite") && source.GetFloat("_ZWrite") > 0.5f;
         }
 
-        private static Shader ResolveLilToonBakedShader(Shader fallbackShader, RenderType renderType, bool transparentWithZWrite)
+        private static Shader ResolveLilToonBakedShader(Shader fallbackShader, RenderType renderType, bool transparentWithZWrite, bool hasOutline)
         {
             // lilToon の通常運用（Apply/Bake）に合わせて Hidden/lilToon 系を優先して利用する。
             // 見つからない場合のみユーザー指定 shader にフォールバック。
@@ -252,23 +252,49 @@ namespace NdmfMToon10ToLilToon
             switch (renderType)
             {
                 case RenderType.Opaque:
-                    hiddenShaderName = "Hidden/lilToon";
+                    hiddenShaderName = hasOutline ? "Hidden/lilToonOutline" : "Hidden/lilToon";
                     break;
                 case RenderType.Cutout:
-                    hiddenShaderName = "Hidden/lilToonCutout";
+                    hiddenShaderName = hasOutline ? "Hidden/lilToonCutoutOutline" : "Hidden/lilToonCutout";
                     break;
                 case RenderType.Transparent:
                     hiddenShaderName = transparentWithZWrite
-                        ? "Hidden/lilToonTransparentZWrite"
-                        : "Hidden/lilToonTransparent";
+                        ? (hasOutline ? "Hidden/lilToonTransparentOutlineZWrite" : "Hidden/lilToonTransparentZWrite")
+                        : (hasOutline ? "Hidden/lilToonTransparentOutline" : "Hidden/lilToonTransparent");
                     break;
                 default:
-                    hiddenShaderName = "Hidden/lilToon";
+                    hiddenShaderName = hasOutline ? "Hidden/lilToonOutline" : "Hidden/lilToon";
                     break;
             }
 
             var hidden = Shader.Find(hiddenShaderName);
+            if (hidden == null && hasOutline)
+            {
+                var nonOutlineName = hiddenShaderName
+                    .Replace("OutlineZWrite", "ZWrite")
+                    .Replace("Outline", string.Empty);
+                hidden = Shader.Find(nonOutlineName);
+            }
             return hidden != null ? hidden : fallbackShader;
+        }
+
+        private static void ApplyShadingFactorMapping(Material source, Material destination)
+        {
+            if (source == null || destination == null) return;
+
+            if (source.HasProperty("_ShadingShiftFactor"))
+            {
+                // MToon の shift は「境界位置」寄り、lilToon _ShadowBorder も同系なのでそのまま転送。
+                SetIfExists(destination, "_ShadowBorder", source.GetFloat("_ShadingShiftFactor"));
+            }
+
+            if (source.HasProperty("_ShadingToonyFactor"))
+            {
+                // MToon: 値が大きいほどくっきり
+                // lilToon _ShadowBlur: 値が大きいほどぼかし
+                var toony = Mathf.Clamp01(source.GetFloat("_ShadingToonyFactor"));
+                SetIfExists(destination, "_ShadowBlur", 1f - toony);
+            }
         }
 
         private static void ApplyLilToonOverrides(Material material, LilToonGlobalOverrides overrides)
