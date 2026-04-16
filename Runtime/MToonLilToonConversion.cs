@@ -198,7 +198,7 @@ namespace NdmfMToon10ToLilToon
 
                 ApplyRenderState(source, converted, report);
                 ApplyFallback(source, converted, renderType);
-                ApplyRenderQueue(converted, renderType);
+                ApplyRenderQueue(source, converted, renderType);
                 ApplyTransparentMode(converted, renderType);
                 ApplyTransparentZWrite(converted, renderType, transparentWithZWrite);
                 ApplyLilToonOverrides(converted, overrides);
@@ -255,17 +255,42 @@ namespace NdmfMToon10ToLilToon
             destination.SetOverrideTag("VRCFallback", fallback);
         }
 
-        private static void ApplyRenderQueue(Material destination, RenderType renderType)
+        private static void ApplyRenderQueue(Material source, Material destination, RenderType renderType)
         {
-            if (renderType == RenderType.Transparent)
+            var queueOffset = ResolveRenderQueueOffset(source, renderType);
+
+            switch (renderType)
             {
-                destination.renderQueue = 2460;
-                return;
+                case RenderType.Opaque:
+                    destination.renderQueue = (int)RenderQueue.Geometry;
+                    return;
+                case RenderType.Cutout:
+                    destination.renderQueue = (int)RenderQueue.AlphaTest;
+                    return;
+                case RenderType.Transparent:
+                    // VRChat アバター向け運用では 2460 開始の帯を使い、
+                    // 個々のマテリアルは後段の ReindexTransparentQueues で詰めて再採番する。
+                    destination.renderQueue = 2460 + queueOffset;
+                    return;
+            }
+        }
+
+        private static int ResolveRenderQueueOffset(Material source, RenderType renderType)
+        {
+            if (source == null || renderType != RenderType.Transparent) return 0;
+
+            var offset = 0;
+            if (source.HasProperty("_RenderQueueOffsetNumber"))
+            {
+                offset = Mathf.RoundToInt(source.GetFloat("_RenderQueueOffsetNumber"));
+            }
+            else if (source.HasProperty("_RenderQueueOffset"))
+            {
+                offset = Mathf.RoundToInt(source.GetFloat("_RenderQueueOffset"));
             }
 
-            destination.renderQueue = renderType == RenderType.Cutout
-                ? (int)RenderQueue.AlphaTest
-                : (int)RenderQueue.Geometry;
+            // VRoid 等で不適切な queue 値が入っていても、offset は安全側で小さく保つ。
+            return Mathf.Clamp(offset, -9, 9);
         }
 
         private static bool HasOutline(Material source)
@@ -294,9 +319,12 @@ namespace NdmfMToon10ToLilToon
         private static void ApplyRenderState(Material source, Material destination, ConversionReport report)
         {
             CopyFloat(source, destination, new[] { "_AlphaCutoff", "_Cutoff" }, new[] { "_Cutoff" }, report);
-            CopyFloat(source, destination, new[] { "_CullMode", "_Cull" }, new[] { "_Cull" }, report);
+            ApplyCullState(source, destination, report);
             CopyFloat(source, destination, new[] { "_SrcBlend" }, new[] { "_SrcBlend" }, report);
             CopyFloat(source, destination, new[] { "_DstBlend" }, new[] { "_DstBlend" }, report);
+            CopyFloat(source, destination, new[] { "_ZWrite" }, new[] { "_ZWrite" }, report);
+            CopyFloat(source, destination, new[] { "_ZTest" }, new[] { "_ZTest" }, report);
+            CopyFloat(source, destination, new[] { "_ColorMask" }, new[] { "_ColorMask" }, report);
 
             if (source.HasProperty("_BaseMap"))
             {
@@ -311,6 +339,40 @@ namespace NdmfMToon10ToLilToon
             var renderType = RenderTypeResolver.ResolveFromMaterial(source);
             ApplyAlphaMode(source, destination, renderType);
             ApplyBlendSetup(destination, renderType);
+        }
+
+        private static void ApplyCullState(Material source, Material destination, ConversionReport report)
+        {
+            if (source == null || destination == null) return;
+
+            // MToon10 は glTF doubleSided 由来で _DoubleSided を利用することがある。
+            // この値が true の場合は lilToon 側を Cull Off に揃える。
+            if (source.HasProperty("_DoubleSided"))
+            {
+                var doubleSided = source.GetFloat("_DoubleSided") > 0.5f;
+                var cull = doubleSided ? (float)CullMode.Off : (float)CullMode.Back;
+                SetIfExists(destination, "_Cull", cull);
+                SetIfExists(destination, "_OutlineCull", cull);
+                return;
+            }
+
+            if (TryFindExistingProperty(source, new[] { "_CullMode", "_Cull" }, out var sourceCull))
+            {
+                var cull = source.GetFloat(sourceCull);
+                SetIfExists(destination, "_Cull", cull);
+                SetIfExists(destination, "_OutlineCull", cull);
+                return;
+            }
+
+            // 旧式 MToon では culling が keyword で制御される場合がある。
+            if (source.IsKeywordEnabled("_CULL_OFF"))
+            {
+                SetIfExists(destination, "_Cull", (float)CullMode.Off);
+                SetIfExists(destination, "_OutlineCull", (float)CullMode.Off);
+                return;
+            }
+
+            report?.RegisterUnsupported("CullMode");
         }
 
         private static void ApplyShadow2OpacityZero(Material destination)
@@ -386,17 +448,20 @@ namespace NdmfMToon10ToLilToon
                     destination.DisableKeyword("_ALPHATEST_ON");
                     destination.DisableKeyword("_ALPHABLEND_ON");
                     destination.DisableKeyword("_ALPHAPREMULTIPLY_ON");
+                    SetIfExists(destination, "_UseClipping", 0f);
                     break;
                 case RenderType.Cutout:
                     destination.EnableKeyword("_ALPHATEST_ON");
                     destination.DisableKeyword("_ALPHABLEND_ON");
                     destination.DisableKeyword("_ALPHAPREMULTIPLY_ON");
                     SetIfExists(destination, "_Cutoff", cutoff);
+                    SetIfExists(destination, "_UseClipping", 1f);
                     break;
                 case RenderType.Transparent:
                     destination.DisableKeyword("_ALPHATEST_ON");
                     destination.EnableKeyword("_ALPHABLEND_ON");
                     destination.DisableKeyword("_ALPHAPREMULTIPLY_ON");
+                    SetIfExists(destination, "_UseClipping", 0f);
                     break;
             }
         }
@@ -424,20 +489,33 @@ namespace NdmfMToon10ToLilToon
 
         private static void ApplyTransparentMode(Material destination, RenderType renderType)
         {
+            var modeValue = renderType switch
+            {
+                RenderType.Opaque => 0f,
+                RenderType.Cutout => 1f,
+                _ => 2f,
+            };
+
             if (renderType == RenderType.Opaque)
             {
-                SetIfExists(destination, "_TransparentMode", 0f);
+                SetIfExists(destination, "_TransparentMode", modeValue);
+                SetIfExists(destination, "_RenderingMode", modeValue);
+                SetIfExists(destination, "_RenderMode", modeValue);
                 return;
             }
 
             if (renderType == RenderType.Cutout)
             {
-                SetIfExists(destination, "_TransparentMode", 1f);
+                SetIfExists(destination, "_TransparentMode", modeValue);
+                SetIfExists(destination, "_RenderingMode", modeValue);
+                SetIfExists(destination, "_RenderMode", modeValue);
                 return;
             }
 
-            // lilToon _TransparentMode: Opaque(0) / Cutout(1) / Transparent(2)
-            SetIfExists(destination, "_TransparentMode", 2f);
+            // lilToon はバージョンによって命名差分があるため候補をまとめて設定する。
+            SetIfExists(destination, "_TransparentMode", modeValue);
+            SetIfExists(destination, "_RenderingMode", modeValue);
+            SetIfExists(destination, "_RenderMode", modeValue);
         }
 
         private static void ApplyTransparentZWrite(Material destination, RenderType renderType, bool transparentWithZWrite)
