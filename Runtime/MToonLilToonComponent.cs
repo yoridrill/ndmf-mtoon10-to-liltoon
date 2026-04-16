@@ -8,7 +8,7 @@ namespace NdmfMToon10ToLilToon
     public sealed class MToonLilToonComponent : MonoBehaviour
     {
         public Shader lilToonShader;
-        public bool enableHairMerge = true;
+        public bool enableHairMerge;
         public List<HairMaterialSelection> hairSelections = new();
         public LilToonGlobalOverrides globalOverrides = new();
         public bool isPreviewing;

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using UnityEditor;
 using UnityEngine;
 
 namespace NdmfMToon10ToLilToon
@@ -8,15 +9,26 @@ namespace NdmfMToon10ToLilToon
     {
         internal static void ApplyOnBuild(MToonLilToonComponent component)
         {
-            if (component == null || component.lilToonShader == null) return;
+            if (component == null) return;
 
             var report = new ConversionReport();
+            var lilToonShader = ResolveLilToonShader(component);
+            if (lilToonShader == null)
+            {
+                component.warnings = new List<string> { "lilToon shader was not found in this project. Conversion skipped." };
+                component.scannedMaterialCount = 0;
+                component.convertedMaterialCount = 0;
+                component.skippedMaterialCount = 0;
+                component.unsupportedProperties = new List<string>();
+                return;
+            }
+
             var selectedForMerge = component.enableHairMerge
                 ? component.hairSelections.Where(s => s.selected && s.material != null).Select(s => s.material).ToHashSet()
                 : new HashSet<Material>();
             foreach (var renderer in component.GetComponentsInChildren<Renderer>(true))
             {
-                ProcessRenderer(component, renderer, selectedForMerge, report);
+                ProcessRenderer(renderer, selectedForMerge, lilToonShader, component.globalOverrides, report);
             }
 
             component.scannedMaterialCount = report.ScannedMaterialCount;
@@ -26,7 +38,7 @@ namespace NdmfMToon10ToLilToon
             component.unsupportedProperties = report.UnsupportedPropertySummary.Select(kv => $"{kv.Key}:{kv.Value}").ToList();
         }
 
-        private static void ProcessRenderer(MToonLilToonComponent component, Renderer renderer, HashSet<Material> selectedForMerge, ConversionReport report)
+        private static void ProcessRenderer(Renderer renderer, HashSet<Material> selectedForMerge, Shader lilToonShader, LilToonGlobalOverrides globalOverrides, ConversionReport report)
         {
             if (renderer == null) return;
 
@@ -64,7 +76,7 @@ namespace NdmfMToon10ToLilToon
                 }
 
                 var canMerge = !mergeExcluded && mergeType.HasValue && selectedForMerge.Contains(source);
-                if (MToonToLilToonMapper.TryConvert(source, component.lilToonShader, component.globalOverrides, out var converted, report))
+                if (MToonToLilToonMapper.TryConvert(source, lilToonShader, globalOverrides, out var converted, report))
                 {
                     result.Add(converted);
                     report.ConvertedMaterialCount++;
@@ -84,7 +96,7 @@ namespace NdmfMToon10ToLilToon
             }
 
             if (mergedIndices.Count >= 2
-                && TryMergeHairMaterials(original, mergedIndices, component.lilToonShader, component.globalOverrides, report, out mergedMaterial, out mergedRects))
+                && TryMergeHairMaterials(original, mergedIndices, lilToonShader, globalOverrides, report, out mergedMaterial, out mergedRects))
             {
                 mergedMaterialCreated = true;
                 var mergedRepresentativeIndex = mergedIndices
@@ -101,6 +113,28 @@ namespace NdmfMToon10ToLilToon
 
             ReindexTransparentQueues(result, resultSourceIndices, transparentRanks);
             renderer.sharedMaterials = result.ToArray();
+        }
+
+        private static Shader ResolveLilToonShader(MToonLilToonComponent component)
+        {
+            if (component.lilToonShader != null) return component.lilToonShader;
+
+            var resolved = Shader.Find("lilToon");
+            if (resolved == null)
+            {
+                var guids = AssetDatabase.FindAssets("lilToon t:Shader");
+                resolved = guids
+                    .Select(AssetDatabase.GUIDToAssetPath)
+                    .Select(AssetDatabase.LoadAssetAtPath<Shader>)
+                    .FirstOrDefault(shader => shader != null && shader.name == "lilToon")
+                    ?? guids
+                        .Select(AssetDatabase.GUIDToAssetPath)
+                        .Select(AssetDatabase.LoadAssetAtPath<Shader>)
+                        .FirstOrDefault(shader => shader != null && shader.name.IndexOf("liltoon", System.StringComparison.OrdinalIgnoreCase) >= 0);
+            }
+
+            component.lilToonShader = resolved;
+            return resolved;
         }
 
         private static bool TryMergeHairMaterials(
