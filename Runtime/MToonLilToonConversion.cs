@@ -202,7 +202,7 @@ namespace NdmfMToon10ToLilToon
                 CopyColor(source, converted, new[] { "_EmissiveFactor", "_EmissionColor" }, new[] { "_EmissionColor" }, report);
                 CopyTexture(source, converted, new[] { "_EmissiveMap", "_EmissionMap" }, new[] { "_EmissionMap" }, report);
                 CopyColor(source, converted, new[] { "_OutlineColorFactor", "_OutlineColor" }, new[] { "_OutlineColor" }, report);
-                CopyTexture(source, converted, new[] { "_OutlineWidthMultiplyTexture", "_OutlineMask" }, new[] { "_OutlineMask", "_OutlineTex" }, report);
+                CopyTexture(source, converted, new[] { "_OutlineWidthMultiplyTexture", "_OutlineMask" }, new[] { "_OutlineMask" }, report);
 
                 ApplyRenderState(source, converted, report);
                 ApplyOutlineState(source, converted);
@@ -365,12 +365,7 @@ namespace NdmfMToon10ToLilToon
                 destination.SetTexture("_OutlineTex", sourceMainTex);
             }
 
-            // MToon の OutlineMask と lilToon の opacity マスクは意味差が大きいため、
-            // 埋まり潰しを避けるためにメインテクスチャへ揃える。
-            if (destination.HasProperty("_OutlineMask"))
-            {
-                destination.SetTexture("_OutlineMask", sourceMainTex);
-            }
+            // _OutlineMask は MToon 側の OutlineMask を優先し、無い場合は触らない。
         }
 
         private static void ApplyFallback(Material source, Material destination, RenderType renderType)
