@@ -107,6 +107,12 @@ namespace NdmfMToon10ToLilToon
         public static RenderType ResolveFromMaterial(Material material)
         {
             if (material == null) return RenderType.Opaque;
+            if (material.HasProperty("_AlphaMode"))
+            {
+                var alphaMode = Mathf.RoundToInt(material.GetFloat("_AlphaMode"));
+                if (alphaMode == 1) return RenderType.Cutout;
+                if (alphaMode == 2 || alphaMode == 3) return RenderType.Transparent;
+            }
             if (material.IsKeywordEnabled("_ALPHATEST_ON")) return RenderType.Cutout;
             if (material.IsKeywordEnabled("_ALPHABLEND_ON") || material.GetTag("RenderType", false, "") == "Transparent")
             {
@@ -261,7 +267,8 @@ namespace NdmfMToon10ToLilToon
             CopyFloat(source, destination, new[] { "_AlphaCutoff", "_Cutoff" }, new[] { "_Cutoff" }, report);
             CopyFloat(source, destination, new[] { "_CullMode", "_Cull" }, new[] { "_Cull" }, report);
             CopyFloat(source, destination, new[] { "_ZWrite" }, new[] { "_ZWrite" }, report);
-            CopyFloat(source, destination, new[] { "_BlendMode", "_SrcBlend" }, new[] { "_BlendMode" }, report);
+            CopyFloat(source, destination, new[] { "_SrcBlend" }, new[] { "_SrcBlend" }, report);
+            CopyFloat(source, destination, new[] { "_DstBlend" }, new[] { "_DstBlend" }, report);
 
             if (source.HasProperty("_BaseMap"))
             {
@@ -272,6 +279,10 @@ namespace NdmfMToon10ToLilToon
             CopyFloat(source, destination, new[] { "_UvAnimScrollX", "_UvAnimationScrollXSpeedFactor" }, new[] { "_MainTex_ScrollRotateX", "_Main2ndTexAngle" }, report);
             CopyFloat(source, destination, new[] { "_UvAnimScrollY", "_UvAnimationScrollYSpeedFactor" }, new[] { "_MainTex_ScrollRotateY", "_Main2ndTex_ScrollRotate" }, report);
             CopyFloat(source, destination, new[] { "_UvAnimRotation", "_UvAnimationRotationSpeedFactor" }, new[] { "_MainTex_ScrollRotateR", "_Main2ndTex_ScrollRotate" }, report);
+
+            var renderType = RenderTypeResolver.ResolveFromMaterial(source);
+            ApplyAlphaMode(source, destination, renderType);
+            ApplyBlendSetup(destination, renderType);
         }
 
         private static void ApplyShadow2OpacityZero(Material destination)
@@ -317,12 +328,97 @@ namespace NdmfMToon10ToLilToon
 
         private static void SetIfExists(Material material, string propertyName, Color value)
         {
-            if (material.HasProperty(propertyName)) material.SetColor(propertyName, value);
+            if (!material.HasProperty(propertyName)) return;
+            if (TryGetPropertyType(material, propertyName, out var propertyType)
+                && propertyType != ShaderPropertyType.Color
+                && propertyType != ShaderPropertyType.Vector) return;
+            material.SetColor(propertyName, value);
         }
 
         private static void SetIfExists(Material material, string propertyName, float value)
         {
-            if (material.HasProperty(propertyName)) material.SetFloat(propertyName, value);
+            if (!material.HasProperty(propertyName)) return;
+            if (TryGetPropertyType(material, propertyName, out var propertyType)
+                && propertyType != ShaderPropertyType.Float
+                && propertyType != ShaderPropertyType.Range) return;
+            material.SetFloat(propertyName, value);
+        }
+
+        private static void ApplyAlphaMode(Material source, Material destination, RenderType renderType)
+        {
+            var cutoff = source.HasProperty("_AlphaCutoff")
+                ? source.GetFloat("_AlphaCutoff")
+                : source.HasProperty("_Cutoff")
+                    ? source.GetFloat("_Cutoff")
+                    : 0.5f;
+
+            switch (renderType)
+            {
+                case RenderType.Opaque:
+                    destination.DisableKeyword("_ALPHATEST_ON");
+                    destination.DisableKeyword("_ALPHABLEND_ON");
+                    destination.DisableKeyword("_ALPHAPREMULTIPLY_ON");
+                    break;
+                case RenderType.Cutout:
+                    destination.EnableKeyword("_ALPHATEST_ON");
+                    destination.DisableKeyword("_ALPHABLEND_ON");
+                    destination.DisableKeyword("_ALPHAPREMULTIPLY_ON");
+                    SetIfExists(destination, "_Cutoff", cutoff);
+                    break;
+                case RenderType.Transparent:
+                    destination.DisableKeyword("_ALPHATEST_ON");
+                    destination.EnableKeyword("_ALPHABLEND_ON");
+                    destination.DisableKeyword("_ALPHAPREMULTIPLY_ON");
+                    break;
+            }
+        }
+
+        private static void ApplyBlendSetup(Material destination, RenderType renderType)
+        {
+            switch (renderType)
+            {
+                case RenderType.Opaque:
+                    SetIfExists(destination, "_SrcBlend", (float)BlendMode.One);
+                    SetIfExists(destination, "_DstBlend", (float)BlendMode.Zero);
+                    SetIfExists(destination, "_ZWrite", 1f);
+                    SetAnyIfExists(destination, new[] { "_Surface", "_TransparentMode", "_BlendMode", "_Mode" }, 0f);
+                    break;
+                case RenderType.Cutout:
+                    SetIfExists(destination, "_SrcBlend", (float)BlendMode.One);
+                    SetIfExists(destination, "_DstBlend", (float)BlendMode.Zero);
+                    SetIfExists(destination, "_ZWrite", 1f);
+                    SetAnyIfExists(destination, new[] { "_Surface", "_TransparentMode", "_BlendMode", "_Mode" }, 1f);
+                    break;
+                case RenderType.Transparent:
+                    SetIfExists(destination, "_SrcBlend", (float)BlendMode.SrcAlpha);
+                    SetIfExists(destination, "_DstBlend", (float)BlendMode.OneMinusSrcAlpha);
+                    SetIfExists(destination, "_ZWrite", 0f);
+                    SetAnyIfExists(destination, new[] { "_Surface", "_TransparentMode", "_BlendMode", "_Mode" }, 2f);
+                    break;
+            }
+        }
+
+        private static void SetAnyIfExists(Material material, IReadOnlyList<string> candidates, float value)
+        {
+            if (!TryFindExistingProperty(material, candidates, out var to)) return;
+            SetIfExists(material, to, value);
+        }
+
+        private static bool TryGetPropertyType(Material material, string propertyName, out ShaderPropertyType propertyType)
+        {
+            propertyType = ShaderPropertyType.Float;
+            if (material == null || material.shader == null || string.IsNullOrEmpty(propertyName)) return false;
+
+            var shader = material.shader;
+            var propertyCount = shader.GetPropertyCount();
+            for (var i = 0; i < propertyCount; i++)
+            {
+                if (shader.GetPropertyName(i) != propertyName) continue;
+                propertyType = shader.GetPropertyType(i);
+                return true;
+            }
+
+            return false;
         }
 
         private static bool TryFindExistingProperty(Material material, IReadOnlyList<string> candidates, out string propertyName)
