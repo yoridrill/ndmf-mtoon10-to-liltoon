@@ -203,7 +203,7 @@ namespace NdmfMToon10ToLilToon
                 CopyColor(source, converted, new[] { "_EmissiveFactor", "_EmissionColor" }, new[] { "_EmissionColor" }, report);
                 CopyTexture(source, converted, new[] { "_EmissiveMap", "_EmissionMap" }, new[] { "_EmissionMap" }, report);
                 CopyColor(source, converted, new[] { "_OutlineColorFactor", "_OutlineColor" }, new[] { "_OutlineColor" }, report);
-                CopyTexture(source, converted, new[] { "_OutlineWidthMultiplyTexture", "_OutlineMask" }, new[] { "_OutlineMask" }, report);
+                CopyTexture(source, converted, new[] { "_OutlineWidthMultiplyTexture", "_OutlineMask" }, new[] { "_OutlineWidthMultiplyTexture", "_OutlineMask" }, report);
 
                 ApplyRenderState(source, converted, report);
                 ApplyOutlineState(source, converted);
@@ -369,6 +369,7 @@ namespace NdmfMToon10ToLilToon
 
             SetIfExists(destination, "_UseShadow", useShadow ? 1f : 0f);
             SetIfExists(destination, "_ReceiveShadowRate", useShadow ? 1f : 0f);
+            SetIfExists(destination, "_ShadowEnvStrength", 0.5f);
         }
 
         private static void ApplyOutlineState(Material source, Material destination)
