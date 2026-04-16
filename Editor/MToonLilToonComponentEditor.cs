@@ -159,7 +159,9 @@ namespace NdmfMToon10ToLilToon
             }
 
             component.hairSelections = HairMaterialSelector.BuildDefaultSelections(
-                renderers.SelectMany(r => r.sharedMaterials).Where(m => m != null));
+                renderers
+                    .SelectMany(r => r.sharedMaterials)
+                    .Where(m => m != null && MToonDetector.IsMToonLike(m)));
         }
 
         private string T(string ja, string en)

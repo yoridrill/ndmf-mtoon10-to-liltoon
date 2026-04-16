@@ -56,33 +56,18 @@ namespace NdmfMToon10ToLilToon
 
     public static class MToonDetector
     {
-        private static readonly string[] MToonLikeShaderNames =
+        private static readonly string[] ConvertibleShaderNamePrefixes =
         {
-            "MToon",
             "VRM10/MToon10",
-            "UniVRM",
+            "VRM/MToon",
         };
 
         public static bool IsMToonLike(Material material)
         {
             if (material == null || material.shader == null) return false;
             var shaderName = material.shader.name;
-            if (MToonLikeShaderNames.Any(token => shaderName.IndexOf(token, StringComparison.OrdinalIgnoreCase) >= 0))
-            {
-                return true;
-            }
-
-            var score = 0;
-            if (HasAny(material, "_BaseColor", "_Color")) score++;
-            if (HasAny(material, "_BaseMap", "_MainTex")) score++;
-            if (HasAny(material, "_ShadeColor", "_ShadeColorFactor")) score++;
-            if (HasAny(material, "_ShadingShiftFactor", "_ShadingToonyFactor")) score++;
-            return score >= 3;
-        }
-
-        private static bool HasAny(Material material, params string[] properties)
-        {
-            return properties.Any(material.HasProperty);
+            return ConvertibleShaderNamePrefixes.Any(prefix =>
+                shaderName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
         }
     }
 
@@ -107,25 +92,48 @@ namespace NdmfMToon10ToLilToon
         public static RenderType ResolveFromMaterial(Material material)
         {
             if (material == null) return RenderType.Opaque;
+
             if (material.HasProperty("_AlphaMode"))
             {
-                var alphaMode = Mathf.RoundToInt(material.GetFloat("_AlphaMode"));
-                if (alphaMode == 1) return RenderType.Cutout;
-                if (alphaMode == 2 || alphaMode == 3) return RenderType.Transparent;
-            }
-            if (material.IsKeywordEnabled("_ALPHATEST_ON")) return RenderType.Cutout;
-            if (material.IsKeywordEnabled("_ALPHABLEND_ON") || material.GetTag("RenderType", false, "") == "Transparent")
-            {
-                return RenderType.Transparent;
+                if (TryGetMToon10RenderType(material, out var renderType))
+                {
+                    return renderType;
+                }
             }
 
-            if (material.HasProperty("_Surface"))
+            if (material.HasProperty("_BlendMode"))
             {
-                var surface = Mathf.RoundToInt(material.GetFloat("_Surface"));
-                if (surface == 1) return RenderType.Transparent;
+                var blendMode = Mathf.RoundToInt(material.GetFloat("_BlendMode"));
+                if (blendMode == 1) return RenderType.Cutout;
+                if (blendMode >= 2) return RenderType.Transparent;
             }
 
             return RenderType.Opaque;
+        }
+
+        private static bool TryGetMToon10RenderType(Material material, out RenderType renderType)
+        {
+            renderType = RenderType.Opaque;
+            if (!material.HasProperty("_AlphaMode")) return false;
+
+            var alphaMode = Mathf.RoundToInt(material.GetFloat("_AlphaMode"));
+            switch (alphaMode)
+            {
+                // glTF alphaMode == OPAQUE
+                case 0:
+                    renderType = RenderType.Opaque;
+                    return true;
+                // glTF alphaMode == MASK
+                case 1:
+                    renderType = RenderType.Cutout;
+                    return true;
+                // glTF alphaMode == BLEND
+                case 2:
+                    renderType = RenderType.Transparent;
+                    return true;
+                default:
+                    return false;
+            }
         }
 
         public static RenderType ResolveMergeType(IEnumerable<Material> selectedMaterials)
