@@ -197,7 +197,7 @@ namespace NdmfMToon10ToLilToon
                 CopyColor(source, converted, new[] { "_BaseColor", "_Color" }, new[] { "_Color", "_BaseColor" }, report);
                 CopyTexture(source, converted, new[] { "_BaseMap", "_MainTex" }, new[] { "_MainTex", "_BaseMap" }, report);
                 CopyColor(source, converted, new[] { "_ShadeColor", "_ShadeColorFactor" }, new[] { "_ShadowColor", "_Shadow1stColor" }, report);
-                CopyTexture(source, converted, new[] { "_ShadeMap", "_ShadeMultiplyTexture", "_ShadeColorTexture" }, new[] { "_ShadowColorTex", "_Shadow1stColorTex" }, report);
+                ApplyShadeTextureMapping(source, converted, report);
                 ApplyShadingFactorMapping(source, converted);
                 CopyTexture(source, converted, new[] { "_NormalMap", "_BumpMap" }, new[] { "_BumpMap", "_NormalMap" }, report);
                 CopyColor(source, converted, new[] { "_EmissiveFactor", "_EmissionColor" }, new[] { "_EmissionColor" }, report);
@@ -296,6 +296,38 @@ namespace NdmfMToon10ToLilToon
                 var toony = Mathf.Clamp01(source.GetFloat("_ShadingToonyFactor"));
                 SetIfExists(destination, "_ShadowBlur", 1f - toony);
             }
+        }
+
+        private static void ApplyShadeTextureMapping(Material source, Material destination, ConversionReport report)
+        {
+            if (source == null || destination == null) return;
+
+            if (!TryFindExistingProperty(source, new[] { "_ShadeMap", "_ShadeMultiplyTexture", "_ShadeColorTexture" }, out var shadeProp))
+            {
+                return;
+            }
+
+            if (!TryFindExistingProperty(destination, new[] { "_ShadowColorTex", "_Shadow1stColorTex" }, out var destinationShadeProp))
+            {
+                report?.RegisterUnsupported(shadeProp);
+                return;
+            }
+
+            var shadeTex = source.GetTexture(shadeProp);
+            if (shadeTex == null) return;
+
+            Texture baseTex = null;
+            if (source.HasProperty("_BaseMap")) baseTex = source.GetTexture("_BaseMap");
+            else if (source.HasProperty("_MainTex")) baseTex = source.GetTexture("_MainTex");
+
+            // MToon 側で shade テクスチャが base と同一の場合、
+            // lilToon では乗算が強く出て影が濃くなりやすいので転送しない。
+            if (baseTex != null && shadeTex == baseTex)
+            {
+                return;
+            }
+
+            destination.SetTexture(destinationShadeProp, shadeTex);
         }
 
         private static void ApplyLilToonOverrides(Material material, LilToonGlobalOverrides overrides)
