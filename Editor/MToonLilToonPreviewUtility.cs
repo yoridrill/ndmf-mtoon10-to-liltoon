@@ -8,16 +8,26 @@ namespace NdmfMToon10ToLilToon
     [InitializeOnLoad]
     internal static class MToonLilToonPreviewUtility
     {
+        private const string PreviewRootName = "__MToonLilToonPreviewRoot";
+        private const string PreviewAvatarName = "__MToonLilToonPreviewAvatar";
+
         private static GameObject _sourceAvatarRoot;
         private static GameObject _previewRoot;
         private static GameObject _previewAvatar;
-        private static readonly List<Renderer> HiddenRenderers = new();
+        private static readonly List<RendererState> HiddenRenderers = new();
+
+        private struct RendererState
+        {
+            public Renderer renderer;
+            public bool wasEnabled;
+        }
 
         static MToonLilToonPreviewUtility()
         {
             AssemblyReloadEvents.beforeAssemblyReload += StopPreview;
             EditorApplication.playModeStateChanged += OnPlayModeStateChanged;
             EditorApplication.quitting += StopPreview;
+            CleanupOrphanPreviewObjects();
         }
 
         internal static void TogglePreview(MToonLilToonComponent component)
@@ -58,10 +68,13 @@ namespace NdmfMToon10ToLilToon
             StopPreview();
             _sourceAvatarRoot = avatarRoot;
 
-            _previewRoot = new GameObject("__MToonLilToonPreviewRoot");
-            _previewRoot.hideFlags = HideFlags.DontSave;
+            _previewRoot = new GameObject(PreviewRootName)
+            {
+                hideFlags = HideFlags.HideInHierarchy | HideFlags.DontSaveInEditor,
+            };
             _previewAvatar = Object.Instantiate(avatarRoot, _previewRoot.transform);
-            _previewAvatar.name = avatarRoot.name + "__Preview";
+            _previewAvatar.name = PreviewAvatarName;
+            _previewAvatar.hideFlags = HideFlags.HideInHierarchy | HideFlags.DontSaveInEditor;
 
             foreach (var component in _previewAvatar.GetComponentsInChildren<MToonLilToonComponent>(true))
             {
@@ -91,25 +104,30 @@ namespace NdmfMToon10ToLilToon
             _previewRoot = null;
             _previewAvatar = null;
             _sourceAvatarRoot = null;
+            CleanupOrphanPreviewObjects();
             SceneView.RepaintAll();
         }
 
         private static void HideSourceRenderers(GameObject avatarRoot)
         {
-            HiddenRenderers.Clear();
+            RestoreSourceRenderers();
             foreach (var renderer in avatarRoot.GetComponentsInChildren<Renderer>(true))
             {
-                if (!renderer.enabled) continue;
+                if (renderer == null) continue;
+                HiddenRenderers.Add(new RendererState
+                {
+                    renderer = renderer,
+                    wasEnabled = renderer.enabled,
+                });
                 renderer.enabled = false;
-                HiddenRenderers.Add(renderer);
             }
         }
 
         private static void RestoreSourceRenderers()
         {
-            foreach (var renderer in HiddenRenderers.Where(r => r != null))
+            foreach (var state in HiddenRenderers.Where(state => state.renderer != null))
             {
-                renderer.enabled = true;
+                state.renderer.enabled = state.wasEnabled;
             }
 
             HiddenRenderers.Clear();
@@ -121,6 +139,16 @@ namespace NdmfMToon10ToLilToon
             {
                 component.isPreviewing = previewing;
                 EditorUtility.SetDirty(component);
+            }
+        }
+
+        private static void CleanupOrphanPreviewObjects()
+        {
+            foreach (var go in Object.FindObjectsByType<GameObject>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            {
+                if (go == null) continue;
+                if (go.name != PreviewRootName && go.name != PreviewAvatarName) continue;
+                Object.DestroyImmediate(go);
             }
         }
 

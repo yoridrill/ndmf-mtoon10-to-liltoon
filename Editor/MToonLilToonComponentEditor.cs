@@ -146,14 +146,15 @@ namespace NdmfMToon10ToLilToon
 
         private static void ScanMaterials(MToonLilToonComponent component)
         {
-            var renderer = component.GetComponent<Renderer>();
-            if (renderer == null)
+            var renderers = component.GetComponentsInChildren<Renderer>(true);
+            if (renderers.Length == 0)
             {
                 component.hairSelections = new List<HairMaterialSelection>();
                 return;
             }
 
-            component.hairSelections = HairMaterialSelector.BuildDefaultSelections(renderer.sharedMaterials.Where(m => m != null));
+            component.hairSelections = HairMaterialSelector.BuildDefaultSelections(
+                renderers.SelectMany(r => r.sharedMaterials).Where(m => m != null));
         }
 
         private string T(string ja, string en)
