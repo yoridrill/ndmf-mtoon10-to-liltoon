@@ -8,20 +8,33 @@ namespace NdmfMToon10ToLilToon
     {
         internal static void ApplyOnBuild(MToonLilToonComponent component)
         {
-            var renderer = component.GetComponent<Renderer>();
-            if (renderer == null || component.lilToonShader == null) return;
+            if (component == null || component.lilToonShader == null) return;
 
             var report = new ConversionReport();
+            var selectedForMerge = component.enableHairMerge
+                ? component.hairSelections.Where(s => s.selected && s.material != null).Select(s => s.material).ToHashSet()
+                : new HashSet<Material>();
+            foreach (var renderer in component.GetComponentsInChildren<Renderer>(true))
+            {
+                ProcessRenderer(component, renderer, selectedForMerge, report);
+            }
+
+            component.scannedMaterialCount = report.ScannedMaterialCount;
+            component.convertedMaterialCount = report.ConvertedMaterialCount;
+            component.skippedMaterialCount = report.SkippedMaterialCount;
+            component.warnings = report.Warnings.Select(w => w.Message).ToList();
+            component.unsupportedProperties = report.UnsupportedPropertySummary.Select(kv => $"{kv.Key}:{kv.Value}").ToList();
+        }
+
+        private static void ProcessRenderer(MToonLilToonComponent component, Renderer renderer, HashSet<Material> selectedForMerge, ConversionReport report)
+        {
+            if (renderer == null) return;
+
             var original = renderer.sharedMaterials;
             var result = new List<Material>(original.Length);
             var resultSourceIndices = new List<int>(original.Length);
             var transparentRanks = BuildTransparentRanks(original);
-
-            report.ScannedMaterialCount = original.Length;
-
-            var selectedForMerge = component.enableHairMerge
-                ? component.hairSelections.Where(s => s.selected && s.material != null).Select(s => s.material).ToHashSet()
-                : new HashSet<Material>();
+            report.ScannedMaterialCount += original.Length;
 
             RenderType? mergeType = selectedForMerge.Count > 0
                 ? RenderTypeResolver.ResolveMergeType(selectedForMerge)
@@ -88,11 +101,6 @@ namespace NdmfMToon10ToLilToon
 
             ReindexTransparentQueues(result, resultSourceIndices, transparentRanks);
             renderer.sharedMaterials = result.ToArray();
-            component.scannedMaterialCount = report.ScannedMaterialCount;
-            component.convertedMaterialCount = report.ConvertedMaterialCount;
-            component.skippedMaterialCount = report.SkippedMaterialCount;
-            component.warnings = report.Warnings.Select(w => w.Message).ToList();
-            component.unsupportedProperties = report.UnsupportedPropertySummary.Select(kv => $"{kv.Key}:{kv.Value}").ToList();
         }
 
         private static bool TryMergeHairMaterials(
