@@ -349,7 +349,8 @@ namespace NdmfMToon10ToLilToon
                     : null;
             if (sourceMainTex == null) return;
 
-            if (destination.HasProperty("_OutlineTex") && destination.GetTexture("_OutlineTex") == null)
+            // MToon には _OutlineTex が無いため、常にメインテクスチャを輪郭線色/不透明度側へ割り当てる。
+            if (destination.HasProperty("_OutlineTex"))
             {
                 destination.SetTexture("_OutlineTex", sourceMainTex);
             }
