@@ -203,7 +203,7 @@ namespace NdmfMToon10ToLilToon
                 CopyColor(source, converted, new[] { "_EmissiveFactor", "_EmissionColor" }, new[] { "_EmissionColor" }, report);
                 CopyTexture(source, converted, new[] { "_EmissiveMap", "_EmissionMap" }, new[] { "_EmissionMap" }, report);
                 CopyColor(source, converted, new[] { "_OutlineColorFactor", "_OutlineColor" }, new[] { "_OutlineColor" }, report);
-                CopyTexture(source, converted, new[] { "_OutlineWidthMultiplyTexture", "_OutlineMask" }, new[] { "_OutlineWidthMultiplyTexture", "_OutlineMask" }, report);
+                CopyTexture(source, converted, new[] { "_OutlineWidthMultiplyTexture", "_OutlineMask", "_OutlineWidthMask" }, new[] { "_OutlineWidthMask", "_OutlineWidthMultiplyTexture", "_OutlineMask" }, report);
 
                 ApplyRenderState(source, converted, report);
                 ApplyOutlineState(source, converted);
@@ -425,7 +425,18 @@ namespace NdmfMToon10ToLilToon
                 destination.SetTexture("_OutlineTex", sourceMainTex);
             }
 
-            // _OutlineMask は MToon 側の OutlineMask を優先し、無い場合は触らない。
+            var sourceOutlineMask = source.HasProperty("_OutlineWidthMultiplyTexture")
+                ? source.GetTexture("_OutlineWidthMultiplyTexture")
+                : source.HasProperty("_OutlineMask")
+                    ? source.GetTexture("_OutlineMask")
+                    : source.HasProperty("_OutlineWidthMask")
+                        ? source.GetTexture("_OutlineWidthMask")
+                        : null;
+            if (sourceOutlineMask == null) return;
+
+            SetTextureIfExists(destination, "_OutlineWidthMask", sourceOutlineMask);
+            SetTextureIfExists(destination, "_OutlineWidthMultiplyTexture", sourceOutlineMask);
+            SetTextureIfExists(destination, "_OutlineMask", sourceOutlineMask);
         }
 
         private static void ApplyFallback(Material source, Material destination, RenderType renderType)
@@ -613,6 +624,13 @@ namespace NdmfMToon10ToLilToon
             if (!material.HasProperty(propertyName)) return;
             if (TryGetPropertyType(material, propertyName, out var propertyType) && !IsNumericPropertyType(propertyType)) return;
             material.SetFloat(propertyName, value);
+        }
+
+        private static void SetTextureIfExists(Material material, string propertyName, Texture texture)
+        {
+            if (material == null || texture == null) return;
+            if (!material.HasProperty(propertyName)) return;
+            material.SetTexture(propertyName, texture);
         }
 
         private static bool IsNumericPropertyType(ShaderPropertyType propertyType)
