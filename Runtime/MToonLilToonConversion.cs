@@ -435,10 +435,6 @@ namespace NdmfMToon10ToLilToon
         private static void SetIfExists(Material material, string propertyName, float value)
         {
             if (!material.HasProperty(propertyName)) return;
-            if (TryGetPropertyType(material, propertyName, out var propertyType)
-                && propertyType != ShaderPropertyType.Float
-                && propertyType != ShaderPropertyType.Int
-                && propertyType != ShaderPropertyType.Range) return;
             material.SetFloat(propertyName, value);
         }
 
