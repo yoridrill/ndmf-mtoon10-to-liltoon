@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -209,7 +208,6 @@ namespace NdmfMToon10ToLilToon
                 ApplyTransparentMode(converted, renderType);
                 ApplyTransparentZWrite(converted, renderType, transparentWithZWrite);
                 ApplyRenderTypeTag(converted, renderType);
-                TryApplyLilToonMaterialSetup(converted, renderType, transparentWithZWrite, report);
                 ApplyLilToonOverrides(converted, overrides);
                 ApplyShadow2OpacityZero(converted);
 
@@ -580,104 +578,6 @@ namespace NdmfMToon10ToLilToon
             }
 
             return false;
-        }
-
-        private static void TryApplyLilToonMaterialSetup(Material destination, RenderType renderType, bool transparentWithZWrite, ConversionReport report)
-        {
-            if (destination == null) return;
-
-            try
-            {
-                var lilTypes = AppDomain.CurrentDomain.GetAssemblies()
-                    .SelectMany(assembly =>
-                    {
-                        try { return assembly.GetTypes(); }
-                        catch (ReflectionTypeLoadException ex) { return ex.Types.Where(t => t != null); }
-                    })
-                    .Where(type => type != null
-                                   && type.IsClass
-                                   && type.Name == "lilMaterialUtils")
-                    .ToArray();
-                if (lilTypes.Length == 0) return;
-
-                var modeAsInt = renderType switch
-                {
-                    RenderType.Opaque => 0,
-                    RenderType.Cutout => 1,
-                    _ => 2,
-                };
-
-                foreach (var lilType in lilTypes)
-                {
-                    var methods = lilType
-                        .GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static)
-                        .Where(m => m.Name.IndexOf("SetupMaterialWith", StringComparison.OrdinalIgnoreCase) >= 0)
-                        .OrderBy(m => m.GetParameters().Length)
-                        .ToArray();
-                    foreach (var method in methods)
-                    {
-                        var parameters = method.GetParameters();
-                        if (!parameters.Any(p => p.ParameterType == typeof(Material))) continue;
-
-                        var args = new object[parameters.Length];
-                        var applicable = true;
-                        for (var i = 0; i < parameters.Length; i++)
-                        {
-                            var parameter = parameters[i];
-                            var parameterName = parameter.Name ?? string.Empty;
-                            if (parameter.ParameterType == typeof(Material))
-                            {
-                                args[i] = destination;
-                                continue;
-                            }
-
-                            if (parameter.ParameterType == typeof(int))
-                            {
-                                args[i] = modeAsInt;
-                                continue;
-                            }
-
-                            if (parameter.ParameterType.IsEnum)
-                            {
-                                args[i] = Enum.ToObject(parameter.ParameterType, modeAsInt);
-                                continue;
-                            }
-
-                            if (parameter.ParameterType == typeof(bool))
-                            {
-                                if (parameterName.IndexOf("cutout", StringComparison.OrdinalIgnoreCase) >= 0)
-                                    args[i] = renderType == RenderType.Cutout;
-                                else if (parameterName.IndexOf("transparent", StringComparison.OrdinalIgnoreCase) >= 0)
-                                    args[i] = renderType == RenderType.Transparent;
-                                else if (parameterName.IndexOf("opaque", StringComparison.OrdinalIgnoreCase) >= 0)
-                                    args[i] = renderType == RenderType.Opaque;
-                                else if (parameterName.IndexOf("zwrite", StringComparison.OrdinalIgnoreCase) >= 0)
-                                    args[i] = transparentWithZWrite;
-                                else
-                                    args[i] = renderType != RenderType.Opaque;
-                                continue;
-                            }
-
-                            if (parameter.HasDefaultValue)
-                            {
-                                args[i] = parameter.DefaultValue;
-                                continue;
-                            }
-
-                            applicable = false;
-                            break;
-                        }
-
-                        if (!applicable) continue;
-                        method.Invoke(null, args);
-                        return;
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                report?.Warnings.Add(new ConversionWarning($"lilToon material setup hook failed ({ex.Message})"));
-            }
         }
 
         private static bool TryFindExistingProperty(Material material, IReadOnlyList<string> candidates, out string propertyName)
