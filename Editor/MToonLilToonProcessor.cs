@@ -259,8 +259,10 @@ namespace NdmfMToon10ToLilToon
             var fallbackColor = ResolveAtlasFallbackColor(destinationProperty);
             var fallback = textures.FirstOrDefault(t => t != null) ?? NewSolidTexture(fallbackColor);
             var atlas = new Texture2D(atlasWidth, atlasHeight, TextureFormat.RGBA32, false);
-            if (textureCount <= 8)
-            {
+                var rectWidthPixels = rect.width * atlasWidth;
+                var rectHeightPixels = rect.height * atlasHeight;
+                var pixelWidth = Mathf.Max(1, Mathf.RoundToInt(rectWidthPixels));
+                var pixelHeight = Mathf.Max(1, Mathf.RoundToInt(rectHeightPixels));
                 required = Mathf.Min(required, 2048);
             }
             atlas.SetPixels(Enumerable.Repeat(fallbackColor, atlasWidth * atlasHeight).ToArray());
