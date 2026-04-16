@@ -108,6 +108,12 @@ namespace NdmfMToon10ToLilToon
                 if (blendMode >= 2) return RenderType.Transparent;
             }
 
+            if (material.IsKeywordEnabled("_ALPHATEST_ON")) return RenderType.Cutout;
+            if (material.IsKeywordEnabled("_ALPHABLEND_ON")) return RenderType.Transparent;
+
+            if (material.renderQueue >= (int)RenderQueue.Transparent) return RenderType.Transparent;
+            if (material.renderQueue >= (int)RenderQueue.AlphaTest) return RenderType.Cutout;
+
             return RenderType.Opaque;
         }
 
@@ -201,8 +207,10 @@ namespace NdmfMToon10ToLilToon
                 ApplyRenderQueue(source, converted, renderType);
                 ApplyTransparentMode(converted, renderType);
                 ApplyTransparentZWrite(converted, renderType, transparentWithZWrite);
+                ApplyRenderTypeTag(converted, renderType);
                 ApplyLilToonOverrides(converted, overrides);
                 ApplyShadow2OpacityZero(converted);
+                ApplyShadowDefaults(converted);
 
                 return true;
             }
@@ -449,6 +457,7 @@ namespace NdmfMToon10ToLilToon
                     destination.DisableKeyword("_ALPHABLEND_ON");
                     destination.DisableKeyword("_ALPHAPREMULTIPLY_ON");
                     SetIfExists(destination, "_UseClipping", 0f);
+                    SetIfExists(destination, "_AlphaMode", 0f);
                     break;
                 case RenderType.Cutout:
                     destination.EnableKeyword("_ALPHATEST_ON");
@@ -456,12 +465,14 @@ namespace NdmfMToon10ToLilToon
                     destination.DisableKeyword("_ALPHAPREMULTIPLY_ON");
                     SetIfExists(destination, "_Cutoff", cutoff);
                     SetIfExists(destination, "_UseClipping", 1f);
+                    SetIfExists(destination, "_AlphaMode", 1f);
                     break;
                 case RenderType.Transparent:
                     destination.DisableKeyword("_ALPHATEST_ON");
                     destination.EnableKeyword("_ALPHABLEND_ON");
                     destination.DisableKeyword("_ALPHAPREMULTIPLY_ON");
                     SetIfExists(destination, "_UseClipping", 0f);
+                    SetIfExists(destination, "_AlphaMode", 2f);
                     break;
             }
         }
@@ -527,6 +538,33 @@ namespace NdmfMToon10ToLilToon
             }
 
             SetIfExists(destination, "_ZWrite", transparentWithZWrite ? 1f : 0f);
+        }
+
+        private static void ApplyRenderTypeTag(Material destination, RenderType renderType)
+        {
+            if (destination == null) return;
+            switch (renderType)
+            {
+                case RenderType.Opaque:
+                    destination.SetOverrideTag("RenderType", "Opaque");
+                    break;
+                case RenderType.Cutout:
+                    destination.SetOverrideTag("RenderType", "TransparentCutout");
+                    break;
+                case RenderType.Transparent:
+                    destination.SetOverrideTag("RenderType", "Transparent");
+                    break;
+            }
+        }
+
+        private static void ApplyShadowDefaults(Material destination)
+        {
+            if (destination == null) return;
+            // lilToon のバージョン差異を考慮して候補プロパティを有効化。
+            if (destination.HasProperty("_UseShadow") && destination.GetFloat("_UseShadow") < 0.5f) destination.SetFloat("_UseShadow", 1f);
+            if (destination.HasProperty("_UseShadowMap") && destination.GetFloat("_UseShadowMap") < 0.5f) destination.SetFloat("_UseShadowMap", 1f);
+            if (destination.HasProperty("_UseReceiveShadow") && destination.GetFloat("_UseReceiveShadow") < 0.5f) destination.SetFloat("_UseReceiveShadow", 1f);
+            if (destination.HasProperty("_ShadowStrength") && destination.GetFloat("_ShadowStrength") <= 0f) destination.SetFloat("_ShadowStrength", 1f);
         }
 
         private static bool TryGetPropertyType(Material material, string propertyName, out ShaderPropertyType propertyType)

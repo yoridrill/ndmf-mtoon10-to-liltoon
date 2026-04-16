@@ -66,3 +66,5 @@ atlas サイズ方針:
 
 - 実行環境外では実機見た目確認はできません
 - 特殊なメッシュ構成では atlas/UV 結合結果の追加調整が必要な場合があります
+- 変換時は lilToon の描画モード（Opaque/Cutout/Transparent）を **明示的に再設定** し、RenderType tag / clipping / alpha mode を同期する前提です。
+- 影が消える事故を防ぐため、lilToon 側の shadow 有効系プロパティは存在する場合に有効化します（バージョン差異に対応するため複数候補を扱います）。
