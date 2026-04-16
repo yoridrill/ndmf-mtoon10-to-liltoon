@@ -179,6 +179,8 @@ namespace NdmfMToon10ToLilToon
 
             try
             {
+                var renderType = RenderTypeResolver.ResolveFromMaterial(source);
+                var transparentWithZWrite = IsTransparentWithZWrite(source, renderType);
                 converted = new Material(lilToonShader)
                 {
                     name = $"{source.name}_lilToon",
@@ -195,9 +197,10 @@ namespace NdmfMToon10ToLilToon
                 CopyTexture(source, converted, new[] { "_EmissiveMap", "_EmissionMap" }, new[] { "_EmissionMap" }, report);
 
                 ApplyRenderState(source, converted, report);
-                var renderType = RenderTypeResolver.ResolveFromMaterial(source);
                 ApplyFallback(source, converted, renderType);
                 ApplyRenderQueue(converted, renderType);
+                ApplyTransparentMode(converted, renderType);
+                ApplyTransparentZWrite(converted, renderType, transparentWithZWrite);
                 ApplyLilToonOverrides(converted, overrides);
                 ApplyShadow2OpacityZero(converted);
 
@@ -208,6 +211,24 @@ namespace NdmfMToon10ToLilToon
                 report?.Warnings.Add(new ConversionWarning($"{source.name}: conversion failed ({ex.Message})"));
                 return false;
             }
+        }
+
+        private static bool IsTransparentWithZWrite(Material source, RenderType renderType)
+        {
+            if (renderType != RenderType.Transparent || source == null) return false;
+
+            if (source.HasProperty("_TransparentWithZWrite"))
+            {
+                return source.GetFloat("_TransparentWithZWrite") > 0.5f;
+            }
+
+            if (source.HasProperty("_BlendMode"))
+            {
+                // Legacy MToon: TransparentWithZWrite == 3
+                return Mathf.RoundToInt(source.GetFloat("_BlendMode")) == 3;
+            }
+
+            return source.HasProperty("_ZWrite") && source.GetFloat("_ZWrite") > 0.5f;
         }
 
         private static void ApplyLilToonOverrides(Material material, LilToonGlobalOverrides overrides)
@@ -274,7 +295,6 @@ namespace NdmfMToon10ToLilToon
         {
             CopyFloat(source, destination, new[] { "_AlphaCutoff", "_Cutoff" }, new[] { "_Cutoff" }, report);
             CopyFloat(source, destination, new[] { "_CullMode", "_Cull" }, new[] { "_Cull" }, report);
-            CopyFloat(source, destination, new[] { "_ZWrite" }, new[] { "_ZWrite" }, report);
             CopyFloat(source, destination, new[] { "_SrcBlend" }, new[] { "_SrcBlend" }, report);
             CopyFloat(source, destination, new[] { "_DstBlend" }, new[] { "_DstBlend" }, report);
 
@@ -389,27 +409,46 @@ namespace NdmfMToon10ToLilToon
                     SetIfExists(destination, "_SrcBlend", (float)BlendMode.One);
                     SetIfExists(destination, "_DstBlend", (float)BlendMode.Zero);
                     SetIfExists(destination, "_ZWrite", 1f);
-                    SetAnyIfExists(destination, new[] { "_Surface", "_TransparentMode", "_BlendMode", "_Mode" }, 0f);
                     break;
                 case RenderType.Cutout:
                     SetIfExists(destination, "_SrcBlend", (float)BlendMode.One);
                     SetIfExists(destination, "_DstBlend", (float)BlendMode.Zero);
                     SetIfExists(destination, "_ZWrite", 1f);
-                    SetAnyIfExists(destination, new[] { "_Surface", "_TransparentMode", "_BlendMode", "_Mode" }, 1f);
                     break;
                 case RenderType.Transparent:
                     SetIfExists(destination, "_SrcBlend", (float)BlendMode.SrcAlpha);
                     SetIfExists(destination, "_DstBlend", (float)BlendMode.OneMinusSrcAlpha);
-                    SetIfExists(destination, "_ZWrite", 0f);
-                    SetAnyIfExists(destination, new[] { "_Surface", "_TransparentMode", "_BlendMode", "_Mode" }, 2f);
                     break;
             }
         }
 
-        private static void SetAnyIfExists(Material material, IReadOnlyList<string> candidates, float value)
+        private static void ApplyTransparentMode(Material destination, RenderType renderType)
         {
-            if (!TryFindExistingProperty(material, candidates, out var to)) return;
-            SetIfExists(material, to, value);
+            if (renderType == RenderType.Opaque)
+            {
+                SetIfExists(destination, "_TransparentMode", 0f);
+                return;
+            }
+
+            if (renderType == RenderType.Cutout)
+            {
+                SetIfExists(destination, "_TransparentMode", 1f);
+                return;
+            }
+
+            // lilToon _TransparentMode: Opaque(0) / Cutout(1) / Transparent(2)
+            SetIfExists(destination, "_TransparentMode", 2f);
+        }
+
+        private static void ApplyTransparentZWrite(Material destination, RenderType renderType, bool transparentWithZWrite)
+        {
+            if (renderType != RenderType.Transparent)
+            {
+                SetIfExists(destination, "_ZWrite", 1f);
+                return;
+            }
+
+            SetIfExists(destination, "_ZWrite", transparentWithZWrite ? 1f : 0f);
         }
 
         private static bool TryGetPropertyType(Material material, string propertyName, out ShaderPropertyType propertyType)
