@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -212,8 +211,6 @@ namespace NdmfMToon10ToLilToon
                 ApplyTransparentMode(converted, renderType);
                 ApplyTransparentZWrite(converted, renderType, transparentWithZWrite);
                 ApplyRenderTypeTag(converted, renderType);
-                TryFinalizeLilToonMaterial(converted, report);
-                // lilToon 側セットアップで値が初期化される場合があるため、最後に再適用する。
                 ApplyOutlineState(source, converted);
                 ApplyShadowState(source, converted);
                 ApplyLilToonOverrides(converted, overrides);
@@ -677,39 +674,6 @@ namespace NdmfMToon10ToLilToon
             }
 
             return false;
-        }
-
-        private static void TryFinalizeLilToonMaterial(Material material, ConversionReport report)
-        {
-            if (material == null) return;
-
-            try
-            {
-                var utilsType = AppDomain.CurrentDomain.GetAssemblies()
-                    .Select(a => a.GetType("lilToon.lilMaterialUtils", false))
-                    .FirstOrDefault(t => t != null);
-                if (utilsType == null) return;
-
-                var methods = utilsType
-                    .GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static)
-                    .Where(m => m.Name == "SetupMaterialWithRenderingMode")
-                    .ToArray();
-                if (methods.Length == 0) return;
-
-                foreach (var method in methods)
-                {
-                    var parameters = method.GetParameters();
-                    if (parameters.Length == 1 && parameters[0].ParameterType == typeof(Material))
-                    {
-                        method.Invoke(null, new object[] { material });
-                        return;
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                report?.Warnings.Add(new ConversionWarning($"lilToon finalization failed ({ex.Message})"));
-            }
         }
 
         private static bool TryFindExistingProperty(Material material, IReadOnlyList<string> candidates, out string propertyName)
