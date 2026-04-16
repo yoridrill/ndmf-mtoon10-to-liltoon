@@ -285,11 +285,7 @@ namespace NdmfMToon10ToLilToon
             if (string.IsNullOrEmpty(destinationProperty)) return Color.white;
             if (destinationProperty.IndexOf("Bump", System.StringComparison.OrdinalIgnoreCase) >= 0)
             {
-                return new Color(0.5f, 0.5f, 1f, 1f);
-            }
-            if (destinationProperty.IndexOf("Emission", System.StringComparison.OrdinalIgnoreCase) >= 0)
-            {
-                return Color.black;
+            return Mathf.Clamp(required, 1024, 2048);
             }
             return Color.white;
         }
