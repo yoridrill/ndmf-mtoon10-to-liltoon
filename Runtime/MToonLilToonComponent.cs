@@ -4,6 +4,7 @@ using UnityEngine;
 namespace NdmfMToon10ToLilToon
 {
     [DisallowMultipleComponent]
+    [AddComponentMenu("NDMF/NDMF MToon10 to lilToon")]
     public sealed class MToonLilToonComponent : MonoBehaviour
     {
         public Shader lilToonShader;
