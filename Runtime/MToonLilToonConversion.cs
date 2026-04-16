@@ -56,41 +56,21 @@ namespace NdmfMToon10ToLilToon
 
     public static class MToonDetector
     {
-        private static readonly string[] MToon10ShaderNames =
+        private static readonly string[] ConvertibleShaderNameTokens =
         {
             "VRM10/MToon10",
             "MToon10",
-        };
-
-        private static readonly string[] CompatibleShaderNameHints =
-        {
+            "VRM/MToon",
             "MToon",
-            "UniVRM",
+            "ClusterMToon",
         };
 
         public static bool IsMToonLike(Material material)
         {
             if (material == null || material.shader == null) return false;
             var shaderName = material.shader.name;
-            if (MToon10ShaderNames.Any(token => shaderName.IndexOf(token, StringComparison.OrdinalIgnoreCase) >= 0))
-            {
-                return true;
-            }
-
-            var hasCompatibleName = CompatibleShaderNameHints.Any(token =>
+            return ConvertibleShaderNameTokens.Any(token =>
                 shaderName.IndexOf(token, StringComparison.OrdinalIgnoreCase) >= 0);
-            if (!hasCompatibleName) return false;
-
-            // このツールは MToon10 想定のため、互換シェーダーも MToon10 にかなり近い構成のみ許可する。
-            return material.HasProperty("_AlphaMode")
-                && HasAny(material, "_BaseColor", "_Color")
-                && HasAny(material, "_BaseMap", "_MainTex")
-                && HasAny(material, "_ShadeColor", "_ShadeColorFactor");
-        }
-
-        private static bool HasAny(Material material, params string[] properties)
-        {
-            return properties.Any(material.HasProperty);
         }
     }
 
@@ -124,19 +104,11 @@ namespace NdmfMToon10ToLilToon
                 }
             }
 
-            // MToon10 互換向けの最低限フォールバック
             if (material.HasProperty("_BlendMode"))
             {
                 var blendMode = Mathf.RoundToInt(material.GetFloat("_BlendMode"));
                 if (blendMode == 1) return RenderType.Cutout;
                 if (blendMode >= 2) return RenderType.Transparent;
-            }
-
-            if (material.IsKeywordEnabled("_ALPHATEST_ON")) return RenderType.Cutout;
-            if (material.IsKeywordEnabled("_ALPHABLEND_ON")
-                || material.IsKeywordEnabled("_ALPHAPREMULTIPLY_ON"))
-            {
-                return RenderType.Transparent;
             }
 
             return RenderType.Opaque;
