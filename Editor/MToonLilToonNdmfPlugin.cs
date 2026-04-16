@@ -5,7 +5,7 @@ using UnityEngine;
 
 namespace NdmfMToon10ToLilToon
 {
-    public sealed class MToonLilToonNdmfPlugin : Plugin
+    public sealed class MToonLilToonNdmfPlugin : Plugin<MToonLilToonNdmfPlugin>
     {
         public override string QualifiedName => "jp.yoridrill.ndmf-mtoon10-to-liltoon";
         public override string DisplayName => "NDMF MToon1.0 to lilToon";
