@@ -187,7 +187,7 @@ namespace NdmfMToon10ToLilToon
             }
 
             var fallback = atlasTextures.FirstOrDefault(t => t != null) ?? NewSolidTexture(Color.white);
-            var atlasMaxSize = ResolveAtlasMaxSize(atlasTextures, mergedIndices.Count);
+            var atlasMaxSize = ResolveAtlasMaxSize(atlasTextures);
             var packTextures = PrepareBaseAtlasTextures(atlasTextures, fallback, atlasMaxSize, mergedIndices.Count);
             var atlas = new Texture2D(2, 2, TextureFormat.RGBA32, false);
             atlasRects = atlas.PackTextures(packTextures, 2, atlasMaxSize, false).ToList();
@@ -266,7 +266,8 @@ namespace NdmfMToon10ToLilToon
             atlas.SetPixels(Enumerable.Repeat(fallbackColor, atlasWidth * atlasHeight).ToArray());
             for (var i = 0; i < textures.Count && i < rects.Count; i++)
             {
-                var src = textures[i] ?? fallback;
+        private static int ResolveAtlasMaxSize(IReadOnlyList<Texture2D> textures)
+            var textureCount = Mathf.Max(1, textures?.Count ?? 0);
                 var rect = rects[i];
                 var pixelWidth = Mathf.Max(1, Mathf.RoundToInt(rect.width * atlasWidth));
                 var pixelHeight = Mathf.Max(1, Mathf.RoundToInt(rect.height * atlasHeight));
