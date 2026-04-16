@@ -159,13 +159,25 @@ namespace NdmfMToon10ToLilToon
             {
                 var source = original[mergedIndices[i]];
                 Texture texture = null;
+                Vector2 scale = Vector2.one;
+                Vector2 offset = Vector2.zero;
                 if (source != null)
                 {
-                    if (source.HasProperty("_BaseMap")) texture = source.GetTexture("_BaseMap");
-                    else if (source.HasProperty("_MainTex")) texture = source.GetTexture("_MainTex");
+                    if (source.HasProperty("_BaseMap"))
+                    {
+                        texture = source.GetTexture("_BaseMap");
+                        scale = source.GetTextureScale("_BaseMap");
+                        offset = source.GetTextureOffset("_BaseMap");
+                    }
+                    else if (source.HasProperty("_MainTex"))
+                    {
+                        texture = source.GetTexture("_MainTex");
+                        scale = source.GetTextureScale("_MainTex");
+                        offset = source.GetTextureOffset("_MainTex");
+                    }
                 }
 
-                atlasTextures.Add(ToReadableTexture(texture));
+                atlasTextures.Add(ToReadableTextureWithTransform(texture, scale, offset));
             }
 
             if (atlasTextures.All(t => t == null))
@@ -180,6 +192,11 @@ namespace NdmfMToon10ToLilToon
             var atlas = new Texture2D(2, 2, TextureFormat.RGBA32, false);
             atlasRects = atlas.PackTextures(packTextures, 2, atlasMaxSize, false).ToList();
             mergedMaterial.SetTexture("_MainTex", atlas);
+            if (mergedMaterial.HasProperty("_MainTex"))
+            {
+                mergedMaterial.SetTextureScale("_MainTex", Vector2.one);
+                mergedMaterial.SetTextureOffset("_MainTex", Vector2.zero);
+            }
 
             BakeOptionalAtlas(new[] { "_ShadowColorTex", "_Shadow1stColorTex" }, original, mergedIndices, mergedMaterial, new[] { "_ShadeMap", "_ShadeMultiplyTexture" }, atlas.width, atlas.height, atlasRects);
             BakeOptionalAtlas(new[] { "_EmissionMap" }, original, mergedIndices, mergedMaterial, new[] { "_EmissiveMap", "_EmissionMap" }, atlas.width, atlas.height, atlasRects);
@@ -192,13 +209,12 @@ namespace NdmfMToon10ToLilToon
         private static Texture2D[] PrepareBaseAtlasTextures(IReadOnlyList<Texture2D> sourceTextures, Texture2D fallback, int atlasSize, int textureCount)
         {
             var prepared = sourceTextures.Select(t => t ?? fallback).ToArray();
-            if (textureCount < 22) return prepared;
 
             var maxWidth = prepared.Max(t => t.width);
             var maxHeight = prepared.Max(t => t.height);
-            const int columns = 8;
-            const int rows = 4;
             const int padding = 2;
+            var columns = Mathf.Max(1, Mathf.CeilToInt(Mathf.Sqrt(textureCount)));
+            var rows = Mathf.Max(1, Mathf.CeilToInt(textureCount / (float)columns));
 
             var scaleX = (atlasSize - (columns - 1) * padding) / (float)(columns * maxWidth);
             var scaleY = (atlasSize - (rows - 1) * padding) / (float)(rows * maxHeight);
@@ -224,15 +240,19 @@ namespace NdmfMToon10ToLilToon
             {
                 var source = original[mergedIndices[i]];
                 Texture texture = null;
+                Vector2 scale = Vector2.one;
+                Vector2 offset = Vector2.zero;
                 if (source != null)
                 {
                     var sourceProperty = sourceProperties.FirstOrDefault(source.HasProperty);
                     if (!string.IsNullOrEmpty(sourceProperty))
                     {
                         texture = source.GetTexture(sourceProperty);
+                        scale = source.GetTextureScale(sourceProperty);
+                        offset = source.GetTextureOffset(sourceProperty);
                     }
                 }
-                textures.Add(ToReadableTexture(texture));
+                textures.Add(ToReadableTextureWithTransform(texture, scale, offset));
             }
 
             if (textures.All(t => t == null)) return;
@@ -303,6 +323,32 @@ namespace NdmfMToon10ToLilToon
             RenderTexture.active = current;
             RenderTexture.ReleaseTemporary(rt);
             return readable;
+        }
+
+        private static Texture2D ToReadableTextureWithTransform(Texture texture, Vector2 scale, Vector2 offset)
+        {
+            var readable = ToReadableTexture(texture);
+            if (readable == null) return null;
+            if ((scale - Vector2.one).sqrMagnitude < 0.000001f && offset.sqrMagnitude < 0.000001f) return readable;
+
+            var width = readable.width;
+            var height = readable.height;
+            var transformed = new Texture2D(width, height, TextureFormat.RGBA32, false);
+            var colors = new Color[width * height];
+            for (var y = 0; y < height; y++)
+            {
+                var v = (y + 0.5f) / height;
+                for (var x = 0; x < width; x++)
+                {
+                    var u = (x + 0.5f) / width;
+                    var tu = Mathf.Repeat(u * scale.x + offset.x, 1f);
+                    var tv = Mathf.Repeat(v * scale.y + offset.y, 1f);
+                    colors[y * width + x] = readable.GetPixelBilinear(tu, tv);
+                }
+            }
+            transformed.SetPixels(colors);
+            transformed.Apply();
+            return transformed;
         }
 
         private static Texture2D NewSolidTexture(Color color)
