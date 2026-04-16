@@ -187,7 +187,8 @@ namespace NdmfMToon10ToLilToon
             {
                 var renderType = RenderTypeResolver.ResolveFromMaterial(source);
                 var transparentWithZWrite = IsTransparentWithZWrite(source, renderType);
-                var destinationShader = ResolveLilToonBakedShader(lilToonShader, renderType, transparentWithZWrite);
+                var hasOutline = HasOutline(source);
+                var destinationShader = ResolveLilToonBakedShader(lilToonShader, renderType, transparentWithZWrite, hasOutline);
                 converted = new Material(destinationShader)
                 {
                     name = $"{source.name}_lilToon",
@@ -244,28 +245,35 @@ namespace NdmfMToon10ToLilToon
             return source.HasProperty("_ZWrite") && source.GetFloat("_ZWrite") > 0.5f;
         }
 
-        private static Shader ResolveLilToonBakedShader(Shader fallbackShader, RenderType renderType, bool transparentWithZWrite)
+        private static Shader ResolveLilToonBakedShader(Shader fallbackShader, RenderType renderType, bool transparentWithZWrite, bool hasOutline)
         {
             string hiddenShaderName;
             switch (renderType)
             {
                 case RenderType.Opaque:
-                    hiddenShaderName = "Hidden/lilToon";
+                    hiddenShaderName = hasOutline ? "Hidden/lilToonOutline" : "Hidden/lilToon";
                     break;
                 case RenderType.Cutout:
-                    hiddenShaderName = "Hidden/lilToonCutout";
+                    hiddenShaderName = hasOutline ? "Hidden/lilToonCutoutOutline" : "Hidden/lilToonCutout";
                     break;
                 case RenderType.Transparent:
                     hiddenShaderName = transparentWithZWrite
-                        ? "Hidden/lilToonTransparentZWrite"
-                        : "Hidden/lilToonTransparent";
+                        ? (hasOutline ? "Hidden/lilToonTransparentOutlineZWrite" : "Hidden/lilToonTransparentZWrite")
+                        : (hasOutline ? "Hidden/lilToonTransparentOutline" : "Hidden/lilToonTransparent");
                     break;
                 default:
-                    hiddenShaderName = "Hidden/lilToon";
+                    hiddenShaderName = hasOutline ? "Hidden/lilToonOutline" : "Hidden/lilToon";
                     break;
             }
 
             var hidden = Shader.Find(hiddenShaderName);
+            if (hidden == null && hasOutline)
+            {
+                var nonOutlineName = hiddenShaderName
+                    .Replace("OutlineZWrite", "ZWrite")
+                    .Replace("Outline", string.Empty);
+                hidden = Shader.Find(nonOutlineName);
+            }
             return hidden != null ? hidden : fallbackShader;
         }
 
@@ -275,8 +283,10 @@ namespace NdmfMToon10ToLilToon
 
             if (source.HasProperty("_ShadingShiftFactor"))
             {
-                // MToon の shift は「境界位置」寄り、lilToon _ShadowBorder も同系なのでそのまま転送。
-                SetIfExists(destination, "_ShadowBorder", source.GetFloat("_ShadingShiftFactor"));
+                // MToon: -1 で影が覆い尽くす / +1 で影が消える（レンジ -1..1）
+                // lilToon: 1 で影が覆い尽くす / 0 で影が消える（レンジ 0..1）
+                var shift = Mathf.Clamp(source.GetFloat("_ShadingShiftFactor"), -1f, 1f);
+                SetIfExists(destination, "_ShadowBorder", (1f - shift) * 0.5f);
             }
 
             if (source.HasProperty("_ShadingToonyFactor"))
