@@ -202,8 +202,13 @@ namespace NdmfMToon10ToLilToon
                 CopyTexture(source, converted, new[] { "_NormalMap", "_BumpMap" }, new[] { "_BumpMap", "_NormalMap" }, report);
                 CopyColor(source, converted, new[] { "_EmissiveFactor", "_EmissionColor" }, new[] { "_EmissionColor" }, report);
                 CopyTexture(source, converted, new[] { "_EmissiveMap", "_EmissionMap" }, new[] { "_EmissionMap" }, report);
+                CopyColor(source, converted, new[] { "_OutlineColorFactor", "_OutlineColor" }, new[] { "_OutlineColor" }, report);
+                CopyFloat(source, converted, new[] { "_OutlineWidthFactor", "_OutlineWidth" }, new[] { "_OutlineWidth" }, report);
+                CopyTexture(source, converted, new[] { "_OutlineWidthMultiplyTexture", "_OutlineMask" }, new[] { "_OutlineMask", "_OutlineTex" }, report);
 
                 ApplyRenderState(source, converted, report);
+                ApplyOutlineState(source, converted);
+                ApplyShadowState(source, converted);
                 ApplyFallback(source, converted, renderType);
                 ApplyRenderQueue(source, converted, renderType);
                 ApplyTransparentMode(converted, renderType);
@@ -275,6 +280,34 @@ namespace NdmfMToon10ToLilToon
             SetIfExists(material, "_DistanceFade", overrides.distanceFadeStrength);
             SetIfExists(material, "_BacklightColor", overrides.backlightColor);
             SetIfExists(material, "_BacklightStrength", overrides.backlightStrength);
+        }
+
+        private static void ApplyShadowState(Material source, Material destination)
+        {
+            if (source == null || destination == null) return;
+
+            var useShadow = true;
+            if (source.HasProperty("_ReceiveShadowRate"))
+            {
+                useShadow = source.GetFloat("_ReceiveShadowRate") > 0.001f;
+            }
+
+            SetIfExists(destination, "_UseShadow", useShadow ? 1f : 0f);
+            SetIfExists(destination, "_ReceiveShadowRate", useShadow ? 1f : 0f);
+        }
+
+        private static void ApplyOutlineState(Material source, Material destination)
+        {
+            if (source == null || destination == null) return;
+
+            var useOutline = HasOutline(source);
+            SetIfExists(destination, "_UseOutline", useOutline ? 1f : 0f);
+            SetIfExists(destination, "_OutlineEnable", useOutline ? 1f : 0f);
+
+            if (!useOutline)
+            {
+                SetIfExists(destination, "_OutlineWidth", 0f);
+            }
         }
 
         private static void ApplyFallback(Material source, Material destination, RenderType renderType)
