@@ -334,7 +334,21 @@ namespace NdmfMToon10ToLilToon
 
                         if (count <= 0) continue;
                         var averaged = sum / count;
-                        averaged.a = 0f;
+                        var maxNeighborAlpha = 0f;
+                        for (var oy = -1; oy <= 1; oy++)
+                        {
+                            var ny = y + oy;
+                            if (ny < 0 || ny >= height) continue;
+                            for (var ox = -1; ox <= 1; ox++)
+                            {
+                                var nx = x + ox;
+                                if (nx < 0 || nx >= width) continue;
+                                var nidx = ny * width + nx;
+                                var neighborAlpha = pixels[nidx].a;
+                                if (neighborAlpha > maxNeighborAlpha) maxNeighborAlpha = neighborAlpha;
+                            }
+                        }
+                        averaged.a = maxNeighborAlpha;
                         work[idx] = averaged;
                     }
                 }
@@ -468,7 +482,7 @@ namespace NdmfMToon10ToLilToon
             }
 
             var atlasTexture = mergedMaterial != null ? mergedMaterial.GetTexture("_MainTex") : null;
-            const float paddingPixels = 2f;
+            const float paddingPixels = 1f;
             var padU = atlasTexture != null && atlasTexture.width > 0 ? paddingPixels / atlasTexture.width : 0f;
             var padV = atlasTexture != null && atlasTexture.height > 0 ? paddingPixels / atlasTexture.height : 0f;
 
