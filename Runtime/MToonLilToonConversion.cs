@@ -203,7 +203,6 @@ namespace NdmfMToon10ToLilToon
                 CopyColor(source, converted, new[] { "_EmissiveFactor", "_EmissionColor" }, new[] { "_EmissionColor" }, report);
                 CopyTexture(source, converted, new[] { "_EmissiveMap", "_EmissionMap" }, new[] { "_EmissionMap" }, report);
                 CopyColor(source, converted, new[] { "_OutlineColorFactor", "_OutlineColor" }, new[] { "_OutlineColor" }, report);
-                CopyFloat(source, converted, new[] { "_OutlineWidthFactor", "_OutlineWidth" }, new[] { "_OutlineWidth" }, report);
                 CopyTexture(source, converted, new[] { "_OutlineWidthMultiplyTexture", "_OutlineMask" }, new[] { "_OutlineMask", "_OutlineTex" }, report);
 
                 ApplyRenderState(source, converted, report);
@@ -333,6 +332,31 @@ namespace NdmfMToon10ToLilToon
             if (!useOutline)
             {
                 SetIfExists(destination, "_OutlineWidth", 0f);
+                return;
+            }
+
+            var sourceWidth = 0f;
+            if (source.HasProperty("_OutlineWidthFactor")) sourceWidth = source.GetFloat("_OutlineWidthFactor");
+            else if (source.HasProperty("_OutlineWidth")) sourceWidth = source.GetFloat("_OutlineWidth");
+
+            // MToon と lilToon で輪郭線の幅スケールが大きく異なるため補正する。
+            SetIfExists(destination, "_OutlineWidth", sourceWidth * 80f);
+
+            var sourceMainTex = source.HasProperty("_BaseMap")
+                ? source.GetTexture("_BaseMap")
+                : source.HasProperty("_MainTex")
+                    ? source.GetTexture("_MainTex")
+                    : null;
+            if (sourceMainTex == null) return;
+
+            if (destination.HasProperty("_OutlineTex") && destination.GetTexture("_OutlineTex") == null)
+            {
+                destination.SetTexture("_OutlineTex", sourceMainTex);
+            }
+
+            if (destination.HasProperty("_OutlineMask") && destination.GetTexture("_OutlineMask") == null)
+            {
+                destination.SetTexture("_OutlineMask", sourceMainTex);
             }
         }
 
