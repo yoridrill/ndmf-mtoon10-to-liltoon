@@ -188,9 +188,7 @@ namespace NdmfMToon10ToLilToon
             {
                 var renderType = RenderTypeResolver.ResolveFromMaterial(source);
                 var transparentWithZWrite = IsTransparentWithZWrite(source, renderType);
-                var hasOutline = HasOutline(source);
-                var destinationShader = ResolveLilToonBakedShader(lilToonShader, renderType, transparentWithZWrite, hasOutline);
-                converted = new Material(destinationShader)
+                converted = new Material(lilToonShader)
                 {
                     name = $"{source.name}_lilToon",
                 };
@@ -246,40 +244,6 @@ namespace NdmfMToon10ToLilToon
             }
 
             return source.HasProperty("_ZWrite") && source.GetFloat("_ZWrite") > 0.5f;
-        }
-
-        private static Shader ResolveLilToonBakedShader(Shader fallbackShader, RenderType renderType, bool transparentWithZWrite, bool hasOutline)
-        {
-            // lilToon の通常運用（Apply/Bake）に合わせて Hidden/lilToon 系を優先して利用する。
-            // 見つからない場合のみユーザー指定 shader にフォールバック。
-            string hiddenShaderName;
-            switch (renderType)
-            {
-                case RenderType.Opaque:
-                    hiddenShaderName = hasOutline ? "Hidden/lilToonOutline" : "Hidden/lilToon";
-                    break;
-                case RenderType.Cutout:
-                    hiddenShaderName = hasOutline ? "Hidden/lilToonCutoutOutline" : "Hidden/lilToonCutout";
-                    break;
-                case RenderType.Transparent:
-                    hiddenShaderName = transparentWithZWrite
-                        ? (hasOutline ? "Hidden/lilToonTransparentOutlineZWrite" : "Hidden/lilToonTransparentZWrite")
-                        : (hasOutline ? "Hidden/lilToonTransparentOutline" : "Hidden/lilToonTransparent");
-                    break;
-                default:
-                    hiddenShaderName = hasOutline ? "Hidden/lilToonOutline" : "Hidden/lilToon";
-                    break;
-            }
-
-            var hidden = Shader.Find(hiddenShaderName);
-            if (hidden == null && hasOutline)
-            {
-                var nonOutlineName = hiddenShaderName
-                    .Replace("OutlineZWrite", "ZWrite")
-                    .Replace("Outline", string.Empty);
-                hidden = Shader.Find(nonOutlineName);
-            }
-            return hidden != null ? hidden : fallbackShader;
         }
 
         private static void ApplyShadingFactorMapping(Material source, Material destination)
