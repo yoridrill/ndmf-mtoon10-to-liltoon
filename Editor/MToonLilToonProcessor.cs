@@ -388,21 +388,31 @@ namespace NdmfMToon10ToLilToon
             }
 
             var meshCopy = Object.Instantiate(mesh);
+            var vertices = meshCopy.vertices.ToList();
             var uv = meshCopy.uv;
+            if (uv == null || uv.Length == 0) uv = Enumerable.Repeat(Vector2.zero, vertices.Count).ToArray();
+            if (uv.Length < vertices.Count)
+            {
+                var expandedUv = new Vector2[vertices.Count];
+                for (var i = 0; i < uv.Length; i++) expandedUv[i] = uv[i];
+                uv = expandedUv;
+            }
+            var uvList = uv.ToList();
+
+            var normals = meshCopy.normals;
+            var tangents = meshCopy.tangents;
+            var colors = meshCopy.colors;
+            var boneWeights = meshCopy.boneWeights;
+            var normalList = normals != null && normals.Length == vertices.Count ? normals.ToList() : null;
+            var tangentList = tangents != null && tangents.Length == vertices.Count ? tangents.ToList() : null;
+            var colorList = colors != null && colors.Length == vertices.Count ? colors.ToList() : null;
+            var boneWeightList = boneWeights != null && boneWeights.Length == vertices.Count ? boneWeights.ToList() : null;
+
+            var rectBySubMesh = new Dictionary<int, Rect>();
             for (var i = 0; i < mergedIndices.Count && i < rects.Count; i++)
             {
-                var subMeshIndex = mergedIndices[i];
-                if (subMeshIndex < 0 || subMeshIndex >= meshCopy.subMeshCount) continue;
-                var rect = rects[i];
-                var triangles = meshCopy.GetTriangles(subMeshIndex);
-                for (var t = 0; t < triangles.Length; t++)
-                {
-                    var vertexIndex = triangles[t];
-                    var src = uv[vertexIndex];
-                    uv[vertexIndex] = new Vector2(rect.x + src.x * rect.width, rect.y + src.y * rect.height);
-                }
+                rectBySubMesh[mergedIndices[i]] = rects[i];
             }
-            meshCopy.uv = uv;
 
             var newSubMeshTriangles = new List<int[]>();
             var mergedTriangles = new List<int>();
@@ -410,7 +420,28 @@ namespace NdmfMToon10ToLilToon
             {
                 if (mergedIndexSet.Contains(i))
                 {
-                    mergedTriangles.AddRange(meshCopy.GetTriangles(i));
+                    var triangles = meshCopy.GetTriangles(i);
+                    if (!rectBySubMesh.TryGetValue(i, out var rect))
+                    {
+                        mergedTriangles.AddRange(triangles);
+                        continue;
+                    }
+
+                    for (var t = 0; t < triangles.Length; t++)
+                    {
+                        var originalIndex = triangles[t];
+                        var src = originalIndex < uvList.Count ? uvList[originalIndex] : Vector2.zero;
+                        var remappedUv = new Vector2(rect.x + src.x * rect.width, rect.y + src.y * rect.height);
+
+                        var newIndex = vertices.Count;
+                        vertices.Add(vertices[originalIndex]);
+                        uvList.Add(remappedUv);
+                        if (normalList != null) normalList.Add(normalList[originalIndex]);
+                        if (tangentList != null) tangentList.Add(tangentList[originalIndex]);
+                        if (colorList != null) colorList.Add(colorList[originalIndex]);
+                        if (boneWeightList != null) boneWeightList.Add(boneWeightList[originalIndex]);
+                        mergedTriangles.Add(newIndex);
+                    }
                     continue;
                 }
 
@@ -421,6 +452,13 @@ namespace NdmfMToon10ToLilToon
                     if (i < materialSourceIndices.Count) newSourceIndices.Add(materialSourceIndices[i]);
                 }
             }
+
+            meshCopy.SetVertices(vertices);
+            meshCopy.SetUVs(0, uvList);
+            if (normalList != null) meshCopy.SetNormals(normalList);
+            if (tangentList != null) meshCopy.SetTangents(tangentList);
+            if (colorList != null) meshCopy.SetColors(colorList);
+            if (boneWeightList != null) meshCopy.boneWeights = boneWeightList.ToArray();
 
             var firstOutputIndex = 0;
             meshCopy.subMeshCount = newSubMeshTriangles.Count + 1;
