@@ -211,11 +211,12 @@ namespace NdmfMToon10ToLilToon
         private static Texture2D[] PrepareBaseAtlasTextures(IReadOnlyList<Texture2D> sourceTextures, Texture2D fallback)
         {
             var prepared = sourceTextures.Select(t => t ?? fallback).ToArray();
+            const float fixedScale = 0.99f;
             var resized = new Texture2D[prepared.Length];
             for (var i = 0; i < prepared.Length; i++)
             {
-                var w = Mathf.Max(1, prepared[i].width);
-                var h = Mathf.Max(1, prepared[i].height);
+                var w = Mathf.Max(1, Mathf.RoundToInt(prepared[i].width * fixedScale));
+                var h = Mathf.Max(1, Mathf.RoundToInt(prepared[i].height * fixedScale));
                 resized[i] = ResizeTexture(prepared[i], w, h);
             }
             return resized;
