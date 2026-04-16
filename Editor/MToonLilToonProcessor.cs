@@ -414,6 +414,11 @@ namespace NdmfMToon10ToLilToon
                 rectBySubMesh[mergedIndices[i]] = rects[i];
             }
 
+            var atlasTexture = mergedMaterial != null ? mergedMaterial.GetTexture("_MainTex") : null;
+            const float paddingPixels = 2f;
+            var padU = atlasTexture != null && atlasTexture.width > 0 ? paddingPixels / atlasTexture.width : 0f;
+            var padV = atlasTexture != null && atlasTexture.height > 0 ? paddingPixels / atlasTexture.height : 0f;
+
             var newSubMeshTriangles = new List<int[]>();
             var mergedTriangles = new List<int>();
             for (var i = 0; i < mesh.subMeshCount; i++)
@@ -431,9 +436,27 @@ namespace NdmfMToon10ToLilToon
                     {
                         var originalIndex = triangles[t];
                         var src = originalIndex < uvList.Count ? uvList[originalIndex] : Vector2.zero;
+                        var wrappedU = Mathf.Repeat(src.x, 1f);
+                        var wrappedV = Mathf.Repeat(src.y, 1f);
+                        var minU = rect.xMin + padU;
+                        var maxU = rect.xMax - padU;
+                        var minV = rect.yMin + padV;
+                        var maxV = rect.yMax - padV;
+                        if (minU > maxU)
+                        {
+                            var midU = (rect.xMin + rect.xMax) * 0.5f;
+                            minU = midU;
+                            maxU = midU;
+                        }
+                        if (minV > maxV)
+                        {
+                            var midV = (rect.yMin + rect.yMax) * 0.5f;
+                            minV = midV;
+                            maxV = midV;
+                        }
                         var remappedUv = new Vector2(
-                            rect.x + Mathf.Repeat(src.x, 1f) * rect.width,
-                            rect.y + Mathf.Repeat(src.y, 1f) * rect.height);
+                            Mathf.Lerp(minU, maxU, wrappedU),
+                            Mathf.Lerp(minV, maxV, wrappedV));
 
                         var newIndex = vertices.Count;
                         vertices.Add(vertices[originalIndex]);
