@@ -328,6 +328,9 @@ namespace NdmfMToon10ToLilToon
             var useOutline = HasOutline(source);
             SetIfExists(destination, "_UseOutline", useOutline ? 1f : 0f);
             SetIfExists(destination, "_OutlineEnable", useOutline ? 1f : 0f);
+            if (useOutline) destination.EnableKeyword("_OUTLINE_ON");
+            else destination.DisableKeyword("_OUTLINE_ON");
+            destination.SetShaderPassEnabled("Outline", useOutline);
 
             if (!useOutline)
             {
