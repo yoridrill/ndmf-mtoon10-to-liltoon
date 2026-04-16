@@ -30,14 +30,8 @@ namespace NdmfMToon10ToLilToon
             EditorGUI.BeginChangeCheck();
 
             DrawPreviewButton(component);
-            DrawMainSettings();
             DrawLilToonUserSettings();
-
-            if (GUILayout.Button(T("マテリアルをスキャン", "Scan Materials")))
-            {
-                ScanMaterials(component);
-                EditorUtility.SetDirty(component);
-            }
+            DrawHairMergeToggle(component);
 
             DrawHairSelections(component);
             DrawReport(component);
@@ -75,16 +69,6 @@ namespace NdmfMToon10ToLilToon
             }
         }
 
-        private void DrawMainSettings()
-        {
-            EditorGUILayout.PropertyField(
-                serializedObject.FindProperty(nameof(MToonLilToonComponent.lilToonShader)),
-                new GUIContent(T("lilToon Shader", "lilToon Shader")));
-            EditorGUILayout.PropertyField(
-                serializedObject.FindProperty(nameof(MToonLilToonComponent.enableHairMerge)),
-                new GUIContent(T("Hair Merge", "Hair Merge")));
-        }
-
         private void DrawLilToonUserSettings()
         {
             var overridesProp = serializedObject.FindProperty(nameof(MToonLilToonComponent.globalOverrides));
@@ -104,8 +88,29 @@ namespace NdmfMToon10ToLilToon
                 new GUIContent(T("逆光ライト（強さ）", "Backlight Strength")));
         }
 
+        private void DrawHairMergeToggle(MToonLilToonComponent component)
+        {
+            var enableHairMergeProp = serializedObject.FindProperty(nameof(MToonLilToonComponent.enableHairMerge));
+            EditorGUI.BeginChangeCheck();
+            EditorGUILayout.PropertyField(enableHairMergeProp, new GUIContent(T("Hair Merge", "Hair Merge")));
+            if (!EditorGUI.EndChangeCheck()) return;
+
+            if (enableHairMergeProp.boolValue)
+            {
+                ScanMaterials(component);
+            }
+            else
+            {
+                component.hairSelections = new List<HairMaterialSelection>();
+            }
+
+            EditorUtility.SetDirty(component);
+        }
+
         private void DrawHairSelections(MToonLilToonComponent component)
         {
+            if (!component.enableHairMerge) return;
+
             EditorGUILayout.Space();
             EditorGUILayout.LabelField(T("Hair Merge Targets", "Hair Merge Targets"), EditorStyles.boldLabel);
 
