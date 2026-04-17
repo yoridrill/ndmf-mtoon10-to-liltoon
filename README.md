@@ -42,8 +42,16 @@ atlas サイズ方針:
 
 - Opaque: `Geometry`
 - Cutout: `AlphaTest`
-- Transparent: `2460` 基準
-- Transparent は元の MToon transparent 順序に基づいて `2460 + rank` で再採番
+- Transparent: **必ず `2460` 開始**
+- Transparent は **元の MToon transparent 同士の相対順序のみ** を保持し、`2460 + rank` で**連番に詰めて再採番**
+- VRoid などで `4000` 等の不適切な queue が入っていても、その絶対値は信用せず、lilToon/VRChat アバター運用向けに再構成
+- この方針は **VRChat アバターで Focus が外れてボケる問題を避けるための仕様** であり、Unity 一般慣例より優先
+
+### Render Queue ポリシー（変更禁止レベル）
+
+- 本ツールは「Unity の一般的な queue 運用」ではなく、**VRChat でアバターに lilToon を使う実運用**を優先する。
+- そのため Transparent queue は 2500/3000 帯へ分割しない。**2460 帯で密に採番**する。
+- 将来の変更でも、このルールを崩す場合は「VRChat での実機検証結果」と「既存アバターへの影響評価」を必須とする。
 
 ## Inspector UI
 
