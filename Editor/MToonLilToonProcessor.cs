@@ -819,10 +819,10 @@ namespace NdmfMToon10ToLilToon
         {
             if (!enableFakeShadow || mergedMaterial == null) return null;
 
-            var shader = Shader.Find("_lil/[Optional]lilToonFakeShadow");
+            var shader = ResolveFakeShadowShader();
             if (shader == null)
             {
-                report?.Warnings.Add(new ConversionWarning("FakeShadow enabled but _lil/[Optional]lilToonFakeShadow shader was not found"));
+                report?.Warnings.Add(new ConversionWarning("FakeShadow enabled but lilToonFakeShadow shader was not found"));
                 return null;
             }
 
@@ -838,6 +838,28 @@ namespace NdmfMToon10ToLilToon
 
             ApplyFakeShadowOverrides(fakeShadowMaterial, true, fakeShadowDirection, fakeShadowOffset);
             return fakeShadowMaterial;
+        }
+
+        private static Shader ResolveFakeShadowShader()
+        {
+            var candidateNames = new[]
+            {
+                "_lil/[Optional] lilToonFakeShadow",
+                "_lil/[Optional]lilToonFakeShadow",
+                "Hidden/lilToonFakeShadow",
+            };
+
+            for (var i = 0; i < candidateNames.Length; i++)
+            {
+                var resolved = Shader.Find(candidateNames[i]);
+                if (resolved != null) return resolved;
+            }
+
+            var guids = AssetDatabase.FindAssets("lilToonFakeShadow t:Shader");
+            return guids
+                .Select(AssetDatabase.GUIDToAssetPath)
+                .Select(AssetDatabase.LoadAssetAtPath<Shader>)
+                .FirstOrDefault(shader => shader != null && shader.name.IndexOf("liltoonfakeshadow", System.StringComparison.OrdinalIgnoreCase) >= 0);
         }
     }
 }
