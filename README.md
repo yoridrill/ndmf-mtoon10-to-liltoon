@@ -34,6 +34,7 @@ MToon 1.0 / 互換 MToon マテリアルを lilToon へ変換するための Uni
 - merge 後マテリアルの render type は、`Transparent` が `Opaque+Cutout` より多い場合のみ `Transparent`、それ以外は `Cutout`
 - オプション: 眉ステンシル / FakeShadow（Inspector で ON/OFF、向き・オフセットを調整可能）
 - FakeShadow は「Enable FakeShadow」が ON かつ「チェックされた結合対象」がある場合に、結合後の髪マテリアルへ適用
+- FakeShadow 有効時は、結合髪に対して FakeShadow 用マテリアルを追加生成し、2マテリアル構成で適用
 - チェックが1つだけの場合は atlas 化せず、元のUV/テクスチャ設定を維持
 - atlas 対象: main / shade / emission / normal / outline
 - UV は atlas rect に再配置し、サブメッシュ統合を実施

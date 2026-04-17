@@ -67,6 +67,7 @@ namespace NdmfMToon10ToLilToon
 
             var mergedMaterialCreated = false;
             Material mergedMaterial = null;
+            Material fakeShadowMaterial = null;
             var mergedIndices = new List<int>();
             var mergedRects = new List<Rect>();
 
@@ -117,11 +118,12 @@ namespace NdmfMToon10ToLilToon
                     fakeShadowOffset,
                     report,
                     out mergedMaterial,
+                    out fakeShadowMaterial,
                     out mergedRects))
             {
                 mergedMaterialCreated = true;
                 var mergedRepresentativeIndex = ResolveMergedRepresentativeIndex(original, mergedIndices, transparentRanks, mergedOutputRenderType);
-                ApplyMergedMaterialAndMesh(renderer, result, resultSourceIndices, mergedIndices, mergedRepresentativeIndex, mergedMaterial, mergedRects, report);
+                ApplyMergedMaterialAndMesh(renderer, result, resultSourceIndices, mergedIndices, mergedRepresentativeIndex, mergedMaterial, fakeShadowMaterial, mergedRects, report);
             }
 
             if (!mergedMaterialCreated && mergedIndices.Count >= 1)
@@ -166,9 +168,11 @@ namespace NdmfMToon10ToLilToon
             Vector2 fakeShadowOffset,
             ConversionReport report,
             out Material mergedMaterial,
+            out Material fakeShadowMaterial,
             out List<Rect> atlasRects)
         {
             mergedMaterial = null;
+            fakeShadowMaterial = null;
             atlasRects = null;
 
             if (!MToonToLilToonMapper.TryConvert(original[mergedIndices[0]], lilToonShader, overrides, out mergedMaterial, report))
@@ -176,7 +180,7 @@ namespace NdmfMToon10ToLilToon
                 return false;
             }
             ForceMergedRenderType(mergedMaterial, original[mergedIndices[0]], mergedOutputRenderType);
-            ApplyFakeShadowOverrides(mergedMaterial, enableFakeShadow, fakeShadowDirection, fakeShadowOffset);
+            fakeShadowMaterial = CreateFakeShadowMaterial(mergedMaterial, enableFakeShadow, fakeShadowDirection, fakeShadowOffset, report);
 
             if (mergedIndices.Count == 1)
             {
@@ -607,11 +611,16 @@ namespace NdmfMToon10ToLilToon
             return texture.GetPixel(x, y);
         }
 
-        private static void ApplyMergedMaterialAndMesh(Renderer renderer, List<Material> materials, List<int> materialSourceIndices, IReadOnlyList<int> mergedIndices, int mergedRepresentativeSourceIndex, Material mergedMaterial, IReadOnlyList<Rect> rects, ConversionReport report)
+        private static void ApplyMergedMaterialAndMesh(Renderer renderer, List<Material> materials, List<int> materialSourceIndices, IReadOnlyList<int> mergedIndices, int mergedRepresentativeSourceIndex, Material mergedMaterial, Material fakeShadowMaterial, IReadOnlyList<Rect> rects, ConversionReport report)
         {
             var mergedIndexSet = mergedIndices.ToHashSet();
             var newMaterials = new List<Material> { mergedMaterial };
             var newSourceIndices = new List<int> { mergedRepresentativeSourceIndex };
+            if (fakeShadowMaterial != null)
+            {
+                newMaterials.Add(fakeShadowMaterial);
+                newSourceIndices.Add(-1);
+            }
 
             var mesh = renderer switch
             {
@@ -733,12 +742,16 @@ namespace NdmfMToon10ToLilToon
             if (boneWeightList != null) meshCopy.boneWeights = boneWeightList.ToArray();
             if (vertices.Count > 65535) meshCopy.indexFormat = IndexFormat.UInt32;
 
-            var firstOutputIndex = 0;
-            meshCopy.subMeshCount = newSubMeshTriangles.Count + 1;
-            meshCopy.SetTriangles(mergedTriangles.ToArray(), firstOutputIndex, false);
+            var baseSubMeshCount = fakeShadowMaterial != null ? 2 : 1;
+            meshCopy.subMeshCount = newSubMeshTriangles.Count + baseSubMeshCount;
+            meshCopy.SetTriangles(mergedTriangles.ToArray(), 0, false);
+            if (fakeShadowMaterial != null)
+            {
+                meshCopy.SetTriangles(mergedTriangles.ToArray(), 1, false);
+            }
             for (var i = 0; i < newSubMeshTriangles.Count; i++)
             {
-                meshCopy.SetTriangles(newSubMeshTriangles[i], i + 1, false);
+                meshCopy.SetTriangles(newSubMeshTriangles[i], i + baseSubMeshCount, false);
             }
 
             switch (renderer)
@@ -787,9 +800,35 @@ namespace NdmfMToon10ToLilToon
                 if (material == null) continue;
                 if (i >= sourceIndices.Count) continue;
                 var sourceIndex = sourceIndices[i];
+                if (sourceIndex < 0) continue;
                 if (!transparentRanks.TryGetValue(sourceIndex, out var rank)) continue;
                 material.renderQueue = 2460 + rank;
             }
+        }
+
+        private static Material CreateFakeShadowMaterial(Material mergedMaterial, bool enableFakeShadow, Vector3 fakeShadowDirection, Vector2 fakeShadowOffset, ConversionReport report)
+        {
+            if (!enableFakeShadow || mergedMaterial == null) return null;
+
+            var shader = Shader.Find("_lil/[Optional]lilToonFakeShadow");
+            if (shader == null)
+            {
+                report?.Warnings.Add(new ConversionWarning("FakeShadow enabled but _lil/[Optional]lilToonFakeShadow shader was not found"));
+                return null;
+            }
+
+            var fakeShadowMaterial = new Material(shader)
+            {
+                name = $"{mergedMaterial.name}_FakeShadow",
+            };
+
+            if (mergedMaterial.HasProperty("_MainTex") && fakeShadowMaterial.HasProperty("_MainTex"))
+            {
+                fakeShadowMaterial.SetTexture("_MainTex", mergedMaterial.GetTexture("_MainTex"));
+            }
+
+            ApplyFakeShadowOverrides(fakeShadowMaterial, true, fakeShadowDirection, fakeShadowOffset);
+            return fakeShadowMaterial;
         }
     }
 }
