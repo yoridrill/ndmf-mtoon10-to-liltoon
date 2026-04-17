@@ -614,13 +614,8 @@ namespace NdmfMToon10ToLilToon
         private static void ApplyMergedMaterialAndMesh(Renderer renderer, List<Material> materials, List<int> materialSourceIndices, IReadOnlyList<int> mergedIndices, int mergedRepresentativeSourceIndex, Material mergedMaterial, Material fakeShadowMaterial, IReadOnlyList<Rect> rects, ConversionReport report)
         {
             var mergedIndexSet = mergedIndices.ToHashSet();
-            var newMaterials = new List<Material> { mergedMaterial };
-            var newSourceIndices = new List<int> { mergedRepresentativeSourceIndex };
-            if (fakeShadowMaterial != null)
-            {
-                newMaterials.Add(fakeShadowMaterial);
-                newSourceIndices.Add(-1);
-            }
+            var newMaterials = new List<Material>();
+            var newSourceIndices = new List<int>();
 
             var mesh = renderer switch
             {
@@ -635,6 +630,13 @@ namespace NdmfMToon10ToLilToon
                     if (mergedIndexSet.Contains(i)) continue;
                     newMaterials.Add(materials[i]);
                     if (i < materialSourceIndices.Count) newSourceIndices.Add(materialSourceIndices[i]);
+                }
+                newMaterials.Add(mergedMaterial);
+                newSourceIndices.Add(mergedRepresentativeSourceIndex);
+                if (fakeShadowMaterial != null)
+                {
+                    newMaterials.Add(fakeShadowMaterial);
+                    newSourceIndices.Add(-1);
                 }
                 materials.Clear();
                 materials.AddRange(newMaterials);
@@ -742,16 +744,23 @@ namespace NdmfMToon10ToLilToon
             if (boneWeightList != null) meshCopy.boneWeights = boneWeightList.ToArray();
             if (vertices.Count > 65535) meshCopy.indexFormat = IndexFormat.UInt32;
 
-            var baseSubMeshCount = fakeShadowMaterial != null ? 2 : 1;
-            meshCopy.subMeshCount = newSubMeshTriangles.Count + baseSubMeshCount;
-            meshCopy.SetTriangles(mergedTriangles.ToArray(), 0, false);
-            if (fakeShadowMaterial != null)
-            {
-                meshCopy.SetTriangles(mergedTriangles.ToArray(), 1, false);
-            }
+            meshCopy.subMeshCount = newSubMeshTriangles.Count + 1;
             for (var i = 0; i < newSubMeshTriangles.Count; i++)
             {
-                meshCopy.SetTriangles(newSubMeshTriangles[i], i + baseSubMeshCount, false);
+                meshCopy.SetTriangles(newSubMeshTriangles[i], i, false);
+            }
+            var mergedSubMeshIndex = newSubMeshTriangles.Count;
+            meshCopy.SetTriangles(mergedTriangles.ToArray(), mergedSubMeshIndex, false);
+
+            newMaterials.Add(mergedMaterial);
+            newSourceIndices.Add(mergedRepresentativeSourceIndex);
+            if (fakeShadowMaterial != null)
+            {
+                // Unity はサブメッシュ数より多いマテリアルを設定すると、
+                // 余剰マテリアルを最後のサブメッシュに重ねて描画する。
+                // merged を最後のサブメッシュに置くことで FakeShadow を同じ髪面に重ねる。
+                newMaterials.Add(fakeShadowMaterial);
+                newSourceIndices.Add(-1);
             }
 
             switch (renderer)
