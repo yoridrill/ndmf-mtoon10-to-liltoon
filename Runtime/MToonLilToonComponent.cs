@@ -10,6 +10,9 @@ namespace NdmfMToon10ToLilToon
         public Shader lilToonShader;
         public bool enableHairMerge;
         public List<HairMaterialSelection> hairSelections = new();
+        public bool enableFakeShadow;
+        public Vector3 fakeShadowDirection = new Vector3(0f, -1f, 0f);
+        public Vector2 fakeShadowOffset = Vector2.zero;
         public LilToonGlobalOverrides globalOverrides = new();
         public bool isPreviewing;
 

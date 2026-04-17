@@ -29,7 +29,15 @@ namespace NdmfMToon10ToLilToon
                 : new HashSet<Material>();
             foreach (var renderer in component.GetComponentsInChildren<Renderer>(true))
             {
-                ProcessRenderer(renderer, selectedForMerge, lilToonShader, component.globalOverrides, report);
+                ProcessRenderer(
+                    renderer,
+                    selectedForMerge,
+                    lilToonShader,
+                    component.globalOverrides,
+                    component.enableFakeShadow,
+                    component.fakeShadowDirection,
+                    component.fakeShadowOffset,
+                    report);
             }
 
             component.scannedMaterialCount = report.ScannedMaterialCount;
@@ -39,7 +47,15 @@ namespace NdmfMToon10ToLilToon
             component.unsupportedProperties = report.UnsupportedPropertySummary.Select(kv => $"{kv.Key}:{kv.Value}").ToList();
         }
 
-        private static void ProcessRenderer(Renderer renderer, HashSet<Material> selectedForMerge, Shader lilToonShader, LilToonGlobalOverrides globalOverrides, ConversionReport report)
+        private static void ProcessRenderer(
+            Renderer renderer,
+            HashSet<Material> selectedForMerge,
+            Shader lilToonShader,
+            LilToonGlobalOverrides globalOverrides,
+            bool enableFakeShadow,
+            Vector3 fakeShadowDirection,
+            Vector2 fakeShadowOffset,
+            ConversionReport report)
         {
             if (renderer == null) return;
 
@@ -49,9 +65,6 @@ namespace NdmfMToon10ToLilToon
             var transparentRanks = BuildTransparentRanks(original);
             report.ScannedMaterialCount += original.Length;
 
-            RenderType? mergeType = selectedForMerge.Count > 0
-                ? RenderTypeResolver.ResolveMergeType(selectedForMerge)
-                : null;
             var mergedMaterialCreated = false;
             Material mergedMaterial = null;
             var mergedIndices = new List<int>();
@@ -68,15 +81,7 @@ namespace NdmfMToon10ToLilToon
                     continue;
                 }
 
-                var mergeExcluded = mergeType.HasValue
-                    && selectedForMerge.Contains(source)
-                    && RenderTypeResolver.ResolveFromMaterial(source) != mergeType.Value;
-                if (mergeExcluded)
-                {
-                    report.Warnings.Add(new ConversionWarning($"{source.name}: skipped hair merge due to render type mismatch"));
-                }
-
-                var canMerge = !mergeExcluded && mergeType.HasValue && selectedForMerge.Contains(source);
+                var canMerge = selectedForMerge.Contains(source);
                 if (MToonToLilToonMapper.TryConvert(source, lilToonShader, globalOverrides, out var converted, report))
                 {
                     result.Add(converted);
@@ -96,18 +101,30 @@ namespace NdmfMToon10ToLilToon
                 }
             }
 
-            if (mergedIndices.Count >= 2
-                && TryMergeHairMaterials(original, mergedIndices, lilToonShader, globalOverrides, report, out mergedMaterial, out mergedRects))
+            var mergedOutputRenderType = mergedIndices.Count >= 1
+                ? ResolveMergedOutputRenderType(original, mergedIndices)
+                : RenderType.Cutout;
+
+            if (mergedIndices.Count >= 1
+                && TryMergeHairMaterials(
+                    original,
+                    mergedIndices,
+                    mergedOutputRenderType,
+                    lilToonShader,
+                    globalOverrides,
+                    enableFakeShadow,
+                    fakeShadowDirection,
+                    fakeShadowOffset,
+                    report,
+                    out mergedMaterial,
+                    out mergedRects))
             {
                 mergedMaterialCreated = true;
-                var mergedRepresentativeIndex = mergedIndices
-                    .OrderBy(i => transparentRanks.TryGetValue(i, out var rank) ? rank : int.MaxValue)
-                    .ThenBy(i => i)
-                    .First();
+                var mergedRepresentativeIndex = ResolveMergedRepresentativeIndex(original, mergedIndices, transparentRanks, mergedOutputRenderType);
                 ApplyMergedMaterialAndMesh(renderer, result, resultSourceIndices, mergedIndices, mergedRepresentativeIndex, mergedMaterial, mergedRects, report);
             }
 
-            if (!mergedMaterialCreated && mergedIndices.Count >= 2)
+            if (!mergedMaterialCreated && mergedIndices.Count >= 1)
             {
                 report.Warnings.Add(new ConversionWarning("hair merge/atlas failed, fallback to per-material conversion"));
             }
@@ -141,8 +158,12 @@ namespace NdmfMToon10ToLilToon
         private static bool TryMergeHairMaterials(
             IReadOnlyList<Material> original,
             IReadOnlyList<int> mergedIndices,
+            RenderType mergedOutputRenderType,
             Shader lilToonShader,
             LilToonGlobalOverrides overrides,
+            bool enableFakeShadow,
+            Vector3 fakeShadowDirection,
+            Vector2 fakeShadowOffset,
             ConversionReport report,
             out Material mergedMaterial,
             out List<Rect> atlasRects)
@@ -153,6 +174,14 @@ namespace NdmfMToon10ToLilToon
             if (!MToonToLilToonMapper.TryConvert(original[mergedIndices[0]], lilToonShader, overrides, out mergedMaterial, report))
             {
                 return false;
+            }
+            ForceMergedRenderType(mergedMaterial, original[mergedIndices[0]], mergedOutputRenderType);
+            ApplyFakeShadowOverrides(mergedMaterial, enableFakeShadow, fakeShadowDirection, fakeShadowOffset);
+
+            if (mergedIndices.Count == 1)
+            {
+                atlasRects = new List<Rect> { new(0f, 0f, 1f, 1f) };
+                return true;
             }
 
             var atlasTextures = new List<Texture2D>();
@@ -206,6 +235,140 @@ namespace NdmfMToon10ToLilToon
             BakeOptionalAtlas(new[] { "_OutlineTex", "_OutlineMask" }, original, mergedIndices, mergedMaterial, new[] { "_OutlineWidthMultiplyTexture", "_OutlineMask" }, atlas.width, atlas.height, atlasRects);
 
             return true;
+        }
+
+        private static void ForceMergedRenderType(Material destination, Material source, RenderType outputRenderType)
+        {
+            if (destination == null) return;
+
+            var cutoff = 0.5f;
+            if (source != null)
+            {
+                if (source.HasProperty("_AlphaCutoff"))
+                {
+                    cutoff = source.GetFloat("_AlphaCutoff");
+                }
+                else if (source.HasProperty("_Cutoff"))
+                {
+                    cutoff = source.GetFloat("_Cutoff");
+                }
+            }
+
+            switch (outputRenderType)
+            {
+                case RenderType.Transparent:
+                    destination.DisableKeyword("_ALPHATEST_ON");
+                    destination.EnableKeyword("_ALPHABLEND_ON");
+                    destination.DisableKeyword("_ALPHAPREMULTIPLY_ON");
+                    destination.SetOverrideTag("RenderType", "Transparent");
+                    destination.renderQueue = (int)RenderQueue.Transparent;
+                    SetFloatIfExists(destination, "_UseClipping", 0f);
+                    SetFloatIfExists(destination, "_AlphaMode", 2f);
+                    SetFloatIfExists(destination, "_SrcBlend", (float)BlendMode.SrcAlpha);
+                    SetFloatIfExists(destination, "_DstBlend", (float)BlendMode.OneMinusSrcAlpha);
+                    SetFloatIfExists(destination, "_ZWrite", 0f);
+                    SetFloatIfExists(destination, "_TransparentMode", 2f);
+                    SetFloatIfExists(destination, "_RenderingMode", 2f);
+                    SetFloatIfExists(destination, "_RenderMode", 2f);
+                    break;
+                case RenderType.Cutout:
+                default:
+                    destination.EnableKeyword("_ALPHATEST_ON");
+                    destination.DisableKeyword("_ALPHABLEND_ON");
+                    destination.DisableKeyword("_ALPHAPREMULTIPLY_ON");
+                    destination.SetOverrideTag("RenderType", "TransparentCutout");
+                    destination.renderQueue = (int)RenderQueue.AlphaTest;
+                    SetFloatIfExists(destination, "_Cutoff", cutoff);
+                    SetFloatIfExists(destination, "_UseClipping", 1f);
+                    SetFloatIfExists(destination, "_AlphaMode", 1f);
+                    SetFloatIfExists(destination, "_SrcBlend", (float)BlendMode.One);
+                    SetFloatIfExists(destination, "_DstBlend", (float)BlendMode.Zero);
+                    SetFloatIfExists(destination, "_ZWrite", 1f);
+                    SetFloatIfExists(destination, "_TransparentMode", 1f);
+                    SetFloatIfExists(destination, "_RenderingMode", 1f);
+                    SetFloatIfExists(destination, "_RenderMode", 1f);
+                    break;
+            }
+        }
+
+        private static RenderType ResolveMergedOutputRenderType(IReadOnlyList<Material> original, IReadOnlyList<int> mergedIndices)
+        {
+            var transparentCount = 0;
+            for (var i = 0; i < mergedIndices.Count; i++)
+            {
+                var source = original[mergedIndices[i]];
+                if (RenderTypeResolver.ResolveFromMaterial(source) == RenderType.Transparent)
+                {
+                    transparentCount++;
+                }
+            }
+
+            var nonTransparentCount = mergedIndices.Count - transparentCount;
+            return transparentCount > nonTransparentCount ? RenderType.Transparent : RenderType.Cutout;
+        }
+
+        private static int ResolveMergedRepresentativeIndex(IReadOnlyList<Material> original, IReadOnlyList<int> mergedIndices, IReadOnlyDictionary<int, int> transparentRanks, RenderType mergedOutputRenderType)
+        {
+            if (mergedOutputRenderType == RenderType.Transparent)
+            {
+                return mergedIndices
+                    .OrderBy(i => transparentRanks.TryGetValue(i, out var rank) ? rank : int.MaxValue)
+                    .ThenBy(i => i)
+                    .First();
+            }
+
+            return mergedIndices
+                .OrderBy(i => RenderTypeResolver.ResolveFromMaterial(original[i]) == RenderType.Transparent ? 1 : 0)
+                .ThenBy(i => i)
+                .First();
+        }
+
+        private static void SetFloatIfExists(Material material, string propertyName, float value)
+        {
+            if (material == null || !material.HasProperty(propertyName)) return;
+            material.SetFloat(propertyName, value);
+        }
+
+        private static void ApplyFakeShadowOverrides(Material material, bool enableFakeShadow, Vector3 fakeShadowDirection, Vector2 fakeShadowOffset)
+        {
+            if (material == null) return;
+            if (!enableFakeShadow)
+            {
+                SetFloatIfAnyExists(material, new[] { "_UseFakeShadow", "_EnableFakeShadow", "_FakeShadow" }, 0f);
+                return;
+            }
+
+            SetFloatIfAnyExists(material, new[] { "_UseFakeShadow", "_EnableFakeShadow", "_FakeShadow" }, 1f);
+
+            var fakeShadowDirectionVector = new Vector4(fakeShadowDirection.x, fakeShadowDirection.y, fakeShadowDirection.z, 0f);
+            SetVectorIfAnyExists(material, new[] { "_FakeShadowVector", "_FakeShadowDir", "_FakeShadowDirection" }, fakeShadowDirectionVector);
+
+            var fakeShadowOffsetVector = new Vector4(fakeShadowOffset.x, fakeShadowOffset.y, 0f, 0f);
+            SetVectorIfAnyExists(material, new[] { "_FakeShadowOffset", "_FakeShadowPositionOffset" }, fakeShadowOffsetVector);
+        }
+
+        private static void SetVectorIfAnyExists(Material material, IReadOnlyList<string> propertyNames, Vector4 value)
+        {
+            if (material == null || propertyNames == null) return;
+
+            for (var i = 0; i < propertyNames.Count; i++)
+            {
+                var propertyName = propertyNames[i];
+                if (!material.HasProperty(propertyName)) continue;
+                material.SetVector(propertyName, value);
+            }
+        }
+
+        private static void SetFloatIfAnyExists(Material material, IReadOnlyList<string> propertyNames, float value)
+        {
+            if (material == null || propertyNames == null) return;
+
+            for (var i = 0; i < propertyNames.Count; i++)
+            {
+                var propertyName = propertyNames[i];
+                if (!material.HasProperty(propertyName)) continue;
+                material.SetFloat(propertyName, value);
+            }
         }
 
         private static Texture2D[] PrepareBaseAtlasTextures(IReadOnlyList<Texture2D> sourceTextures, Texture2D fallback)

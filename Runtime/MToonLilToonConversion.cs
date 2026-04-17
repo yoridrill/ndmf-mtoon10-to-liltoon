@@ -75,15 +75,103 @@ namespace NdmfMToon10ToLilToon
     {
         public static List<HairMaterialSelection> BuildDefaultSelections(IEnumerable<Material> materials)
         {
-            return materials
+            var distinctMaterials = materials
                 .Where(m => m != null)
                 .Distinct()
+                .ToList();
+
+            var nameMatched = distinctMaterials
+                .Where(m => m.name.IndexOf("HAIR", StringComparison.OrdinalIgnoreCase) >= 0)
+                .ToList();
+
+            var transparentCount = nameMatched.Count(m => RenderTypeResolver.ResolveFromMaterial(m) == RenderType.Transparent);
+            var nonTransparentCount = nameMatched.Count - transparentCount;
+            var transparentDominant = transparentCount > nonTransparentCount;
+            var dominantCullMode = CullModeResolver.ResolveMergeCullMode(nameMatched);
+
+            return distinctMaterials
                 .Select(m => new HairMaterialSelection
                 {
                     material = m,
-                    selected = m.name.IndexOf("HAIR", StringComparison.OrdinalIgnoreCase) >= 0,
+                    selected = nameMatched.Contains(m)
+                        && IsInDominantRenderGroup(m, transparentDominant)
+                        && CullModeResolver.ResolveFromMaterial(m) == dominantCullMode,
                 })
                 .ToList();
+        }
+
+        private static bool IsInDominantRenderGroup(Material material, bool transparentDominant)
+        {
+            if (material == null) return false;
+            var renderType = RenderTypeResolver.ResolveFromMaterial(material);
+            return transparentDominant
+                ? renderType == RenderType.Transparent
+                : renderType != RenderType.Transparent;
+        }
+    }
+
+    public static class CullModeResolver
+    {
+        public static CullMode ResolveFromMaterial(Material material)
+        {
+            if (material == null) return CullMode.Back;
+
+            if (material.HasProperty("_DoubleSided"))
+            {
+                var doubleSided = material.GetFloat("_DoubleSided") > 0.5f;
+                return doubleSided ? CullMode.Off : CullMode.Back;
+            }
+
+            if (TryResolveFromProperty(material, "_CullMode", out var fromCullMode))
+            {
+                return fromCullMode;
+            }
+
+            if (TryResolveFromProperty(material, "_Cull", out var fromCull))
+            {
+                return fromCull;
+            }
+
+            if (material.IsKeywordEnabled("_CULL_OFF"))
+            {
+                return CullMode.Off;
+            }
+
+            return CullMode.Back;
+        }
+
+        public static CullMode ResolveMergeCullMode(IEnumerable<Material> materials)
+        {
+            var counts = new Dictionary<CullMode, int>
+            {
+                [CullMode.Off] = 0,
+                [CullMode.Front] = 0,
+                [CullMode.Back] = 0,
+            };
+
+            foreach (var material in materials.Where(m => m != null))
+            {
+                counts[ResolveFromMaterial(material)]++;
+            }
+
+            var highest = counts.Values.Max();
+            var winners = counts.Where(p => p.Value == highest).Select(p => p.Key).ToArray();
+            if (winners.Length == 1) return winners[0];
+
+            if (winners.Contains(CullMode.Back)) return CullMode.Back;
+            if (winners.Contains(CullMode.Off)) return CullMode.Off;
+            return CullMode.Front;
+        }
+
+        private static bool TryResolveFromProperty(Material material, string propertyName, out CullMode cullMode)
+        {
+            cullMode = CullMode.Back;
+            if (material == null || !material.HasProperty(propertyName)) return false;
+
+            var raw = Mathf.RoundToInt(material.GetFloat(propertyName));
+            raw = Mathf.Clamp(raw, (int)CullMode.Off, (int)CullMode.Back);
+            cullMode = (CullMode)raw;
+            return true;
         }
     }
 

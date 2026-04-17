@@ -92,19 +92,32 @@ namespace NdmfMToon10ToLilToon
         {
             var enableHairMergeProp = serializedObject.FindProperty(nameof(MToonLilToonComponent.enableHairMerge));
             EditorGUI.BeginChangeCheck();
-            EditorGUILayout.PropertyField(enableHairMergeProp, new GUIContent(T("Hair Merge", "Hair Merge")));
-            if (!EditorGUI.EndChangeCheck()) return;
-
-            if (enableHairMergeProp.boolValue)
+            EditorGUILayout.PropertyField(enableHairMergeProp, new GUIContent(T("髪周りのルック調整", "Hair Look Adjustments")));
+            var mergeToggleChanged = EditorGUI.EndChangeCheck();
+            if (mergeToggleChanged)
             {
-                ScanMaterials(component);
-            }
-            else
-            {
-                component.hairSelections = new List<HairMaterialSelection>();
+                if (enableHairMergeProp.boolValue)
+                {
+                    ScanMaterials(component);
+                }
+                else
+                {
+                    component.hairSelections = new List<HairMaterialSelection>();
+                }
+                EditorUtility.SetDirty(component);
             }
 
-            EditorUtility.SetDirty(component);
+            if (!enableHairMergeProp.boolValue) return;
+
+            var enableFakeShadowProp = serializedObject.FindProperty(nameof(MToonLilToonComponent.enableFakeShadow));
+            EditorGUILayout.PropertyField(enableFakeShadowProp, new GUIContent(T("FakeShadow を有効化", "Enable FakeShadow")));
+            if (enableFakeShadowProp.boolValue)
+            {
+                EditorGUILayout.PropertyField(serializedObject.FindProperty(nameof(MToonLilToonComponent.fakeShadowDirection)),
+                    new GUIContent(T("FakeShadow（向き）", "FakeShadow Direction")));
+                EditorGUILayout.PropertyField(serializedObject.FindProperty(nameof(MToonLilToonComponent.fakeShadowOffset)),
+                    new GUIContent(T("FakeShadow（オフセット）", "FakeShadow Offset")));
+            }
         }
 
         private void DrawHairSelections(MToonLilToonComponent component)
@@ -117,7 +130,8 @@ namespace NdmfMToon10ToLilToon
             }
 
             EditorGUILayout.Space();
-            EditorGUILayout.LabelField(T("Hair Merge Targets", "Hair Merge Targets"), EditorStyles.boldLabel);
+            EditorGUILayout.LabelField(T("結合対象マテリアル", "Materials to Merge"), EditorStyles.boldLabel);
+            EditorGUILayout.HelpBox(T("チェックを入れたマテリアルは結合されます。", "Checked materials will be merged."), MessageType.Info);
 
             if (component.hairSelections == null || component.hairSelections.Count == 0)
             {
