@@ -109,6 +109,13 @@ namespace NdmfMToon10ToLilToon
 
             if (!enableHairMergeProp.boolValue) return;
 
+            var enableEyebrowStencilProp = serializedObject.FindProperty(nameof(MToonLilToonComponent.enableEyebrowStencil));
+            EditorGUILayout.PropertyField(enableEyebrowStencilProp, new GUIContent(T("眉ステンシルを有効化", "Enable Eyebrow Stencil")));
+            if (enableEyebrowStencilProp.boolValue)
+            {
+                DrawEyebrowStencilMaterialSelector(component);
+            }
+
             DrawFakeShadowFaceMaterialSelector(component);
 
             var enableFakeShadowProp = serializedObject.FindProperty(nameof(MToonLilToonComponent.enableFakeShadow));
@@ -139,6 +146,25 @@ namespace NdmfMToon10ToLilToon
 
             var nextIndex = EditorGUILayout.Popup(T("FakeShadow 顔マテリアル", "FakeShadow Face Material"), currentIndex, labels);
             component.fakeShadowFaceMaterial = nextIndex <= 0 ? null : candidates[nextIndex - 1];
+        }
+
+        private void DrawEyebrowStencilMaterialSelector(MToonLilToonComponent component)
+        {
+            var candidates = GetRendererMaterials(component);
+            if (candidates.Count == 0) return;
+
+            if (component.eyebrowStencilMaterial == null || !candidates.Contains(component.eyebrowStencilMaterial))
+            {
+                component.eyebrowStencilMaterial = DetectDefaultEyebrowMaterial(candidates);
+            }
+
+            var labels = new[] { T("未設定", "None") }.Concat(candidates.Select(m => m != null ? m.name : "(null)")).ToArray();
+            var currentIndex = component.eyebrowStencilMaterial != null
+                ? candidates.IndexOf(component.eyebrowStencilMaterial) + 1
+                : 0;
+
+            var nextIndex = EditorGUILayout.Popup(T("眉ステンシル対象", "Eyebrow Stencil Material"), currentIndex, labels);
+            component.eyebrowStencilMaterial = nextIndex <= 0 ? null : candidates[nextIndex - 1];
         }
 
         private void DrawHairSelections(MToonLilToonComponent component)
@@ -205,6 +231,11 @@ namespace NdmfMToon10ToLilToon
             {
                 component.fakeShadowFaceMaterial = DetectDefaultFaceMaterial(scannedMaterials);
             }
+
+            if (component.eyebrowStencilMaterial == null || !scannedMaterials.Contains(component.eyebrowStencilMaterial))
+            {
+                component.eyebrowStencilMaterial = DetectDefaultEyebrowMaterial(scannedMaterials);
+            }
         }
 
         private static List<Material> GetRendererMaterials(MToonLilToonComponent component)
@@ -229,6 +260,19 @@ namespace NdmfMToon10ToLilToon
                 && (m.name.IndexOf("FACE", System.StringComparison.OrdinalIgnoreCase) >= 0
                     || m.name.IndexOf("顔", System.StringComparison.OrdinalIgnoreCase) >= 0));
             if (face != null) return face;
+
+            return materials.FirstOrDefault();
+        }
+
+        private static Material DetectDefaultEyebrowMaterial(IReadOnlyList<Material> materials)
+        {
+            if (materials == null || materials.Count == 0) return null;
+
+            var eyebrow = materials.FirstOrDefault(m => m != null
+                && (m.name.IndexOf("EYEBROW", System.StringComparison.OrdinalIgnoreCase) >= 0
+                    || m.name.IndexOf("BROW", System.StringComparison.OrdinalIgnoreCase) >= 0
+                    || m.name.IndexOf("眉", System.StringComparison.OrdinalIgnoreCase) >= 0));
+            if (eyebrow != null) return eyebrow;
 
             return materials.FirstOrDefault();
         }

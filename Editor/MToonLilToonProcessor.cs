@@ -58,6 +58,19 @@ namespace NdmfMToon10ToLilToon
                 }
             }
 
+            if (component.enableEyebrowStencil
+                && component.fakeShadowFaceMaterial != null
+                && component.eyebrowStencilMaterial != null)
+            {
+                var resolvedFaceMaterial = convertedBySource.TryGetValue(component.fakeShadowFaceMaterial, out var convertedFace)
+                    ? convertedFace
+                    : component.fakeShadowFaceMaterial;
+                var resolvedEyebrowMaterial = convertedBySource.TryGetValue(component.eyebrowStencilMaterial, out var convertedEyebrow)
+                    ? convertedEyebrow
+                    : component.eyebrowStencilMaterial;
+                ApplyEyebrowStencilSettings(resolvedFaceMaterial, resolvedEyebrowMaterial);
+            }
+
             component.scannedMaterialCount = report.ScannedMaterialCount;
             component.convertedMaterialCount = report.ConvertedMaterialCount;
             component.skippedMaterialCount = report.SkippedMaterialCount;
@@ -451,6 +464,31 @@ namespace NdmfMToon10ToLilToon
             SetFloatIfAnyExists(material, new[] { "_StencilPass", "_Pass" }, pass);
             SetFloatIfAnyExists(material, new[] { "_StencilFail", "_Fail" }, fail);
             SetFloatIfAnyExists(material, new[] { "_StencilZFail", "_ZFail" }, zFail);
+        }
+
+        private static void ApplyEyebrowStencilSettings(Material faceMaterial, Material eyebrowMaterial)
+        {
+            if (faceMaterial == null || eyebrowMaterial == null) return;
+
+            ApplyStencilSettings(
+                faceMaterial,
+                reference: 51f,
+                readMask: 255f,
+                writeMask: 255f,
+                compare: (float)CompareFunction.Always,
+                pass: (float)StencilOp.Replace,
+                fail: (float)StencilOp.Keep,
+                zFail: (float)StencilOp.Keep);
+
+            ApplyStencilSettings(
+                eyebrowMaterial,
+                reference: 51f,
+                readMask: 255f,
+                writeMask: 255f,
+                compare: (float)CompareFunction.Equal,
+                pass: (float)StencilOp.Keep,
+                fail: (float)StencilOp.Keep,
+                zFail: (float)StencilOp.Keep);
         }
 
         private static void SyncFakeShadowColor(Material faceMaterial, Material fakeShadowMaterial)
