@@ -34,6 +34,7 @@ namespace NdmfMToon10ToLilToon
                     selectedForMerge,
                     lilToonShader,
                     component.globalOverrides,
+                    component.fakeShadowFaceMaterial,
                     component.enableFakeShadow,
                     component.fakeShadowDirection,
                     component.fakeShadowOffset,
@@ -52,6 +53,7 @@ namespace NdmfMToon10ToLilToon
             HashSet<Material> selectedForMerge,
             Shader lilToonShader,
             LilToonGlobalOverrides globalOverrides,
+            Material fakeShadowFaceMaterialSource,
             bool enableFakeShadow,
             Vector3 fakeShadowDirection,
             Vector2 fakeShadowOffset,
@@ -68,6 +70,7 @@ namespace NdmfMToon10ToLilToon
             var mergedMaterialCreated = false;
             Material mergedMaterial = null;
             Material fakeShadowMaterial = null;
+            Material faceResultMaterial = null;
             var mergedIndices = new List<int>();
             var mergedRects = new List<Rect>();
 
@@ -92,6 +95,7 @@ namespace NdmfMToon10ToLilToon
                         mergedIndices.Add(i);
                     }
                     resultSourceIndices.Add(i);
+                    if (source == fakeShadowFaceMaterialSource) faceResultMaterial = converted;
                 }
                 else
                 {
@@ -99,6 +103,7 @@ namespace NdmfMToon10ToLilToon
                     report.SkippedMaterialCount++;
                     report.Warnings.Add(new ConversionWarning($"{source.name}: skipped (not convertible)"));
                     resultSourceIndices.Add(i);
+                    if (source == fakeShadowFaceMaterialSource) faceResultMaterial = source;
                 }
             }
 
@@ -124,6 +129,7 @@ namespace NdmfMToon10ToLilToon
                 mergedMaterialCreated = true;
                 var mergedRepresentativeIndex = ResolveMergedRepresentativeIndex(original, mergedIndices, transparentRanks, mergedOutputRenderType);
                 ApplyMergedMaterialAndMesh(renderer, result, resultSourceIndices, mergedIndices, mergedRepresentativeIndex, mergedMaterial, fakeShadowMaterial, mergedRects, report);
+                ApplyFakeShadowStencilSettings(faceResultMaterial, mergedMaterial, fakeShadowMaterial);
             }
 
             if (!mergedMaterialCreated && mergedIndices.Count >= 1)
@@ -373,6 +379,53 @@ namespace NdmfMToon10ToLilToon
                 if (!material.HasProperty(propertyName)) continue;
                 material.SetFloat(propertyName, value);
             }
+        }
+
+        private static void ApplyFakeShadowStencilSettings(Material faceMaterial, Material hairMaterial, Material fakeShadowMaterial)
+        {
+            if (faceMaterial == null || hairMaterial == null || fakeShadowMaterial == null) return;
+
+            ApplyStencilSettings(
+                faceMaterial,
+                reference: 51f,
+                readMask: 255f,
+                writeMask: 255f,
+                compare: (float)CompareFunction.Always,
+                pass: (float)StencilOp.Replace,
+                fail: (float)StencilOp.Keep,
+                zFail: (float)StencilOp.Keep);
+
+            ApplyStencilSettings(
+                hairMaterial,
+                reference: 0f,
+                readMask: 255f,
+                writeMask: 255f,
+                compare: (float)CompareFunction.Always,
+                pass: (float)StencilOp.Replace,
+                fail: (float)StencilOp.Keep,
+                zFail: (float)StencilOp.Keep);
+
+            ApplyStencilSettings(
+                fakeShadowMaterial,
+                reference: 51f,
+                readMask: 255f,
+                writeMask: 255f,
+                compare: (float)CompareFunction.Equal,
+                pass: (float)StencilOp.Keep,
+                fail: (float)StencilOp.Keep,
+                zFail: (float)StencilOp.Keep);
+        }
+
+        private static void ApplyStencilSettings(Material material, float reference, float readMask, float writeMask, float compare, float pass, float fail, float zFail)
+        {
+            if (material == null) return;
+            SetFloatIfAnyExists(material, new[] { "_StencilRef", "_Ref" }, reference);
+            SetFloatIfAnyExists(material, new[] { "_StencilReadMask", "_ReadMask" }, readMask);
+            SetFloatIfAnyExists(material, new[] { "_StencilWriteMask", "_WriteMask" }, writeMask);
+            SetFloatIfAnyExists(material, new[] { "_StencilComp", "_Comp" }, compare);
+            SetFloatIfAnyExists(material, new[] { "_StencilPass", "_Pass" }, pass);
+            SetFloatIfAnyExists(material, new[] { "_StencilFail", "_Fail" }, fail);
+            SetFloatIfAnyExists(material, new[] { "_StencilZFail", "_ZFail" }, zFail);
         }
 
         private static Texture2D[] PrepareBaseAtlasTextures(IReadOnlyList<Texture2D> sourceTextures, Texture2D fallback)

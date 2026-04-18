@@ -109,6 +109,8 @@ namespace NdmfMToon10ToLilToon
 
             if (!enableHairMergeProp.boolValue) return;
 
+            DrawFakeShadowFaceMaterialSelector(component);
+
             var enableFakeShadowProp = serializedObject.FindProperty(nameof(MToonLilToonComponent.enableFakeShadow));
             EditorGUILayout.PropertyField(enableFakeShadowProp, new GUIContent(T("FakeShadow を有効化", "Enable FakeShadow")));
             if (enableFakeShadowProp.boolValue)
@@ -118,6 +120,25 @@ namespace NdmfMToon10ToLilToon
                 EditorGUILayout.PropertyField(serializedObject.FindProperty(nameof(MToonLilToonComponent.fakeShadowOffset)),
                     new GUIContent(T("FakeShadow（オフセット）", "FakeShadow Offset")));
             }
+        }
+
+        private void DrawFakeShadowFaceMaterialSelector(MToonLilToonComponent component)
+        {
+            var candidates = GetRendererMaterials(component);
+            if (candidates.Count == 0) return;
+
+            if (component.fakeShadowFaceMaterial == null || !candidates.Contains(component.fakeShadowFaceMaterial))
+            {
+                component.fakeShadowFaceMaterial = DetectDefaultFaceMaterial(candidates);
+            }
+
+            var labels = new[] { T("未設定", "None") }.Concat(candidates.Select(m => m != null ? m.name : "(null)")).ToArray();
+            var currentIndex = component.fakeShadowFaceMaterial != null
+                ? candidates.IndexOf(component.fakeShadowFaceMaterial) + 1
+                : 0;
+
+            var nextIndex = EditorGUILayout.Popup(T("FakeShadow 顔マテリアル", "FakeShadow Face Material"), currentIndex, labels);
+            component.fakeShadowFaceMaterial = nextIndex <= 0 ? null : candidates[nextIndex - 1];
         }
 
         private void DrawHairSelections(MToonLilToonComponent component)
@@ -170,17 +191,41 @@ namespace NdmfMToon10ToLilToon
 
         private static void ScanMaterials(MToonLilToonComponent component)
         {
-            var renderers = component.GetComponentsInChildren<Renderer>(true);
-            if (renderers.Length == 0)
+            var scannedMaterials = GetRendererMaterials(component);
+            if (scannedMaterials.Count == 0)
             {
                 component.hairSelections = new List<HairMaterialSelection>();
                 return;
             }
 
             component.hairSelections = HairMaterialSelector.BuildDefaultSelections(
-                renderers
-                    .SelectMany(r => r.sharedMaterials)
-                    .Where(m => m != null && MToonDetector.IsMToonLike(m)));
+                scannedMaterials.Where(m => m != null && MToonDetector.IsMToonLike(m)));
+
+            if (component.fakeShadowFaceMaterial == null || !scannedMaterials.Contains(component.fakeShadowFaceMaterial))
+            {
+                component.fakeShadowFaceMaterial = DetectDefaultFaceMaterial(scannedMaterials);
+            }
+        }
+
+        private static List<Material> GetRendererMaterials(MToonLilToonComponent component)
+        {
+            return component.GetComponentsInChildren<Renderer>(true)
+                .SelectMany(r => r.sharedMaterials)
+                .Where(m => m != null)
+                .Distinct()
+                .ToList();
+        }
+
+        private static Material DetectDefaultFaceMaterial(IReadOnlyList<Material> materials)
+        {
+            if (materials == null || materials.Count == 0) return null;
+
+            var face = materials.FirstOrDefault(m => m != null
+                && (m.name.IndexOf("FACE", System.StringComparison.OrdinalIgnoreCase) >= 0
+                    || m.name.IndexOf("顔", System.StringComparison.OrdinalIgnoreCase) >= 0));
+            if (face != null) return face;
+
+            return materials.FirstOrDefault();
         }
 
         private string T(string ja, string en)
