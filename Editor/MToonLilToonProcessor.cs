@@ -27,6 +27,8 @@ namespace NdmfMToon10ToLilToon
             var selectedForMerge = component.enableHairMerge
                 ? component.hairSelections.Where(s => s.selected && s.material != null).Select(s => s.material).ToHashSet()
                 : new HashSet<Material>();
+            var convertedBySource = new Dictionary<Material, Material>();
+            var fakeShadowPairs = new List<(Material hair, Material fake)>();
             foreach (var renderer in component.GetComponentsInChildren<Renderer>(true))
             {
                 ProcessRenderer(
@@ -34,11 +36,25 @@ namespace NdmfMToon10ToLilToon
                     selectedForMerge,
                     lilToonShader,
                     component.globalOverrides,
-                    component.fakeShadowFaceMaterial,
                     component.enableFakeShadow,
                     component.fakeShadowDirection,
                     component.fakeShadowOffset,
+                    convertedBySource,
+                    fakeShadowPairs,
                     report);
+            }
+
+            if (component.enableFakeShadow
+                && component.fakeShadowFaceMaterial != null
+                && fakeShadowPairs.Count > 0)
+            {
+                var resolvedFaceMaterial = convertedBySource.TryGetValue(component.fakeShadowFaceMaterial, out var convertedFace)
+                    ? convertedFace
+                    : component.fakeShadowFaceMaterial;
+                for (var i = 0; i < fakeShadowPairs.Count; i++)
+                {
+                    ApplyFakeShadowStencilSettings(resolvedFaceMaterial, fakeShadowPairs[i].hair, fakeShadowPairs[i].fake);
+                }
             }
 
             component.scannedMaterialCount = report.ScannedMaterialCount;
@@ -53,10 +69,11 @@ namespace NdmfMToon10ToLilToon
             HashSet<Material> selectedForMerge,
             Shader lilToonShader,
             LilToonGlobalOverrides globalOverrides,
-            Material fakeShadowFaceMaterialSource,
             bool enableFakeShadow,
             Vector3 fakeShadowDirection,
             float fakeShadowOffset,
+            IDictionary<Material, Material> convertedBySource,
+            IList<(Material hair, Material fake)> fakeShadowPairs,
             ConversionReport report)
         {
             if (renderer == null) return;
@@ -70,7 +87,6 @@ namespace NdmfMToon10ToLilToon
             var mergedMaterialCreated = false;
             Material mergedMaterial = null;
             Material fakeShadowMaterial = null;
-            Material faceResultMaterial = null;
             var mergedIndices = new List<int>();
             var mergedRects = new List<Rect>();
 
@@ -95,7 +111,10 @@ namespace NdmfMToon10ToLilToon
                         mergedIndices.Add(i);
                     }
                     resultSourceIndices.Add(i);
-                    if (source == fakeShadowFaceMaterialSource) faceResultMaterial = converted;
+                    if (convertedBySource != null && source != null && !convertedBySource.ContainsKey(source))
+                    {
+                        convertedBySource[source] = converted;
+                    }
                 }
                 else
                 {
@@ -103,7 +122,10 @@ namespace NdmfMToon10ToLilToon
                     report.SkippedMaterialCount++;
                     report.Warnings.Add(new ConversionWarning($"{source.name}: skipped (not convertible)"));
                     resultSourceIndices.Add(i);
-                    if (source == fakeShadowFaceMaterialSource) faceResultMaterial = source;
+                    if (convertedBySource != null && source != null && !convertedBySource.ContainsKey(source))
+                    {
+                        convertedBySource[source] = source;
+                    }
                 }
             }
 
@@ -129,7 +151,10 @@ namespace NdmfMToon10ToLilToon
                 mergedMaterialCreated = true;
                 var mergedRepresentativeIndex = ResolveMergedRepresentativeIndex(original, mergedIndices, transparentRanks, mergedOutputRenderType);
                 ApplyMergedMaterialAndMesh(renderer, result, resultSourceIndices, mergedIndices, mergedRepresentativeIndex, mergedMaterial, fakeShadowMaterial, mergedRects, report);
-                ApplyFakeShadowStencilSettings(faceResultMaterial, mergedMaterial, fakeShadowMaterial);
+                if (fakeShadowPairs != null && fakeShadowMaterial != null)
+                {
+                    fakeShadowPairs.Add((mergedMaterial, fakeShadowMaterial));
+                }
             }
 
             if (!mergedMaterialCreated && mergedIndices.Count >= 1)
