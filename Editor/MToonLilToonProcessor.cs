@@ -54,6 +54,7 @@ namespace NdmfMToon10ToLilToon
                 for (var i = 0; i < fakeShadowPairs.Count; i++)
                 {
                     ApplyFakeShadowStencilSettings(resolvedFaceMaterial, fakeShadowPairs[i].hair, fakeShadowPairs[i].fake);
+                    SyncFakeShadowColor(resolvedFaceMaterial, fakeShadowPairs[i].fake);
                 }
             }
 
@@ -450,6 +451,47 @@ namespace NdmfMToon10ToLilToon
             SetFloatIfAnyExists(material, new[] { "_StencilPass", "_Pass" }, pass);
             SetFloatIfAnyExists(material, new[] { "_StencilFail", "_Fail" }, fail);
             SetFloatIfAnyExists(material, new[] { "_StencilZFail", "_ZFail" }, zFail);
+        }
+
+        private static void SyncFakeShadowColor(Material faceMaterial, Material fakeShadowMaterial)
+        {
+            if (faceMaterial == null || fakeShadowMaterial == null) return;
+
+            Color sourceColor;
+            if (!TryGetColorFromAny(faceMaterial, new[] { "_ShadowColor", "_Shadow1stColor", "_ShadeColor", "_Color" }, out sourceColor))
+            {
+                return;
+            }
+
+            SetColorIfAnyExists(fakeShadowMaterial, new[] { "_Color", "_MainColor", "_BaseColor", "_ShadowColor" }, sourceColor);
+        }
+
+        private static bool TryGetColorFromAny(Material material, IReadOnlyList<string> propertyNames, out Color color)
+        {
+            color = Color.white;
+            if (material == null || propertyNames == null) return false;
+
+            for (var i = 0; i < propertyNames.Count; i++)
+            {
+                var propertyName = propertyNames[i];
+                if (!material.HasProperty(propertyName)) continue;
+                color = material.GetColor(propertyName);
+                return true;
+            }
+
+            return false;
+        }
+
+        private static void SetColorIfAnyExists(Material material, IReadOnlyList<string> propertyNames, Color color)
+        {
+            if (material == null || propertyNames == null) return;
+
+            for (var i = 0; i < propertyNames.Count; i++)
+            {
+                var propertyName = propertyNames[i];
+                if (!material.HasProperty(propertyName)) continue;
+                material.SetColor(propertyName, color);
+            }
         }
 
         private static Texture2D[] PrepareBaseAtlasTextures(IReadOnlyList<Texture2D> sourceTextures, Texture2D fallback)
@@ -908,10 +950,7 @@ namespace NdmfMToon10ToLilToon
                 name = $"{mergedMaterial.name}_FakeShadow",
             };
 
-            if (mergedMaterial.HasProperty("_MainTex") && fakeShadowMaterial.HasProperty("_MainTex"))
-            {
-                fakeShadowMaterial.SetTexture("_MainTex", mergedMaterial.GetTexture("_MainTex"));
-            }
+            if (fakeShadowMaterial.HasProperty("_MainTex")) fakeShadowMaterial.SetTexture("_MainTex", null);
 
             ApplyFakeShadowOverrides(fakeShadowMaterial, true, fakeShadowDirection, fakeShadowOffset);
             return fakeShadowMaterial;
