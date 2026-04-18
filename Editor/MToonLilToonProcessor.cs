@@ -29,6 +29,7 @@ namespace NdmfMToon10ToLilToon
                 : new HashSet<Material>();
             var convertedBySource = new Dictionary<Material, Material>();
             var fakeShadowPairs = new List<(Material hair, Material fake)>();
+            var mergedHairMaterials = new List<Material>();
             foreach (var renderer in component.GetComponentsInChildren<Renderer>(true))
             {
                 ProcessRenderer(
@@ -41,34 +42,49 @@ namespace NdmfMToon10ToLilToon
                     component.fakeShadowOffset,
                     convertedBySource,
                     fakeShadowPairs,
+                    mergedHairMaterials,
                     report);
             }
 
-            if (component.enableFakeShadow
-                && component.fakeShadowFaceMaterial != null
-                && fakeShadowPairs.Count > 0)
-            {
-                var resolvedFaceMaterial = convertedBySource.TryGetValue(component.fakeShadowFaceMaterial, out var convertedFace)
+            var resolvedFaceMaterial = component.fakeShadowFaceMaterial != null
+                ? (convertedBySource.TryGetValue(component.fakeShadowFaceMaterial, out var convertedFace)
                     ? convertedFace
-                    : component.fakeShadowFaceMaterial;
-                for (var i = 0; i < fakeShadowPairs.Count; i++)
+                    : component.fakeShadowFaceMaterial)
+                : null;
+            var resolvedEyebrowMaterial = component.eyebrowStencilMaterial != null
+                ? (convertedBySource.TryGetValue(component.eyebrowStencilMaterial, out var convertedEyebrow)
+                    ? convertedEyebrow
+                    : component.eyebrowStencilMaterial)
+                : null;
+
+            if (component.enableEyebrowStencil
+                && resolvedFaceMaterial != null
+                && resolvedEyebrowMaterial != null)
+            {
+                ApplyEyebrowMaterialOverride(resolvedEyebrowMaterial, resolvedFaceMaterial);
+                ApplyStencilSettingsForFace(resolvedFaceMaterial);
+                ApplyStencilSettingsForEyebrow(resolvedEyebrowMaterial);
+            }
+
+            if (resolvedFaceMaterial != null)
+            {
+                for (var i = 0; i < mergedHairMaterials.Count; i++)
                 {
-                    ApplyFakeShadowStencilSettings(resolvedFaceMaterial, fakeShadowPairs[i].hair, fakeShadowPairs[i].fake);
-                    SyncFakeShadowColor(resolvedFaceMaterial, fakeShadowPairs[i].fake);
+                    ApplyStencilSettingsForFrontHair(mergedHairMaterials[i]);
                 }
             }
 
-            if (component.enableEyebrowStencil
-                && component.fakeShadowFaceMaterial != null
-                && component.eyebrowStencilMaterial != null)
+            if (component.enableFakeShadow
+                && resolvedFaceMaterial != null
+                && fakeShadowPairs.Count > 0)
             {
-                var resolvedFaceMaterial = convertedBySource.TryGetValue(component.fakeShadowFaceMaterial, out var convertedFace)
-                    ? convertedFace
-                    : component.fakeShadowFaceMaterial;
-                var resolvedEyebrowMaterial = convertedBySource.TryGetValue(component.eyebrowStencilMaterial, out var convertedEyebrow)
-                    ? convertedEyebrow
-                    : component.eyebrowStencilMaterial;
-                ApplyEyebrowStencilSettings(resolvedFaceMaterial, resolvedEyebrowMaterial);
+                for (var i = 0; i < fakeShadowPairs.Count; i++)
+                {
+                    ApplyStencilSettingsForFace(resolvedFaceMaterial);
+                    ApplyStencilSettingsForFrontHair(fakeShadowPairs[i].hair);
+                    ApplyStencilSettingsForFakeShadow(fakeShadowPairs[i].fake);
+                    SyncFakeShadowColor(resolvedFaceMaterial, fakeShadowPairs[i].fake);
+                }
             }
 
             component.scannedMaterialCount = report.ScannedMaterialCount;
@@ -88,6 +104,7 @@ namespace NdmfMToon10ToLilToon
             float fakeShadowOffset,
             IDictionary<Material, Material> convertedBySource,
             IList<(Material hair, Material fake)> fakeShadowPairs,
+            IList<Material> mergedHairMaterials,
             ConversionReport report)
         {
             if (renderer == null) return;
@@ -165,6 +182,10 @@ namespace NdmfMToon10ToLilToon
                 mergedMaterialCreated = true;
                 var mergedRepresentativeIndex = ResolveMergedRepresentativeIndex(original, mergedIndices, transparentRanks, mergedOutputRenderType);
                 ApplyMergedMaterialAndMesh(renderer, result, resultSourceIndices, mergedIndices, mergedRepresentativeIndex, mergedMaterial, fakeShadowMaterial, mergedRects, report);
+                if (mergedHairMaterials != null && mergedMaterial != null)
+                {
+                    mergedHairMaterials.Add(mergedMaterial);
+                }
                 if (fakeShadowPairs != null && fakeShadowMaterial != null)
                 {
                     fakeShadowPairs.Add((mergedMaterial, fakeShadowMaterial));
@@ -419,41 +440,6 @@ namespace NdmfMToon10ToLilToon
             }
         }
 
-        private static void ApplyFakeShadowStencilSettings(Material faceMaterial, Material hairMaterial, Material fakeShadowMaterial)
-        {
-            if (faceMaterial == null || hairMaterial == null || fakeShadowMaterial == null) return;
-
-            ApplyStencilSettings(
-                faceMaterial,
-                reference: 51f,
-                readMask: 255f,
-                writeMask: 255f,
-                compare: (float)CompareFunction.Always,
-                pass: (float)StencilOp.Replace,
-                fail: (float)StencilOp.Keep,
-                zFail: (float)StencilOp.Keep);
-
-            ApplyStencilSettings(
-                hairMaterial,
-                reference: 0f,
-                readMask: 255f,
-                writeMask: 255f,
-                compare: (float)CompareFunction.Always,
-                pass: (float)StencilOp.Replace,
-                fail: (float)StencilOp.Keep,
-                zFail: (float)StencilOp.Keep);
-
-            ApplyStencilSettings(
-                fakeShadowMaterial,
-                reference: 51f,
-                readMask: 255f,
-                writeMask: 255f,
-                compare: (float)CompareFunction.Equal,
-                pass: (float)StencilOp.Keep,
-                fail: (float)StencilOp.Keep,
-                zFail: (float)StencilOp.Keep);
-        }
-
         private static void ApplyStencilSettings(Material material, float reference, float readMask, float writeMask, float compare, float pass, float fail, float zFail)
         {
             if (material == null) return;
@@ -466,29 +452,73 @@ namespace NdmfMToon10ToLilToon
             SetFloatIfAnyExists(material, new[] { "_StencilZFail", "_ZFail" }, zFail);
         }
 
-        private static void ApplyEyebrowStencilSettings(Material faceMaterial, Material eyebrowMaterial)
+        private static void ApplyStencilSettingsForFace(Material faceMaterial)
         {
-            if (faceMaterial == null || eyebrowMaterial == null) return;
-
             ApplyStencilSettings(
                 faceMaterial,
                 reference: 51f,
                 readMask: 255f,
-                writeMask: 255f,
+                writeMask: 4f,
                 compare: (float)CompareFunction.Always,
                 pass: (float)StencilOp.Replace,
                 fail: (float)StencilOp.Keep,
                 zFail: (float)StencilOp.Keep);
+        }
 
+        private static void ApplyStencilSettingsForEyebrow(Material eyebrowMaterial)
+        {
             ApplyStencilSettings(
                 eyebrowMaterial,
-                reference: 51f,
+                reference: 2f,
                 readMask: 255f,
-                writeMask: 255f,
+                writeMask: 2f,
+                compare: (float)CompareFunction.Always,
+                pass: (float)StencilOp.Replace,
+                fail: (float)StencilOp.Keep,
+                zFail: (float)StencilOp.Keep);
+        }
+
+        private static void ApplyStencilSettingsForFrontHair(Material hairMaterial)
+        {
+            ApplyStencilSettings(
+                hairMaterial,
+                reference: 2f,
+                readMask: 2f,
+                writeMask: 0f,
+                compare: (float)CompareFunction.NotEqual,
+                pass: (float)StencilOp.Keep,
+                fail: (float)StencilOp.Keep,
+                zFail: (float)StencilOp.Keep);
+        }
+
+        private static void ApplyStencilSettingsForFakeShadow(Material fakeShadowMaterial)
+        {
+            ApplyStencilSettings(
+                fakeShadowMaterial,
+                reference: 51f,
+                readMask: 4f,
+                writeMask: 0f,
                 compare: (float)CompareFunction.Equal,
                 pass: (float)StencilOp.Keep,
                 fail: (float)StencilOp.Keep,
                 zFail: (float)StencilOp.Keep);
+        }
+
+        private static void ApplyEyebrowMaterialOverride(Material eyebrowMaterial, Material faceMaterial)
+        {
+            if (eyebrowMaterial == null) return;
+
+            eyebrowMaterial.EnableKeyword("_ALPHATEST_ON");
+            eyebrowMaterial.DisableKeyword("_ALPHABLEND_ON");
+            eyebrowMaterial.DisableKeyword("_ALPHAPREMULTIPLY_ON");
+            eyebrowMaterial.SetOverrideTag("RenderType", "TransparentCutout");
+            SetFloatIfAnyExists(eyebrowMaterial, new[] { "_UseClipping", "_AlphaMode", "_TransparentMode", "_RenderingMode", "_RenderMode" }, 1f);
+            SetFloatIfAnyExists(eyebrowMaterial, new[] { "_SrcBlend" }, (float)BlendMode.One);
+            SetFloatIfAnyExists(eyebrowMaterial, new[] { "_DstBlend" }, (float)BlendMode.Zero);
+            SetFloatIfAnyExists(eyebrowMaterial, new[] { "_ZWrite" }, 1f);
+
+            var faceQueue = faceMaterial != null ? faceMaterial.renderQueue : (int)RenderQueue.AlphaTest;
+            eyebrowMaterial.renderQueue = faceQueue + 1;
         }
 
         private static void SyncFakeShadowColor(Material faceMaterial, Material fakeShadowMaterial)
