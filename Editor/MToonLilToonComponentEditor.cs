@@ -221,6 +221,11 @@ namespace NdmfMToon10ToLilToon
             if (materials == null || materials.Count == 0) return null;
 
             var face = materials.FirstOrDefault(m => m != null
+                && m.name.IndexOf("FACE", System.StringComparison.OrdinalIgnoreCase) >= 0
+                && m.name.IndexOf("SKIN", System.StringComparison.OrdinalIgnoreCase) >= 0);
+            if (face != null) return face;
+
+            face = materials.FirstOrDefault(m => m != null
                 && (m.name.IndexOf("FACE", System.StringComparison.OrdinalIgnoreCase) >= 0
                     || m.name.IndexOf("顔", System.StringComparison.OrdinalIgnoreCase) >= 0));
             if (face != null) return face;

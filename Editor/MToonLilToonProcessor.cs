@@ -56,7 +56,7 @@ namespace NdmfMToon10ToLilToon
             Material fakeShadowFaceMaterialSource,
             bool enableFakeShadow,
             Vector3 fakeShadowDirection,
-            Vector2 fakeShadowOffset,
+            float fakeShadowOffset,
             ConversionReport report)
         {
             if (renderer == null) return;
@@ -171,7 +171,7 @@ namespace NdmfMToon10ToLilToon
             LilToonGlobalOverrides overrides,
             bool enableFakeShadow,
             Vector3 fakeShadowDirection,
-            Vector2 fakeShadowOffset,
+            float fakeShadowOffset,
             ConversionReport report,
             out Material mergedMaterial,
             out Material fakeShadowMaterial,
@@ -339,7 +339,7 @@ namespace NdmfMToon10ToLilToon
             material.SetFloat(propertyName, value);
         }
 
-        private static void ApplyFakeShadowOverrides(Material material, bool enableFakeShadow, Vector3 fakeShadowDirection, Vector2 fakeShadowOffset)
+        private static void ApplyFakeShadowOverrides(Material material, bool enableFakeShadow, Vector3 fakeShadowDirection, float fakeShadowOffset)
         {
             if (material == null) return;
             if (!enableFakeShadow)
@@ -350,11 +350,10 @@ namespace NdmfMToon10ToLilToon
 
             SetFloatIfAnyExists(material, new[] { "_UseFakeShadow", "_EnableFakeShadow", "_FakeShadow" }, 1f);
 
-            var fakeShadowDirectionVector = new Vector4(fakeShadowDirection.x, fakeShadowDirection.y, fakeShadowDirection.z, 0f);
+            var fakeShadowDirectionVector = new Vector4(fakeShadowDirection.x, fakeShadowDirection.y, fakeShadowDirection.z, fakeShadowOffset);
             SetVectorIfAnyExists(material, new[] { "_FakeShadowVector", "_FakeShadowDir", "_FakeShadowDirection" }, fakeShadowDirectionVector);
 
-            var fakeShadowOffsetVector = new Vector4(fakeShadowOffset.x, fakeShadowOffset.y, 0f, 0f);
-            SetVectorIfAnyExists(material, new[] { "_FakeShadowOffset", "_FakeShadowPositionOffset" }, fakeShadowOffsetVector);
+            SetFloatIfAnyExists(material, new[] { "_FakeShadowOffset", "_FakeShadowPositionOffset" }, fakeShadowOffset);
         }
 
         private static void SetVectorIfAnyExists(Material material, IReadOnlyList<string> propertyNames, Vector4 value)
@@ -868,7 +867,7 @@ namespace NdmfMToon10ToLilToon
             }
         }
 
-        private static Material CreateFakeShadowMaterial(Material mergedMaterial, bool enableFakeShadow, Vector3 fakeShadowDirection, Vector2 fakeShadowOffset, ConversionReport report)
+        private static Material CreateFakeShadowMaterial(Material mergedMaterial, bool enableFakeShadow, Vector3 fakeShadowDirection, float fakeShadowOffset, ConversionReport report)
         {
             if (!enableFakeShadow || mergedMaterial == null) return null;
 
