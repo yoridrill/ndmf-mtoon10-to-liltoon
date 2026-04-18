@@ -66,7 +66,8 @@ namespace NdmfMToon10ToLilToon
                 ApplyStencilSettingsForEyebrow(resolvedEyebrowMaterial);
             }
 
-            if (resolvedFaceMaterial != null)
+            if (resolvedFaceMaterial != null
+                && (component.enableEyebrowStencil || component.enableFakeShadow))
             {
                 for (var i = 0; i < mergedHairMaterials.Count; i++)
                 {
@@ -512,7 +513,9 @@ namespace NdmfMToon10ToLilToon
             eyebrowMaterial.DisableKeyword("_ALPHABLEND_ON");
             eyebrowMaterial.DisableKeyword("_ALPHAPREMULTIPLY_ON");
             eyebrowMaterial.SetOverrideTag("RenderType", "TransparentCutout");
-            SetFloatIfAnyExists(eyebrowMaterial, new[] { "_UseClipping", "_AlphaMode", "_TransparentMode", "_RenderingMode", "_RenderMode" }, 1f);
+            SetFloatIfAnyExists(eyebrowMaterial, new[] { "_UseClipping" }, 1f);
+            SetFloatIfAnyExists(eyebrowMaterial, new[] { "_AlphaMode", "_TransparentMode", "_RenderingMode", "_RenderMode" }, 1f);
+            SetFloatIfAnyExists(eyebrowMaterial, new[] { "_Cutoff" }, 0.5f);
             SetFloatIfAnyExists(eyebrowMaterial, new[] { "_SrcBlend" }, (float)BlendMode.One);
             SetFloatIfAnyExists(eyebrowMaterial, new[] { "_DstBlend" }, (float)BlendMode.Zero);
             SetFloatIfAnyExists(eyebrowMaterial, new[] { "_ZWrite" }, 1f);
