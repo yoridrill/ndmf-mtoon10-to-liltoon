@@ -73,7 +73,7 @@ namespace NdmfMToon10ToLilToon
         {
             var overridesProp = serializedObject.FindProperty(nameof(MToonLilToonComponent.globalOverrides));
             EditorGUILayout.Space();
-            EditorGUILayout.LabelField(T("lilToon ユーザー設定", "lilToon User Settings"), EditorStyles.boldLabel);
+            EditorGUILayout.LabelField(T("lilToon固有機能の一括設定", "Bulk Settings for lilToon-specific Features"), EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.shadowBorderColor)),
                 new GUIContent(T("境界の色", "Shadow Border Color")));
             EditorGUILayout.PropertyField(overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.shadowBorderStrength)),
@@ -86,6 +86,8 @@ namespace NdmfMToon10ToLilToon
                 new GUIContent(T("逆光ライト（色）", "Backlight Color")));
             EditorGUILayout.PropertyField(overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.backlightStrength)),
                 new GUIContent(T("逆光ライト（強さ）", "Backlight Strength")));
+            EditorGUILayout.PropertyField(overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.outlineZBias)),
+                new GUIContent(T("輪郭線のZ Bias", "Outline Z Bias")));
         }
 
         private void DrawHairMergeToggle(MToonLilToonComponent component)
