@@ -304,6 +304,7 @@ namespace NdmfMToon10ToLilToon
                 ApplyShadowState(source, converted);
                 ApplyRimState(source, converted);
                 ApplyUvAnimationMapping(source, converted);
+                ApplyFeatureEnables(source, converted);
                 ApplyFallback(source, converted, renderType);
                 ApplyRenderQueue(source, converted, renderType);
                 ApplyTransparentMode(converted, renderType);
@@ -404,7 +405,7 @@ namespace NdmfMToon10ToLilToon
         {
             if (source == null || destination == null) return;
 
-            if (!TryFindExistingProperty(source, new[] { "_ShadeMap", "_ShadeMultiplyTexture", "_ShadeColorTexture" }, out var shadeProp))
+            if (!TryFindExistingProperty(source, new[] { "_ShadeTex", "_ShadeMap", "_ShadeMultiplyTexture", "_ShadeColorTexture" }, out var shadeProp))
             {
                 ApplyShadowTextureUsage(destination, false);
                 return;
@@ -481,6 +482,23 @@ namespace NdmfMToon10ToLilToon
             CopyFloat(source, destination, new[] { "_RimLift" }, new[] { "_RimBorder" }, null);
             CopyFloat(source, destination, new[] { "_RimLightingMix" }, new[] { "_RimEnableLighting" }, null);
             CopyFloat(source, destination, new[] { "_OutlineLightingMix" }, new[] { "_OutlineEnableLighting" }, null);
+        }
+
+        private static void ApplyFeatureEnables(Material source, Material destination)
+        {
+            if (source == null || destination == null) return;
+
+            var useEmission = HasNonDefaultColor(source, new[] { "_EmissiveFactor", "_EmissionColor" }, Color.black)
+                || HasTexture(source, "_EmissiveMap", "_EmissionMap");
+            SetIfExists(destination, "_UseEmission", useEmission ? 1f : 0f);
+
+            var useMatCap = HasNonDefaultColor(source, new[] { "_MatcapColor" }, Color.black)
+                || HasTexture(source, "_MatcapTex");
+            SetIfExists(destination, "_UseMatCap", useMatCap ? 1f : 0f);
+
+            var useRim = HasNonDefaultColor(source, new[] { "_RimColor" }, Color.black)
+                || HasTexture(source, "_RimTex");
+            SetIfExists(destination, "_UseRim", useRim ? 1f : 0f);
         }
 
         private static void ApplyOutlineState(Material source, Material destination)
@@ -659,7 +677,7 @@ namespace NdmfMToon10ToLilToon
 
             var renderType = RenderTypeResolver.ResolveFromMaterial(source);
             ApplyAlphaMode(source, destination, renderType);
-            ApplyBlendSetup(destination, renderType);
+            ApplyBlendSetup(source, destination, renderType);
         }
 
         private static void ApplyCullState(Material source, Material destination, ConversionReport report)
@@ -789,6 +807,41 @@ namespace NdmfMToon10ToLilToon
             return true;
         }
 
+        private static bool HasTexture(Material material, params string[] properties)
+        {
+            if (material == null) return false;
+            for (var i = 0; i < properties.Length; i++)
+            {
+                var propertyName = properties[i];
+                if (!material.HasProperty(propertyName)) continue;
+                if (material.GetTexture(propertyName) != null) return true;
+            }
+
+            return false;
+        }
+
+        private static bool HasNonDefaultColor(Material material, IReadOnlyList<string> candidates, Color defaultColor, float epsilon = 0.0001f)
+        {
+            if (material == null) return false;
+            if (!TryFindExistingProperty(material, candidates, out var propertyName)) return false;
+            var color = material.GetColor(propertyName);
+            return Mathf.Abs(color.r - defaultColor.r) > epsilon
+                || Mathf.Abs(color.g - defaultColor.g) > epsilon
+                || Mathf.Abs(color.b - defaultColor.b) > epsilon
+                || Mathf.Abs(color.a - defaultColor.a) > epsilon;
+        }
+
+        private static bool HasAnyProperty(Material material, params string[] propertyNames)
+        {
+            if (material == null) return false;
+            for (var i = 0; i < propertyNames.Length; i++)
+            {
+                if (material.HasProperty(propertyNames[i])) return true;
+            }
+
+            return false;
+        }
+
         private static bool IsNumericPropertyType(ShaderPropertyType propertyType)
         {
             // Unity バージョン差で ShaderPropertyType.Int が存在しない場合があるため、
@@ -833,23 +886,27 @@ namespace NdmfMToon10ToLilToon
             }
         }
 
-        private static void ApplyBlendSetup(Material destination, RenderType renderType)
+        private static void ApplyBlendSetup(Material source, Material destination, RenderType renderType)
         {
+            var hasExplicitSrcBlend = source != null && HasAnyProperty(source, "_M_SrcBlend", "_SrcBlend");
+            var hasExplicitDstBlend = source != null && HasAnyProperty(source, "_M_DstBlend", "_DstBlend");
+            var hasExplicitZWrite = source != null && HasAnyProperty(source, "_M_ZWrite", "_ZWrite");
+
             switch (renderType)
             {
                 case RenderType.Opaque:
-                    SetIfExists(destination, "_SrcBlend", (float)BlendMode.One);
-                    SetIfExists(destination, "_DstBlend", (float)BlendMode.Zero);
-                    SetIfExists(destination, "_ZWrite", 1f);
+                    if (!hasExplicitSrcBlend) SetIfExists(destination, "_SrcBlend", (float)BlendMode.One);
+                    if (!hasExplicitDstBlend) SetIfExists(destination, "_DstBlend", (float)BlendMode.Zero);
+                    if (!hasExplicitZWrite) SetIfExists(destination, "_ZWrite", 1f);
                     break;
                 case RenderType.Cutout:
-                    SetIfExists(destination, "_SrcBlend", (float)BlendMode.One);
-                    SetIfExists(destination, "_DstBlend", (float)BlendMode.Zero);
-                    SetIfExists(destination, "_ZWrite", 1f);
+                    if (!hasExplicitSrcBlend) SetIfExists(destination, "_SrcBlend", (float)BlendMode.One);
+                    if (!hasExplicitDstBlend) SetIfExists(destination, "_DstBlend", (float)BlendMode.Zero);
+                    if (!hasExplicitZWrite) SetIfExists(destination, "_ZWrite", 1f);
                     break;
                 case RenderType.Transparent:
-                    SetIfExists(destination, "_SrcBlend", (float)BlendMode.SrcAlpha);
-                    SetIfExists(destination, "_DstBlend", (float)BlendMode.OneMinusSrcAlpha);
+                    if (!hasExplicitSrcBlend) SetIfExists(destination, "_SrcBlend", (float)BlendMode.SrcAlpha);
+                    if (!hasExplicitDstBlend) SetIfExists(destination, "_DstBlend", (float)BlendMode.OneMinusSrcAlpha);
                     break;
             }
         }
