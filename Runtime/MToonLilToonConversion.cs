@@ -310,8 +310,6 @@ namespace NdmfMToon10ToLilToon
                 ApplyTransparentMode(converted, renderType);
                 ApplyTransparentZWrite(converted, renderType, transparentWithZWrite);
                 ApplyRenderTypeTag(converted, renderType);
-                ApplyOutlineState(source, converted);
-                ApplyShadowState(source, converted);
                 ApplyLilToonOverrides(converted, overrides);
                 ApplyShadow2OpacityZero(converted);
 
@@ -398,6 +396,14 @@ namespace NdmfMToon10ToLilToon
             {
                 var shiftTex = source.GetTexture("_ShadingShiftTex");
                 SetTextureIfExists(destination, "_ShadowBorderMask", shiftTex);
+            }
+
+            if (source.HasProperty("_ShadingShiftTexScale") && destination.HasProperty("_ShadowBorder"))
+            {
+                // 1:1 対応先はないため、境界位置へ全体補正として反映する。
+                var scale = Mathf.Max(0f, source.GetFloat("_ShadingShiftTexScale"));
+                var current = destination.GetFloat("_ShadowBorder");
+                SetIfExists(destination, "_ShadowBorder", Mathf.Clamp01(current * scale));
             }
         }
 
@@ -493,12 +499,19 @@ namespace NdmfMToon10ToLilToon
             SetIfExists(destination, "_UseEmission", useEmission ? 1f : 0f);
 
             var useMatCap = HasNonDefaultColor(source, new[] { "_MatcapColor" }, Color.black)
-                || HasTexture(source, "_MatcapTex");
+                || HasTexture(source, "_MatcapTex")
+                || HasNonDefaultFloat(source, new[] { "_MatcapBlendFactor" }, 0f);
             SetIfExists(destination, "_UseMatCap", useMatCap ? 1f : 0f);
 
             var useRim = HasNonDefaultColor(source, new[] { "_RimColor" }, Color.black)
-                || HasTexture(source, "_RimTex");
+                || HasTexture(source, "_RimTex")
+                || HasNonDefaultFloat(source, new[] { "_RimFresnelPower", "_RimLightingMix", "_RimLift" }, 0f);
             SetIfExists(destination, "_UseRim", useRim ? 1f : 0f);
+
+            var useNormalMap = HasTexture(source, "_NormalMap", "_BumpMap")
+                && HasNonDefaultFloat(source, new[] { "_BumpScale" }, 0f);
+            SetIfExists(destination, "_UseBumpMap", useNormalMap ? 1f : 0f);
+            SetIfExists(destination, "_UseNormalMap", useNormalMap ? 1f : 0f);
         }
 
         private static void ApplyOutlineState(Material source, Material destination)
@@ -840,6 +853,13 @@ namespace NdmfMToon10ToLilToon
             }
 
             return false;
+        }
+
+        private static bool HasNonDefaultFloat(Material material, IReadOnlyList<string> candidates, float defaultValue, float epsilon = 0.0001f)
+        {
+            if (material == null) return false;
+            if (!TryFindExistingProperty(material, candidates, out var propertyName)) return false;
+            return Mathf.Abs(material.GetFloat(propertyName) - defaultValue) > epsilon;
         }
 
         private static bool IsNumericPropertyType(ShaderPropertyType propertyType)
