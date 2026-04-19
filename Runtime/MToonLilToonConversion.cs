@@ -288,14 +288,22 @@ namespace NdmfMToon10ToLilToon
                 ApplyShadeTextureMapping(source, converted, report);
                 ApplyShadingFactorMapping(source, converted);
                 CopyTexture(source, converted, new[] { "_NormalMap", "_BumpMap" }, new[] { "_BumpMap", "_NormalMap" }, report);
+                CopyFloat(source, converted, new[] { "_BumpScale" }, new[] { "_BumpScale" }, report);
                 CopyColor(source, converted, new[] { "_EmissiveFactor", "_EmissionColor" }, new[] { "_EmissionColor" }, report);
                 CopyTexture(source, converted, new[] { "_EmissiveMap", "_EmissionMap" }, new[] { "_EmissionMap" }, report);
+                CopyColor(source, converted, new[] { "_MatcapColor" }, new[] { "_MatCapColor" }, report);
+                CopyTexture(source, converted, new[] { "_MatcapTex" }, new[] { "_MatCapTex" }, report);
+                CopyColor(source, converted, new[] { "_RimColor" }, new[] { "_RimColor" }, report);
+                CopyTexture(source, converted, new[] { "_RimTex" }, new[] { "_RimColorTex" }, report);
+                CopyFloat(source, converted, new[] { "_RimFresnelPower" }, new[] { "_RimFresnelPower" }, report);
                 CopyColor(source, converted, new[] { "_OutlineColorFactor", "_OutlineColor" }, new[] { "_OutlineColor" }, report);
-                CopyTexture(source, converted, new[] { "_OutlineWidthMultiplyTexture", "_OutlineMask" }, new[] { "_OutlineTex", "_OutlineMask" }, report);
+                CopyTexture(source, converted, new[] { "_OutlineWidthTex", "_OutlineWidthMultiplyTexture", "_OutlineMask" }, new[] { "_OutlineWidthMask", "_OutlineTex", "_OutlineMask" }, report);
 
                 ApplyRenderState(source, converted, report);
                 ApplyOutlineState(source, converted);
                 ApplyShadowState(source, converted);
+                ApplyRimState(source, converted);
+                ApplyUvAnimationMapping(source, converted);
                 ApplyFallback(source, converted, renderType);
                 ApplyRenderQueue(source, converted, renderType);
                 ApplyTransparentMode(converted, renderType);
@@ -384,6 +392,12 @@ namespace NdmfMToon10ToLilToon
                 var toony = Mathf.Clamp01(source.GetFloat("_ShadingToonyFactor"));
                 SetIfExists(destination, "_ShadowBlur", 1f - toony);
             }
+
+            if (source.HasProperty("_ShadingShiftTex"))
+            {
+                var shiftTex = source.GetTexture("_ShadingShiftTex");
+                SetTextureIfExists(destination, "_ShadowBorderMask", shiftTex);
+            }
         }
 
         private static void ApplyShadeTextureMapping(Material source, Material destination, ConversionReport report)
@@ -460,6 +474,15 @@ namespace NdmfMToon10ToLilToon
             SetIfExists(destination, "_ShadowEnvStrength", 0.5f);
         }
 
+        private static void ApplyRimState(Material source, Material destination)
+        {
+            if (source == null || destination == null) return;
+
+            CopyFloat(source, destination, new[] { "_RimLift" }, new[] { "_RimBorder" }, null);
+            CopyFloat(source, destination, new[] { "_RimLightingMix" }, new[] { "_RimEnableLighting" }, null);
+            CopyFloat(source, destination, new[] { "_OutlineLightingMix" }, new[] { "_OutlineEnableLighting" }, null);
+        }
+
         private static void ApplyOutlineState(Material source, Material destination)
         {
             if (source == null || destination == null) return;
@@ -497,8 +520,9 @@ namespace NdmfMToon10ToLilToon
             else if (source.HasProperty("_OutlineWidth")) sourceWidth = source.GetFloat("_OutlineWidth");
 
             // MToon と lilToon で輪郭線の幅スケールが大きく異なるため補正する。
-            SetIfExists(destination, "_OutlineWidth", sourceWidth * 80f);
+            SetIfExists(destination, "_OutlineWidth", sourceWidth * 100f);
             SetIfExists(destination, "_OutlineCull", (float)CullMode.Front);
+            ApplyOutlineWidthMode(source, destination);
 
             var sourceMainTex = source.HasProperty("_BaseMap")
                 ? source.GetTexture("_BaseMap")
@@ -507,11 +531,13 @@ namespace NdmfMToon10ToLilToon
                     : null;
             if (sourceMainTex == null) return;
 
-            var sourceOutlineMask = source.HasProperty("_OutlineWidthMultiplyTexture")
-                ? source.GetTexture("_OutlineWidthMultiplyTexture")
-                : source.HasProperty("_OutlineMask")
-                    ? source.GetTexture("_OutlineMask")
-                    : null;
+            var sourceOutlineMask = source.HasProperty("_OutlineWidthTex")
+                ? source.GetTexture("_OutlineWidthTex")
+                : source.HasProperty("_OutlineWidthMultiplyTexture")
+                    ? source.GetTexture("_OutlineWidthMultiplyTexture")
+                    : source.HasProperty("_OutlineMask")
+                        ? source.GetTexture("_OutlineMask")
+                        : null;
 
             // MToon には _OutlineTex がないため、mask がある場合はそれを優先、
             // 無い場合のみメインテクスチャを輪郭線テクスチャへ入れる。
@@ -521,7 +547,23 @@ namespace NdmfMToon10ToLilToon
             }
 
             if (sourceOutlineMask == null) return;
+            SetTextureIfExists(destination, "_OutlineWidthMask", sourceOutlineMask);
             SetTextureIfExists(destination, "_OutlineMask", sourceOutlineMask);
+        }
+
+        private static void ApplyOutlineWidthMode(Material source, Material destination)
+        {
+            if (source == null || destination == null || !source.HasProperty("_OutlineWidthMode")) return;
+
+            // MToon10: 0=None, 1=WorldCoordinates, 2=ScreenCoordinates
+            var mode = Mathf.RoundToInt(source.GetFloat("_OutlineWidthMode"));
+            var useOutline = mode > 0 ? 1f : 0f;
+            var fixWidth = mode == 2 ? 1f : 0f;
+            var vertexR2Width = mode == 1 ? 1f : 0f;
+
+            SetIfExists(destination, "_UseOutline", useOutline);
+            SetIfExists(destination, "_OutlineFixWidth", fixWidth);
+            SetIfExists(destination, "_OutlineVertexR2Width", vertexR2Width);
         }
 
         private static void ApplyFallback(Material source, Material destination, RenderType renderType)
@@ -602,21 +644,18 @@ namespace NdmfMToon10ToLilToon
         {
             CopyFloat(source, destination, new[] { "_AlphaCutoff", "_Cutoff" }, new[] { "_Cutoff" }, report);
             ApplyCullState(source, destination, report);
-            CopyFloat(source, destination, new[] { "_SrcBlend" }, new[] { "_SrcBlend" }, report);
-            CopyFloat(source, destination, new[] { "_DstBlend" }, new[] { "_DstBlend" }, report);
-            CopyFloat(source, destination, new[] { "_ZWrite" }, new[] { "_ZWrite" }, report);
+            CopyFloat(source, destination, new[] { "_M_SrcBlend", "_SrcBlend" }, new[] { "_SrcBlend" }, report);
+            CopyFloat(source, destination, new[] { "_M_DstBlend", "_DstBlend" }, new[] { "_DstBlend" }, report);
+            CopyFloat(source, destination, new[] { "_M_ZWrite", "_ZWrite" }, new[] { "_ZWrite" }, report);
             CopyFloat(source, destination, new[] { "_ZTest" }, new[] { "_ZTest" }, report);
             CopyFloat(source, destination, new[] { "_ColorMask" }, new[] { "_ColorMask" }, report);
+            CopyFloat(source, destination, new[] { "_M_AlphaToMask", "_AlphaToMask" }, new[] { "_AlphaToMask" }, report);
 
             if (source.HasProperty("_BaseMap"))
             {
                 destination.mainTextureScale = source.mainTextureScale;
                 destination.mainTextureOffset = source.mainTextureOffset;
             }
-
-            CopyFloat(source, destination, new[] { "_UvAnimScrollX", "_UvAnimationScrollXSpeedFactor" }, new[] { "_MainTex_ScrollRotateX", "_Main2ndTexAngle" }, report);
-            CopyFloat(source, destination, new[] { "_UvAnimScrollY", "_UvAnimationScrollYSpeedFactor" }, new[] { "_MainTex_ScrollRotateY", "_Main2ndTex_ScrollRotate" }, report);
-            CopyFloat(source, destination, new[] { "_UvAnimRotation", "_UvAnimationRotationSpeedFactor" }, new[] { "_MainTex_ScrollRotateR", "_Main2ndTex_ScrollRotate" }, report);
 
             var renderType = RenderTypeResolver.ResolveFromMaterial(source);
             ApplyAlphaMode(source, destination, renderType);
@@ -637,7 +676,7 @@ namespace NdmfMToon10ToLilToon
                 return;
             }
 
-            if (TryFindExistingProperty(source, new[] { "_CullMode", "_Cull" }, out var sourceCull))
+            if (TryFindExistingProperty(source, new[] { "_M_CullMode", "_CullMode", "_Cull" }, out var sourceCull))
             {
                 var cull = source.GetFloat(sourceCull);
                 SetIfExists(destination, "_Cull", cull);
@@ -713,9 +752,41 @@ namespace NdmfMToon10ToLilToon
 
         private static void SetTextureIfExists(Material material, string propertyName, Texture texture)
         {
-            if (material == null || texture == null) return;
+            if (material == null) return;
             if (!material.HasProperty(propertyName)) return;
             material.SetTexture(propertyName, texture);
+        }
+
+        private static void ApplyUvAnimationMapping(Material source, Material destination)
+        {
+            if (source == null || destination == null) return;
+
+            var hasScrollX = TryGetFloat(source, new[] { "_UvAnimScrollXSpeed", "_UvAnimScrollX", "_UvAnimationScrollXSpeedFactor" }, out var scrollX);
+            var hasScrollY = TryGetFloat(source, new[] { "_UvAnimScrollYSpeed", "_UvAnimScrollY", "_UvAnimationScrollYSpeedFactor" }, out var scrollY);
+            var hasRotation = TryGetFloat(source, new[] { "_UvAnimRotationSpeed", "_UvAnimRotation", "_UvAnimationRotationSpeedFactor" }, out var rotation);
+
+            if (destination.HasProperty("_EmissionBlendMask_ScrollRotate") && (hasScrollX || hasScrollY || hasRotation))
+            {
+                var current = destination.GetVector("_EmissionBlendMask_ScrollRotate");
+                current.x = hasScrollX ? scrollX : current.x;
+                current.y = hasScrollY ? scrollY : current.y;
+                current.w = hasRotation ? rotation : current.w;
+                destination.SetVector("_EmissionBlendMask_ScrollRotate", current);
+            }
+
+            if (source.HasProperty("_UvAnimMaskTex"))
+            {
+                var maskTex = source.GetTexture("_UvAnimMaskTex");
+                SetTextureIfExists(destination, "_EmissionBlendMask", maskTex);
+            }
+        }
+
+        private static bool TryGetFloat(Material material, IReadOnlyList<string> candidates, out float value)
+        {
+            value = 0f;
+            if (!TryFindExistingProperty(material, candidates, out var propertyName)) return false;
+            value = material.GetFloat(propertyName);
+            return true;
         }
 
         private static bool IsNumericPropertyType(ShaderPropertyType propertyType)
