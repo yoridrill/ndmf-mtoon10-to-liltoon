@@ -920,10 +920,6 @@ namespace NdmfMToon10ToLilToon
             switch (renderType)
             {
                 case RenderType.Opaque:
-                    if (!hasExplicitSrcBlend) SetIfExists(destination, "_SrcBlend", (float)BlendMode.One);
-                    if (!hasExplicitDstBlend) SetIfExists(destination, "_DstBlend", (float)BlendMode.Zero);
-                    if (!hasExplicitZWrite) SetIfExists(destination, "_ZWrite", 1f);
-                    break;
                 case RenderType.Cutout:
                     if (!hasExplicitSrcBlend) SetIfExists(destination, "_SrcBlend", (float)BlendMode.One);
                     if (!hasExplicitDstBlend) SetIfExists(destination, "_DstBlend", (float)BlendMode.Zero);
@@ -944,22 +940,6 @@ namespace NdmfMToon10ToLilToon
                 RenderType.Cutout => 1f,
                 _ => 2f,
             };
-
-            if (renderType == RenderType.Opaque)
-            {
-                SetIfExists(destination, "_TransparentMode", modeValue);
-                SetIfExists(destination, "_RenderingMode", modeValue);
-                SetIfExists(destination, "_RenderMode", modeValue);
-                return;
-            }
-
-            if (renderType == RenderType.Cutout)
-            {
-                SetIfExists(destination, "_TransparentMode", modeValue);
-                SetIfExists(destination, "_RenderingMode", modeValue);
-                SetIfExists(destination, "_RenderMode", modeValue);
-                return;
-            }
 
             // lilToon はバージョンによって命名差分があるため候補をまとめて設定する。
             SetIfExists(destination, "_TransparentMode", modeValue);
