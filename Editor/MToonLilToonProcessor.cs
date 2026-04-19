@@ -61,7 +61,7 @@ namespace NdmfMToon10ToLilToon
                 && resolvedFaceMaterial != null
                 && resolvedEyebrowMaterial != null)
             {
-                ApplyEyebrowMaterialOverride(resolvedEyebrowMaterial, resolvedFaceMaterial);
+                ApplyEyebrowMaterialOverride(resolvedEyebrowMaterial);
                 ApplyStencilSettingsForFace(resolvedFaceMaterial);
                 ApplyStencilSettingsForEyebrow(resolvedEyebrowMaterial);
             }
@@ -455,11 +455,13 @@ namespace NdmfMToon10ToLilToon
 
         private static void ApplyStencilSettingsForFace(Material faceMaterial)
         {
+            if (faceMaterial == null) return;
+            faceMaterial.renderQueue = 2450;
             ApplyStencilSettings(
                 faceMaterial,
                 reference: 51f,
-                readMask: 255f,
-                writeMask: 4f,
+                readMask: 63f,
+                writeMask: 63f,
                 compare: (float)CompareFunction.Always,
                 pass: (float)StencilOp.Replace,
                 fail: (float)StencilOp.Keep,
@@ -468,11 +470,13 @@ namespace NdmfMToon10ToLilToon
 
         private static void ApplyStencilSettingsForEyebrow(Material eyebrowMaterial)
         {
+            if (eyebrowMaterial == null) return;
+            eyebrowMaterial.renderQueue = 2451;
             ApplyStencilSettings(
                 eyebrowMaterial,
-                reference: 2f,
-                readMask: 255f,
-                writeMask: 2f,
+                reference: 128f,
+                readMask: 128f,
+                writeMask: 191f,
                 compare: (float)CompareFunction.Always,
                 pass: (float)StencilOp.Replace,
                 fail: (float)StencilOp.Keep,
@@ -481,23 +485,26 @@ namespace NdmfMToon10ToLilToon
 
         private static void ApplyStencilSettingsForFrontHair(Material hairMaterial)
         {
+            if (hairMaterial == null) return;
+            hairMaterial.renderQueue = 2452;
             ApplyStencilSettings(
                 hairMaterial,
-                reference: 2f,
-                readMask: 2f,
-                writeMask: 0f,
+                reference: 128f,
+                readMask: 128f,
+                writeMask: 63f,
                 compare: (float)CompareFunction.NotEqual,
-                pass: (float)StencilOp.Keep,
+                pass: (float)StencilOp.Replace,
                 fail: (float)StencilOp.Keep,
                 zFail: (float)StencilOp.Keep);
         }
 
         private static void ApplyStencilSettingsForFakeShadow(Material fakeShadowMaterial)
         {
+            if (fakeShadowMaterial == null) return;
             ApplyStencilSettings(
                 fakeShadowMaterial,
                 reference: 51f,
-                readMask: 4f,
+                readMask: 63f,
                 writeMask: 0f,
                 compare: (float)CompareFunction.Equal,
                 pass: (float)StencilOp.Keep,
@@ -505,7 +512,7 @@ namespace NdmfMToon10ToLilToon
                 zFail: (float)StencilOp.Keep);
         }
 
-        private static void ApplyEyebrowMaterialOverride(Material eyebrowMaterial, Material faceMaterial)
+        private static void ApplyEyebrowMaterialOverride(Material eyebrowMaterial)
         {
             if (eyebrowMaterial == null) return;
 
@@ -519,9 +526,7 @@ namespace NdmfMToon10ToLilToon
             SetFloatIfAnyExists(eyebrowMaterial, new[] { "_SrcBlend" }, (float)BlendMode.One);
             SetFloatIfAnyExists(eyebrowMaterial, new[] { "_DstBlend" }, (float)BlendMode.Zero);
             SetFloatIfAnyExists(eyebrowMaterial, new[] { "_ZWrite" }, 1f);
-
-            var faceQueue = faceMaterial != null ? faceMaterial.renderQueue : (int)RenderQueue.AlphaTest;
-            eyebrowMaterial.renderQueue = faceQueue + 1;
+            eyebrowMaterial.renderQueue = 2451;
         }
 
         private static void SyncFakeShadowColor(Material faceMaterial, Material fakeShadowMaterial)
