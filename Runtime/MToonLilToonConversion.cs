@@ -337,6 +337,11 @@ namespace NdmfMToon10ToLilToon
                 return Mathf.RoundToInt(source.GetFloat("_BlendMode")) == 3;
             }
 
+            if (source.HasProperty("_M_ZWrite"))
+            {
+                return source.GetFloat("_M_ZWrite") > 0.5f;
+            }
+
             return source.HasProperty("_ZWrite") && source.GetFloat("_ZWrite") > 0.5f;
         }
 
