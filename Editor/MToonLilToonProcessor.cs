@@ -451,6 +451,16 @@ namespace NdmfMToon10ToLilToon
             SetFloatIfAnyExists(material, new[] { "_StencilPass", "_Pass" }, pass);
             SetFloatIfAnyExists(material, new[] { "_StencilFail", "_Fail" }, fail);
             SetFloatIfAnyExists(material, new[] { "_StencilZFail", "_ZFail" }, zFail);
+
+            // Cutout + Outline 構成では本体とアウトラインでステンシル値が分かれる場合がある。
+            // 髪/顔で齟齬が出ないよう同値で揃える。
+            SetFloatIfAnyExists(material, new[] { "_OutlineStencilRef", "_OutlineRef" }, reference);
+            SetFloatIfAnyExists(material, new[] { "_OutlineStencilReadMask", "_OutlineReadMask" }, readMask);
+            SetFloatIfAnyExists(material, new[] { "_OutlineStencilWriteMask", "_OutlineWriteMask" }, writeMask);
+            SetFloatIfAnyExists(material, new[] { "_OutlineStencilComp", "_OutlineComp" }, compare);
+            SetFloatIfAnyExists(material, new[] { "_OutlineStencilPass", "_OutlinePass" }, pass);
+            SetFloatIfAnyExists(material, new[] { "_OutlineStencilFail", "_OutlineFail" }, fail);
+            SetFloatIfAnyExists(material, new[] { "_OutlineStencilZFail", "_OutlineZFail" }, zFail);
         }
 
         private static void ApplyStencilSettingsForFace(Material faceMaterial)
@@ -516,12 +526,25 @@ namespace NdmfMToon10ToLilToon
         {
             if (eyebrowMaterial == null) return;
 
+            if (eyebrowMaterial.shader != null
+                && eyebrowMaterial.shader.name.IndexOf("Transparent", System.StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                var hasOutline = (eyebrowMaterial.HasProperty("_UseOutline") && eyebrowMaterial.GetFloat("_UseOutline") > 0.5f)
+                    || (eyebrowMaterial.HasProperty("_OutlineEnable") && eyebrowMaterial.GetFloat("_OutlineEnable") > 0.5f);
+                var cutoutShader = Shader.Find(hasOutline ? "Hidden/lilToonCutoutOutline" : "Hidden/lilToonCutout");
+                if (cutoutShader != null)
+                {
+                    eyebrowMaterial.shader = cutoutShader;
+                }
+            }
+
             eyebrowMaterial.EnableKeyword("_ALPHATEST_ON");
             eyebrowMaterial.DisableKeyword("_ALPHABLEND_ON");
             eyebrowMaterial.DisableKeyword("_ALPHAPREMULTIPLY_ON");
             eyebrowMaterial.SetOverrideTag("RenderType", "TransparentCutout");
             SetFloatIfAnyExists(eyebrowMaterial, new[] { "_UseClipping" }, 1f);
             SetFloatIfAnyExists(eyebrowMaterial, new[] { "_AlphaMode", "_TransparentMode", "_RenderingMode", "_RenderMode" }, 1f);
+            SetFloatIfAnyExists(eyebrowMaterial, new[] { "_BlendMode", "_Surface" }, 1f);
             SetFloatIfAnyExists(eyebrowMaterial, new[] { "_Cutoff" }, 0.5f);
             SetFloatIfAnyExists(eyebrowMaterial, new[] { "_SrcBlend" }, (float)BlendMode.One);
             SetFloatIfAnyExists(eyebrowMaterial, new[] { "_DstBlend" }, (float)BlendMode.Zero);
