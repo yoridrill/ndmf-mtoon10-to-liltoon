@@ -112,22 +112,27 @@ namespace NdmfMToon10ToLilToon
             using (new EditorGUI.IndentLevelScope())
             {
                 var enableEyebrowStencilProp = serializedObject.FindProperty(nameof(MToonLilToonComponent.enableEyebrowStencil));
-                EditorGUILayout.PropertyField(enableEyebrowStencilProp, new GUIContent(T("眉ステンシルを有効化", "Enable Eyebrow Stencil")));
+                EditorGUILayout.PropertyField(enableEyebrowStencilProp, new GUIContent(T("眉ステンシル", "Eyebrow Stencil")));
                 if (enableEyebrowStencilProp.boolValue)
                 {
-                    DrawEyebrowStencilMaterialSelector(component);
+                    using (new EditorGUI.IndentLevelScope())
+                    {
+                        DrawEyebrowStencilMaterialSelector(component);
+                    }
                 }
 
-                DrawFakeShadowFaceMaterialSelector(component);
-
                 var enableFakeShadowProp = serializedObject.FindProperty(nameof(MToonLilToonComponent.enableFakeShadow));
-                EditorGUILayout.PropertyField(enableFakeShadowProp, new GUIContent(T("FakeShadow を有効化", "Enable FakeShadow")));
+                EditorGUILayout.PropertyField(enableFakeShadowProp, new GUIContent("FakeShadow"));
                 if (enableFakeShadowProp.boolValue)
                 {
-                    EditorGUILayout.PropertyField(serializedObject.FindProperty(nameof(MToonLilToonComponent.fakeShadowDirection)),
-                        new GUIContent(T("FakeShadow（向き）", "FakeShadow Direction")));
-                    EditorGUILayout.PropertyField(serializedObject.FindProperty(nameof(MToonLilToonComponent.fakeShadowOffset)),
-                        new GUIContent(T("FakeShadow（オフセット）", "FakeShadow Offset")));
+                    using (new EditorGUI.IndentLevelScope())
+                    {
+                        DrawFakeShadowFaceMaterialSelector(component);
+                        EditorGUILayout.PropertyField(serializedObject.FindProperty(nameof(MToonLilToonComponent.fakeShadowDirection)),
+                            new GUIContent(T("向き", "Direction")));
+                        EditorGUILayout.PropertyField(serializedObject.FindProperty(nameof(MToonLilToonComponent.fakeShadowOffset)),
+                            new GUIContent(T("オフセット", "Offset")));
+                    }
                 }
             }
         }
@@ -147,7 +152,7 @@ namespace NdmfMToon10ToLilToon
                 ? candidates.IndexOf(component.fakeShadowFaceMaterial) + 1
                 : 0;
 
-            var nextIndex = EditorGUILayout.Popup(T("FakeShadow 顔マテリアル", "FakeShadow Face Material"), currentIndex, labels);
+            var nextIndex = EditorGUILayout.Popup(T("顔マテリアル", "Face Material"), currentIndex, labels);
             component.fakeShadowFaceMaterial = nextIndex <= 0 ? null : candidates[nextIndex - 1];
         }
 
@@ -166,7 +171,7 @@ namespace NdmfMToon10ToLilToon
                 ? candidates.IndexOf(component.eyebrowStencilMaterial) + 1
                 : 0;
 
-            var nextIndex = EditorGUILayout.Popup(T("眉ステンシル対象", "Eyebrow Stencil Material"), currentIndex, labels);
+            var nextIndex = EditorGUILayout.Popup(T("対象マテリアル", "Target Material"), currentIndex, labels);
             component.eyebrowStencilMaterial = nextIndex <= 0 ? null : candidates[nextIndex - 1];
         }
 
