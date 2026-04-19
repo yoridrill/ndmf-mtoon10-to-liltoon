@@ -92,19 +92,79 @@ namespace NdmfMToon10ToLilToon
         {
             var enableHairMergeProp = serializedObject.FindProperty(nameof(MToonLilToonComponent.enableHairMerge));
             EditorGUI.BeginChangeCheck();
-            EditorGUILayout.PropertyField(enableHairMergeProp, new GUIContent(T("Hair Merge", "Hair Merge")));
-            if (!EditorGUI.EndChangeCheck()) return;
-
-            if (enableHairMergeProp.boolValue)
+            EditorGUILayout.PropertyField(enableHairMergeProp, new GUIContent(T("髪周りのルック調整", "Hair Look Adjustments")));
+            var mergeToggleChanged = EditorGUI.EndChangeCheck();
+            if (mergeToggleChanged)
             {
-                ScanMaterials(component);
-            }
-            else
-            {
-                component.hairSelections = new List<HairMaterialSelection>();
+                if (enableHairMergeProp.boolValue)
+                {
+                    ScanMaterials(component);
+                }
+                else
+                {
+                    component.hairSelections = new List<HairMaterialSelection>();
+                }
+                EditorUtility.SetDirty(component);
             }
 
-            EditorUtility.SetDirty(component);
+            if (!enableHairMergeProp.boolValue) return;
+
+            var enableEyebrowStencilProp = serializedObject.FindProperty(nameof(MToonLilToonComponent.enableEyebrowStencil));
+            EditorGUILayout.PropertyField(enableEyebrowStencilProp, new GUIContent(T("眉ステンシルを有効化", "Enable Eyebrow Stencil")));
+            if (enableEyebrowStencilProp.boolValue)
+            {
+                DrawEyebrowStencilMaterialSelector(component);
+            }
+
+            DrawFakeShadowFaceMaterialSelector(component);
+
+            var enableFakeShadowProp = serializedObject.FindProperty(nameof(MToonLilToonComponent.enableFakeShadow));
+            EditorGUILayout.PropertyField(enableFakeShadowProp, new GUIContent(T("FakeShadow を有効化", "Enable FakeShadow")));
+            if (enableFakeShadowProp.boolValue)
+            {
+                EditorGUILayout.PropertyField(serializedObject.FindProperty(nameof(MToonLilToonComponent.fakeShadowDirection)),
+                    new GUIContent(T("FakeShadow（向き）", "FakeShadow Direction")));
+                EditorGUILayout.PropertyField(serializedObject.FindProperty(nameof(MToonLilToonComponent.fakeShadowOffset)),
+                    new GUIContent(T("FakeShadow（オフセット）", "FakeShadow Offset")));
+            }
+        }
+
+        private void DrawFakeShadowFaceMaterialSelector(MToonLilToonComponent component)
+        {
+            var candidates = GetRendererMaterials(component);
+            if (candidates.Count == 0) return;
+
+            if (component.fakeShadowFaceMaterial == null || !candidates.Contains(component.fakeShadowFaceMaterial))
+            {
+                component.fakeShadowFaceMaterial = DetectDefaultFaceMaterial(candidates);
+            }
+
+            var labels = new[] { T("未設定", "None") }.Concat(candidates.Select(m => m != null ? m.name : "(null)")).ToArray();
+            var currentIndex = component.fakeShadowFaceMaterial != null
+                ? candidates.IndexOf(component.fakeShadowFaceMaterial) + 1
+                : 0;
+
+            var nextIndex = EditorGUILayout.Popup(T("FakeShadow 顔マテリアル", "FakeShadow Face Material"), currentIndex, labels);
+            component.fakeShadowFaceMaterial = nextIndex <= 0 ? null : candidates[nextIndex - 1];
+        }
+
+        private void DrawEyebrowStencilMaterialSelector(MToonLilToonComponent component)
+        {
+            var candidates = GetRendererMaterials(component);
+            if (candidates.Count == 0) return;
+
+            if (component.eyebrowStencilMaterial == null || !candidates.Contains(component.eyebrowStencilMaterial))
+            {
+                component.eyebrowStencilMaterial = DetectDefaultEyebrowMaterial(candidates);
+            }
+
+            var labels = new[] { T("未設定", "None") }.Concat(candidates.Select(m => m != null ? m.name : "(null)")).ToArray();
+            var currentIndex = component.eyebrowStencilMaterial != null
+                ? candidates.IndexOf(component.eyebrowStencilMaterial) + 1
+                : 0;
+
+            var nextIndex = EditorGUILayout.Popup(T("眉ステンシル対象", "Eyebrow Stencil Material"), currentIndex, labels);
+            component.eyebrowStencilMaterial = nextIndex <= 0 ? null : candidates[nextIndex - 1];
         }
 
         private void DrawHairSelections(MToonLilToonComponent component)
@@ -117,7 +177,8 @@ namespace NdmfMToon10ToLilToon
             }
 
             EditorGUILayout.Space();
-            EditorGUILayout.LabelField(T("Hair Merge Targets", "Hair Merge Targets"), EditorStyles.boldLabel);
+            EditorGUILayout.LabelField(T("結合対象マテリアル", "Materials to Merge"), EditorStyles.boldLabel);
+            EditorGUILayout.HelpBox(T("チェックを入れたマテリアルは結合されます。", "Checked materials will be merged."), MessageType.Info);
 
             if (component.hairSelections == null || component.hairSelections.Count == 0)
             {
@@ -156,17 +217,64 @@ namespace NdmfMToon10ToLilToon
 
         private static void ScanMaterials(MToonLilToonComponent component)
         {
-            var renderers = component.GetComponentsInChildren<Renderer>(true);
-            if (renderers.Length == 0)
+            var scannedMaterials = GetRendererMaterials(component);
+            if (scannedMaterials.Count == 0)
             {
                 component.hairSelections = new List<HairMaterialSelection>();
                 return;
             }
 
             component.hairSelections = HairMaterialSelector.BuildDefaultSelections(
-                renderers
-                    .SelectMany(r => r.sharedMaterials)
-                    .Where(m => m != null && MToonDetector.IsMToonLike(m)));
+                scannedMaterials.Where(m => m != null && MToonDetector.IsMToonLike(m)));
+
+            if (component.fakeShadowFaceMaterial == null || !scannedMaterials.Contains(component.fakeShadowFaceMaterial))
+            {
+                component.fakeShadowFaceMaterial = DetectDefaultFaceMaterial(scannedMaterials);
+            }
+
+            if (component.eyebrowStencilMaterial == null || !scannedMaterials.Contains(component.eyebrowStencilMaterial))
+            {
+                component.eyebrowStencilMaterial = DetectDefaultEyebrowMaterial(scannedMaterials);
+            }
+        }
+
+        private static List<Material> GetRendererMaterials(MToonLilToonComponent component)
+        {
+            return component.GetComponentsInChildren<Renderer>(true)
+                .SelectMany(r => r.sharedMaterials)
+                .Where(m => m != null)
+                .Distinct()
+                .ToList();
+        }
+
+        private static Material DetectDefaultFaceMaterial(IReadOnlyList<Material> materials)
+        {
+            if (materials == null || materials.Count == 0) return null;
+
+            var face = materials.FirstOrDefault(m => m != null
+                && m.name.IndexOf("FACE", System.StringComparison.OrdinalIgnoreCase) >= 0
+                && m.name.IndexOf("SKIN", System.StringComparison.OrdinalIgnoreCase) >= 0);
+            if (face != null) return face;
+
+            face = materials.FirstOrDefault(m => m != null
+                && (m.name.IndexOf("FACE", System.StringComparison.OrdinalIgnoreCase) >= 0
+                    || m.name.IndexOf("顔", System.StringComparison.OrdinalIgnoreCase) >= 0));
+            if (face != null) return face;
+
+            return materials.FirstOrDefault();
+        }
+
+        private static Material DetectDefaultEyebrowMaterial(IReadOnlyList<Material> materials)
+        {
+            if (materials == null || materials.Count == 0) return null;
+
+            var eyebrow = materials.FirstOrDefault(m => m != null
+                && (m.name.IndexOf("EYEBROW", System.StringComparison.OrdinalIgnoreCase) >= 0
+                    || m.name.IndexOf("BROW", System.StringComparison.OrdinalIgnoreCase) >= 0
+                    || m.name.IndexOf("眉", System.StringComparison.OrdinalIgnoreCase) >= 0));
+            if (eyebrow != null) return eyebrow;
+
+            return materials.FirstOrDefault();
         }
 
         private string T(string ja, string en)
