@@ -109,23 +109,26 @@ namespace NdmfMToon10ToLilToon
 
             if (!enableHairMergeProp.boolValue) return;
 
-            var enableEyebrowStencilProp = serializedObject.FindProperty(nameof(MToonLilToonComponent.enableEyebrowStencil));
-            EditorGUILayout.PropertyField(enableEyebrowStencilProp, new GUIContent(T("眉ステンシルを有効化", "Enable Eyebrow Stencil")));
-            if (enableEyebrowStencilProp.boolValue)
+            using (new EditorGUI.IndentLevelScope())
             {
-                DrawEyebrowStencilMaterialSelector(component);
-            }
+                var enableEyebrowStencilProp = serializedObject.FindProperty(nameof(MToonLilToonComponent.enableEyebrowStencil));
+                EditorGUILayout.PropertyField(enableEyebrowStencilProp, new GUIContent(T("眉ステンシルを有効化", "Enable Eyebrow Stencil")));
+                if (enableEyebrowStencilProp.boolValue)
+                {
+                    DrawEyebrowStencilMaterialSelector(component);
+                }
 
-            DrawFakeShadowFaceMaterialSelector(component);
+                DrawFakeShadowFaceMaterialSelector(component);
 
-            var enableFakeShadowProp = serializedObject.FindProperty(nameof(MToonLilToonComponent.enableFakeShadow));
-            EditorGUILayout.PropertyField(enableFakeShadowProp, new GUIContent(T("FakeShadow を有効化", "Enable FakeShadow")));
-            if (enableFakeShadowProp.boolValue)
-            {
-                EditorGUILayout.PropertyField(serializedObject.FindProperty(nameof(MToonLilToonComponent.fakeShadowDirection)),
-                    new GUIContent(T("FakeShadow（向き）", "FakeShadow Direction")));
-                EditorGUILayout.PropertyField(serializedObject.FindProperty(nameof(MToonLilToonComponent.fakeShadowOffset)),
-                    new GUIContent(T("FakeShadow（オフセット）", "FakeShadow Offset")));
+                var enableFakeShadowProp = serializedObject.FindProperty(nameof(MToonLilToonComponent.enableFakeShadow));
+                EditorGUILayout.PropertyField(enableFakeShadowProp, new GUIContent(T("FakeShadow を有効化", "Enable FakeShadow")));
+                if (enableFakeShadowProp.boolValue)
+                {
+                    EditorGUILayout.PropertyField(serializedObject.FindProperty(nameof(MToonLilToonComponent.fakeShadowDirection)),
+                        new GUIContent(T("FakeShadow（向き）", "FakeShadow Direction")));
+                    EditorGUILayout.PropertyField(serializedObject.FindProperty(nameof(MToonLilToonComponent.fakeShadowOffset)),
+                        new GUIContent(T("FakeShadow（オフセット）", "FakeShadow Offset")));
+                }
             }
         }
 
