@@ -22,6 +22,7 @@ namespace NdmfMToon10ToLilToon
         [Range(0f, 1f)] public float distanceFadeStrength = 0f;
         public Color backlightColor = Color.black;
         [Range(0f, 1f)] public float backlightStrength = 0f;
+        public float outlineZBias = 0.003f;
     }
 
     [Serializable]
@@ -469,6 +470,14 @@ namespace NdmfMToon10ToLilToon
             SetIfExists(material, "_DistanceFade", overrides.distanceFadeStrength);
             SetIfExists(material, "_BacklightColor", overrides.backlightColor);
             SetIfExists(material, "_BacklightStrength", overrides.backlightStrength);
+
+            var hasOutline = (material.HasProperty("_UseOutline") && material.GetFloat("_UseOutline") > 0.5f)
+                || (material.HasProperty("_OutlineEnable") && material.GetFloat("_OutlineEnable") > 0.5f)
+                || material.IsKeywordEnabled("_OUTLINE_ON");
+            if (hasOutline)
+            {
+                SetIfExists(material, "_OutlineZBias", overrides.outlineZBias);
+            }
         }
 
         private static void ApplyShadowState(Material source, Material destination)
