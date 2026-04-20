@@ -27,19 +27,21 @@ namespace NdmfMToon10ToLilToon
             serializedObject.Update();
             var component = (MToonLilToonComponent)target;
             var previousPreviewing = MToonLilToonPreviewUtility.IsPreviewing(component);
-            EditorGUI.BeginChangeCheck();
 
             DrawPreviewButton(component);
             DrawLilToonUserSettings();
-            DrawHairMergeToggle(component);
+            var directValueChanged = DrawHairMergeToggle(component);
 
-            DrawHairSelections(component);
+            directValueChanged |= DrawHairSelections(component);
             DrawReport(component);
 
-            var changed = EditorGUI.EndChangeCheck();
-            serializedObject.ApplyModifiedProperties();
+            var serializedChanged = serializedObject.ApplyModifiedProperties();
+            if (directValueChanged)
+            {
+                EditorUtility.SetDirty(component);
+            }
 
-            if (changed && previousPreviewing)
+            if ((serializedChanged || directValueChanged) && previousPreviewing)
             {
                 MToonLilToonPreviewUtility.RestartPreviewIfActive(component);
             }
@@ -90,14 +92,16 @@ namespace NdmfMToon10ToLilToon
                 new GUIContent(T("輪郭線のZ Bias", "Outline Z Bias")));
         }
 
-        private void DrawHairMergeToggle(MToonLilToonComponent component)
+        private bool DrawHairMergeToggle(MToonLilToonComponent component)
         {
+            var changed = false;
             var enableHairMergeProp = serializedObject.FindProperty(nameof(MToonLilToonComponent.enableHairMerge));
             EditorGUI.BeginChangeCheck();
             EditorGUILayout.PropertyField(enableHairMergeProp, new GUIContent(T("髪周りのルック調整", "Hair Look Adjustments")));
             var mergeToggleChanged = EditorGUI.EndChangeCheck();
             if (mergeToggleChanged)
             {
+                changed = true;
                 if (enableHairMergeProp.boolValue)
                 {
                     ScanMaterials(component);
@@ -109,7 +113,7 @@ namespace NdmfMToon10ToLilToon
                 EditorUtility.SetDirty(component);
             }
 
-            if (!enableHairMergeProp.boolValue) return;
+            if (!enableHairMergeProp.boolValue) return changed;
 
             using (new EditorGUI.IndentLevelScope())
             {
@@ -119,7 +123,7 @@ namespace NdmfMToon10ToLilToon
                 {
                     using (new EditorGUI.IndentLevelScope())
                     {
-                        DrawEyebrowStencilMaterialSelector(component);
+                        changed |= DrawEyebrowStencilMaterialSelector(component);
                     }
                 }
 
@@ -129,7 +133,7 @@ namespace NdmfMToon10ToLilToon
                 {
                     using (new EditorGUI.IndentLevelScope())
                     {
-                        DrawFakeShadowFaceMaterialSelector(component);
+                        changed |= DrawFakeShadowFaceMaterialSelector(component);
                         EditorGUILayout.PropertyField(serializedObject.FindProperty(nameof(MToonLilToonComponent.fakeShadowDirection)),
                             new GUIContent(T("向き", "Direction")));
                         EditorGUILayout.PropertyField(serializedObject.FindProperty(nameof(MToonLilToonComponent.fakeShadowOffset)),
@@ -137,12 +141,14 @@ namespace NdmfMToon10ToLilToon
                     }
                 }
             }
+
+            return changed;
         }
 
-        private void DrawFakeShadowFaceMaterialSelector(MToonLilToonComponent component)
+        private bool DrawFakeShadowFaceMaterialSelector(MToonLilToonComponent component)
         {
             var candidates = GetRendererMaterials(component);
-            if (candidates.Count == 0) return;
+            if (candidates.Count == 0) return false;
 
             if (component.fakeShadowFaceMaterial == null || !candidates.Contains(component.fakeShadowFaceMaterial))
             {
@@ -155,13 +161,17 @@ namespace NdmfMToon10ToLilToon
                 : 0;
 
             var nextIndex = EditorGUILayout.Popup(T("顔マテリアル", "Face Material"), currentIndex, labels);
-            component.fakeShadowFaceMaterial = nextIndex <= 0 ? null : candidates[nextIndex - 1];
+            var nextMaterial = nextIndex <= 0 ? null : candidates[nextIndex - 1];
+            if (nextMaterial == component.fakeShadowFaceMaterial) return false;
+
+            component.fakeShadowFaceMaterial = nextMaterial;
+            return true;
         }
 
-        private void DrawEyebrowStencilMaterialSelector(MToonLilToonComponent component)
+        private bool DrawEyebrowStencilMaterialSelector(MToonLilToonComponent component)
         {
             var candidates = GetRendererMaterials(component);
-            if (candidates.Count == 0) return;
+            if (candidates.Count == 0) return false;
 
             if (component.eyebrowStencilMaterial == null || !candidates.Contains(component.eyebrowStencilMaterial))
             {
@@ -174,12 +184,16 @@ namespace NdmfMToon10ToLilToon
                 : 0;
 
             var nextIndex = EditorGUILayout.Popup(T("対象マテリアル", "Target Material"), currentIndex, labels);
-            component.eyebrowStencilMaterial = nextIndex <= 0 ? null : candidates[nextIndex - 1];
+            var nextMaterial = nextIndex <= 0 ? null : candidates[nextIndex - 1];
+            if (nextMaterial == component.eyebrowStencilMaterial) return false;
+
+            component.eyebrowStencilMaterial = nextMaterial;
+            return true;
         }
 
-        private void DrawHairSelections(MToonLilToonComponent component)
+        private bool DrawHairSelections(MToonLilToonComponent component)
         {
-            if (!component.enableHairMerge) return;
+            if (!component.enableHairMerge) return false;
 
             if (component.hairSelections == null || component.hairSelections.Count == 0)
             {
@@ -193,17 +207,25 @@ namespace NdmfMToon10ToLilToon
             if (component.hairSelections == null || component.hairSelections.Count == 0)
             {
                 EditorGUILayout.HelpBox(T("まだスキャンされていません。", "No materials scanned yet."), MessageType.Info);
-                return;
+                return false;
             }
 
+            var changed = false;
             foreach (var entry in component.hairSelections)
             {
                 using (new EditorGUILayout.HorizontalScope())
                 {
-                    entry.selected = EditorGUILayout.Toggle(entry.selected, GUILayout.Width(20));
+                    var nextSelected = EditorGUILayout.Toggle(entry.selected, GUILayout.Width(20));
+                    if (nextSelected != entry.selected)
+                    {
+                        entry.selected = nextSelected;
+                        changed = true;
+                    }
                     EditorGUILayout.ObjectField(entry.material, typeof(Material), false);
                 }
             }
+
+            return changed;
         }
 
         private void DrawReport(MToonLilToonComponent component)
