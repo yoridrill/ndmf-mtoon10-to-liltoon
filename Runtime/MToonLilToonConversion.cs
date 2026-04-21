@@ -522,9 +522,8 @@ namespace NdmfMToon10ToLilToon
                 || HasTexture(source, true, "_EmissiveMap", "_EmissionMap");
             SetIfExists(destination, "_UseEmission", useEmission ? 1f : 0f);
 
-            var useMatCap = HasNonDefaultColor(source, new[] { "_MatcapColor" }, Color.black)
-                || HasTexture(source, true, "_MatcapTex")
-                || HasNonDefaultFloat(source, new[] { "_MatcapBlendFactor" }, 0f);
+            var hasMatCapTexture = HasTexture(source, true, "_MatcapTex");
+            var useMatCap = hasMatCapTexture;
             SetIfExists(destination, "_UseMatCap", useMatCap ? 1f : 0f);
 
             var useRim = HasNonDefaultColor(source, new[] { "_RimColor" }, Color.black)
