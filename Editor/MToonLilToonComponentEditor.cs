@@ -33,7 +33,7 @@ namespace NdmfMToon10ToLilToon
             var directValueChanged = DrawHairMergeToggle(component);
 
             directValueChanged |= DrawHairSelections(component);
-            DrawReport(component);
+            directValueChanged |= DrawAdvancedSection(component);
 
             var serializedChanged = serializedObject.ApplyModifiedProperties();
             if (directValueChanged)
@@ -230,23 +230,43 @@ namespace NdmfMToon10ToLilToon
             return changed;
         }
 
-        private void DrawReport(MToonLilToonComponent component)
+        private bool DrawAdvancedSection(MToonLilToonComponent component)
         {
+            var changed = false;
             EditorGUILayout.Space();
-            EditorGUILayout.LabelField(T("レポート", "Last Report"), EditorStyles.boldLabel);
-            EditorGUILayout.LabelField($"{T("scanned material count", "scanned material count")}: {component.scannedMaterialCount}");
-            EditorGUILayout.LabelField($"{T("converted material count", "converted material count")}: {component.convertedMaterialCount}");
-            EditorGUILayout.LabelField($"{T("skipped material count", "skipped material count")}: {component.skippedMaterialCount}");
 
-            if (component.warnings.Count > 0)
+            var showAdvancedProp = serializedObject.FindProperty(nameof(MToonLilToonComponent.showAdvanced));
+            showAdvancedProp.boolValue = EditorGUILayout.Foldout(showAdvancedProp.boolValue, "Advanced", true);
+            if (!showAdvancedProp.boolValue) return changed;
+
+            using (new EditorGUI.IndentLevelScope())
             {
-                EditorGUILayout.HelpBox(string.Join("\n", component.warnings), MessageType.Warning);
+                EditorGUILayout.PropertyField(
+                    serializedObject.FindProperty(nameof(MToonLilToonComponent.verboseLog)),
+                    new GUIContent("Verbose Log"));
+
+                var previewing = MToonLilToonPreviewUtility.IsPreviewing(component);
+                var stalePreviewState = MToonLilToonPreviewUtility.HasStalePreviewState(component);
+                EditorGUILayout.HelpBox(
+                    previewing
+                        ? T("Preview中は Reset Preview を使いません。通常の Preview ボタンで解除してください。", "Do not use Reset Preview while preview is active. Turn it off with the Preview button.")
+                        : stalePreviewState
+                            ? T("Scene保存時に Preview 状態が残った場合の復旧ができます。", "Recover from a preview state that remained after saving the scene.")
+                            : T("詳細ログの出力設定と、保存済み Preview 状態の復旧は Advanced にあります。", "Verbose logging and saved preview-state recovery are available in Advanced."),
+                    (previewing || stalePreviewState) ? MessageType.Warning : MessageType.Info);
+
+                using (new EditorGUI.DisabledScope(!stalePreviewState))
+                {
+                    if (GUILayout.Button("Reset Preview"))
+                    {
+                        MToonLilToonPreviewUtility.ResetSavedPreviewState(component);
+                        EditorUtility.SetDirty(component);
+                        changed = true;
+                    }
+                }
             }
 
-            if (component.unsupportedProperties.Count > 0)
-            {
-                EditorGUILayout.HelpBox($"{T("unsupported property summary", "unsupported property summary")}: {string.Join(", ", component.unsupportedProperties)}", MessageType.Info);
-            }
+            return changed;
         }
 
         private static void ScanMaterials(MToonLilToonComponent component)

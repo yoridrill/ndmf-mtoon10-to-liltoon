@@ -52,6 +52,40 @@ namespace NdmfMToon10ToLilToon
             StartPreview(avatarRoot);
         }
 
+
+        internal static bool HasStalePreviewState(MToonLilToonComponent component)
+        {
+            if (component == null) return false;
+            if (IsPreviewing(component)) return false;
+            var avatarRoot = FindAvatarRoot(component.gameObject);
+            if (avatarRoot == null) return false;
+            return avatarRoot.GetComponentsInChildren<MToonLilToonComponent>(true).Any(c => c != null && c.isPreviewing);
+        }
+
+        internal static void ResetSavedPreviewState(MToonLilToonComponent component)
+        {
+            if (component == null) return;
+
+            var avatarRoot = FindAvatarRoot(component.gameObject);
+            if (avatarRoot == null) return;
+
+            if (IsPreviewing(avatarRoot))
+            {
+                return;
+            }
+
+            CleanupOrphanPreviewObjects();
+            foreach (var renderer in avatarRoot.GetComponentsInChildren<Renderer>(true))
+            {
+                if (renderer == null) continue;
+                renderer.enabled = true;
+                EditorUtility.SetDirty(renderer);
+            }
+
+            SyncSourcePreviewFlag(avatarRoot, false);
+            SceneView.RepaintAll();
+        }
+
         internal static bool IsPreviewing(MToonLilToonComponent component)
         {
             var avatarRoot = FindAvatarRoot(component.gameObject);

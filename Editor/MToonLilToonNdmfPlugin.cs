@@ -1,3 +1,4 @@
+using System.Linq;
 using nadena.dev.ndmf;
 using UnityEngine;
 
@@ -22,6 +23,15 @@ namespace NdmfMToon10ToLilToon
             if (root == null) return;
 
             var components = root.GetComponentsInChildren<MToonLilToonComponent>(true);
+            if (components.Any(c => c != null && c.isPreviewing))
+            {
+                MToonLilToonPreviewUtility.StopPreview();
+                foreach (var component in components.Where(c => c != null))
+                {
+                    component.isPreviewing = false;
+                }
+            }
+
             foreach (var component in components)
             {
                 ApplyOnBuild(component);

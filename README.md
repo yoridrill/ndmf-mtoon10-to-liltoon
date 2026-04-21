@@ -9,7 +9,7 @@ MToon 1.0 / 互換 MToon マテリアルを lilToon へ変換するための Uni
 - Build 時に NDMF フェーズで自動変換
 - Editor 上での非破壊 Preview
 - 髪周りのルック調整（マテリアル結合 / atlas）
-- 変換結果のレポート表示（件数・warning・unsupported）
+- Advanced での詳細ログと Preview 復旧機能
 
 ## 前提
 
@@ -67,7 +67,7 @@ atlas サイズ方針:
 - Hair 選択 UI
 - 髪周りのルック調整オプション（眉ステンシル / FakeShadow）
 - FakeShadow パラメータ（向き / オフセット）
-- レポート表示
+- Advanced 折りたたみ（Verbose Log / Reset Preview(保存済みPreview復旧) / 注意文）
 - 日本語 / 英語切り替え
 - lilToon ユーザー設定ラベル（影を受け取る、境界の色、境界の幅、逆光ライト、距離フェード）
 

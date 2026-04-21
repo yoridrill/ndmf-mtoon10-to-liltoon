@@ -12,6 +12,15 @@ namespace NdmfMToon10ToLilToon
         {
             if (component == null) return;
 
+            if (component.isPreviewing)
+            {
+                component.isPreviewing = false;
+                if (component.verboseLog)
+                {
+                    Debug.LogWarning("[MToon10ToLilToon] Preview state was active on this component and has been reset before conversion.", component);
+                }
+            }
+
             var report = new ConversionReport();
             var lilToonShader = ResolveLilToonShader(component);
             if (lilToonShader == null)
@@ -21,6 +30,10 @@ namespace NdmfMToon10ToLilToon
                 component.convertedMaterialCount = 0;
                 component.skippedMaterialCount = 0;
                 component.unsupportedProperties = new List<string>();
+                if (component.verboseLog)
+                {
+                    Debug.LogWarning("[MToon10ToLilToon] lilToon shader was not found. Conversion skipped.", component);
+                }
                 return;
             }
 
@@ -93,6 +106,23 @@ namespace NdmfMToon10ToLilToon
             component.skippedMaterialCount = report.SkippedMaterialCount;
             component.warnings = report.Warnings.Select(w => w.Message).ToList();
             component.unsupportedProperties = report.UnsupportedPropertySummary.Select(kv => $"{kv.Key}:{kv.Value}").ToList();
+            LogVerboseReportIfNeeded(component, report);
+        }
+
+        private static void LogVerboseReportIfNeeded(MToonLilToonComponent component, ConversionReport report)
+        {
+            if (component == null || report == null || !component.verboseLog) return;
+
+            var unsupportedSummary = report.UnsupportedPropertySummary.Count > 0
+                ? string.Join(", ", report.UnsupportedPropertySummary.Select(kv => $"{kv.Key}:{kv.Value}"))
+                : "none";
+            var warnings = report.Warnings.Count > 0
+                ? string.Join(" | ", report.Warnings.Select(w => w.Message))
+                : "none";
+
+            Debug.Log(
+                $"[MToon10ToLilToon] scanned={report.ScannedMaterialCount}, converted={report.ConvertedMaterialCount}, skipped={report.SkippedMaterialCount}, warnings={warnings}, unsupported={unsupportedSummary}",
+                component);
         }
 
         private static void ProcessRenderer(
