@@ -64,6 +64,11 @@ namespace NdmfMToon10ToLilToon
                     ? convertedFace
                     : component.fakeShadowFaceMaterial)
                 : null;
+            var resolvedFaceShadowMaterial = component.faceShadowFaceMaterial != null
+                ? (convertedBySource.TryGetValue(component.faceShadowFaceMaterial, out var convertedFaceShadow)
+                    ? convertedFaceShadow
+                    : component.faceShadowFaceMaterial)
+                : null;
             var resolvedEyebrowMaterial = component.eyebrowStencilMaterial != null
                 ? (convertedBySource.TryGetValue(component.eyebrowStencilMaterial, out var convertedEyebrow)
                     ? convertedEyebrow
@@ -99,6 +104,12 @@ namespace NdmfMToon10ToLilToon
                     ApplyStencilSettingsForFakeShadow(fakeShadowPairs[i].fake);
                     SyncFakeShadowColor(resolvedFaceMaterial, fakeShadowPairs[i].fake);
                 }
+            }
+
+            if (component.enableFaceShadowTuning
+                && resolvedFaceShadowMaterial != null)
+            {
+                ApplyFaceShadowSdfSettings(resolvedFaceShadowMaterial, component.faceShadowSdfTexture);
             }
 
             component.scannedMaterialCount = report.ScannedMaterialCount;
@@ -469,6 +480,27 @@ namespace NdmfMToon10ToLilToon
                 if (!material.HasProperty(propertyName)) continue;
                 material.SetFloat(propertyName, value);
             }
+        }
+
+        private static void SetTextureIfAnyExists(Material material, IReadOnlyList<string> propertyNames, Texture texture)
+        {
+            if (material == null || propertyNames == null) return;
+
+            for (var i = 0; i < propertyNames.Count; i++)
+            {
+                var propertyName = propertyNames[i];
+                if (!material.HasProperty(propertyName)) continue;
+                material.SetTexture(propertyName, texture);
+            }
+        }
+
+        private static void ApplyFaceShadowSdfSettings(Material faceMaterial, Texture sdfTexture)
+        {
+            if (faceMaterial == null) return;
+
+            SetFloatIfAnyExists(faceMaterial, new[] { "_UseShadowMask", "_UseShadowStrengthMask" }, 1f);
+            SetFloatIfAnyExists(faceMaterial, new[] { "_ShadowMaskType" }, 4f);
+            SetTextureIfAnyExists(faceMaterial, new[] { "_ShadowStrengthMask", "_ShadowMask", "_ShadowBorderMask", "_ShadowMaskTex" }, sdfTexture);
         }
 
         private static void ApplyStencilSettings(Material material, float reference, float readMask, float writeMask, float compare, float pass, float fail, float zFail)

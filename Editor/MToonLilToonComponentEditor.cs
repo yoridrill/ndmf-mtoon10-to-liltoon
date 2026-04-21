@@ -15,6 +15,7 @@ namespace NdmfMToon10ToLilToon
         }
 
         private const string PrefKeyLanguage = "MToonLilToonComponentEditor.Language";
+        private const string DefaultFaceShadowSdfTexturePath = "Runtime/Textures/FaceShadowSDF/VRoidFaceShadowSDF.png";
         private Language _language;
 
         private void OnEnable()
@@ -33,6 +34,7 @@ namespace NdmfMToon10ToLilToon
             var directValueChanged = DrawHairMergeToggle(component);
 
             directValueChanged |= DrawHairSelections(component);
+            directValueChanged |= DrawFaceShadowTuningSection(component);
             directValueChanged |= DrawAdvancedSection(component);
 
             var serializedChanged = serializedObject.ApplyModifiedProperties();
@@ -142,6 +144,24 @@ namespace NdmfMToon10ToLilToon
                             new GUIContent(T("オフセット", "Offset")));
                     }
                 }
+
+            }
+
+            return changed;
+        }
+
+        private bool DrawFaceShadowTuningSection(MToonLilToonComponent component)
+        {
+            var changed = false;
+            EditorGUILayout.Space();
+            var enableFaceShadowTuningProp = serializedObject.FindProperty(nameof(MToonLilToonComponent.enableFaceShadowTuning));
+            EditorGUILayout.PropertyField(enableFaceShadowTuningProp, new GUIContent(T("顔の影を整える", "Tune Face Shadow")));
+            if (!enableFaceShadowTuningProp.boolValue) return changed;
+
+            using (new EditorGUI.IndentLevelScope())
+            {
+                changed |= DrawFaceShadowFaceMaterialSelector(component);
+                DrawFaceShadowSdfTextureField(component);
             }
 
             return changed;
@@ -168,6 +188,40 @@ namespace NdmfMToon10ToLilToon
 
             component.fakeShadowFaceMaterial = nextMaterial;
             return true;
+        }
+
+        private bool DrawFaceShadowFaceMaterialSelector(MToonLilToonComponent component)
+        {
+            var candidates = GetRendererMaterials(component);
+            if (candidates.Count == 0) return false;
+
+            if (component.faceShadowFaceMaterial == null || !candidates.Contains(component.faceShadowFaceMaterial))
+            {
+                component.faceShadowFaceMaterial = DetectDefaultFaceMaterial(candidates);
+            }
+
+            var labels = new[] { T("未設定", "None") }.Concat(candidates.Select(m => m != null ? m.name : "(null)")).ToArray();
+            var currentIndex = component.faceShadowFaceMaterial != null
+                ? candidates.IndexOf(component.faceShadowFaceMaterial) + 1
+                : 0;
+
+            var nextIndex = EditorGUILayout.Popup(T("顔マテリアル", "Face Material"), currentIndex, labels);
+            var nextMaterial = nextIndex <= 0 ? null : candidates[nextIndex - 1];
+            if (nextMaterial == component.faceShadowFaceMaterial) return false;
+
+            component.faceShadowFaceMaterial = nextMaterial;
+            return true;
+        }
+
+        private void DrawFaceShadowSdfTextureField(MToonLilToonComponent component)
+        {
+            if (component.faceShadowSdfTexture == null)
+            {
+                component.faceShadowSdfTexture = AssetDatabase.LoadAssetAtPath<Texture2D>(DefaultFaceShadowSdfTexturePath);
+            }
+
+            var textureProperty = serializedObject.FindProperty(nameof(MToonLilToonComponent.faceShadowSdfTexture));
+            EditorGUILayout.PropertyField(textureProperty, new GUIContent(T("SDFテクスチャ", "SDF Texture")));
         }
 
         private bool DrawEyebrowStencilMaterialSelector(MToonLilToonComponent component)
@@ -279,6 +333,16 @@ namespace NdmfMToon10ToLilToon
             if (component.fakeShadowFaceMaterial == null || !scannedMaterials.Contains(component.fakeShadowFaceMaterial))
             {
                 component.fakeShadowFaceMaterial = DetectDefaultFaceMaterial(scannedMaterials);
+            }
+
+            if (component.faceShadowFaceMaterial == null || !scannedMaterials.Contains(component.faceShadowFaceMaterial))
+            {
+                component.faceShadowFaceMaterial = DetectDefaultFaceMaterial(scannedMaterials);
+            }
+
+            if (component.faceShadowSdfTexture == null)
+            {
+                component.faceShadowSdfTexture = AssetDatabase.LoadAssetAtPath<Texture2D>(DefaultFaceShadowSdfTexturePath);
             }
 
             if (component.eyebrowStencilMaterial == null || !scannedMaterials.Contains(component.eyebrowStencilMaterial))
