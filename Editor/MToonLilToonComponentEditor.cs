@@ -76,6 +76,8 @@ namespace NdmfMToon10ToLilToon
             var overridesProp = serializedObject.FindProperty(nameof(MToonLilToonComponent.globalOverrides));
             EditorGUILayout.Space();
             EditorGUILayout.LabelField(T("lilToon固有機能の一括設定", "Bulk Settings for lilToon-specific Features"), EditorStyles.boldLabel);
+            EditorGUILayout.PropertyField(overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.shadowReceive)),
+                new GUIContent(T("影を受け取る", "Receive Shadow")));
             EditorGUILayout.PropertyField(overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.shadowBorderColor)),
                 new GUIContent(T("境界の色", "Shadow Border Color")));
             EditorGUILayout.PropertyField(overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.shadowBorderStrength)),

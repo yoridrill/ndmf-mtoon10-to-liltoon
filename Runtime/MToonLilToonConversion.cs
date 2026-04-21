@@ -16,6 +16,7 @@ namespace NdmfMToon10ToLilToon
     [Serializable]
     public sealed class LilToonGlobalOverrides
     {
+        [Range(0f, 1f)] public float shadowReceive = 0.5f;
         public Color shadowBorderColor = Color.black;
         [Range(0f, 1f)] public float shadowBorderStrength = 0f;
         public Color distanceFadeColor = Color.black;
@@ -464,6 +465,7 @@ namespace NdmfMToon10ToLilToon
         private static void ApplyLilToonOverrides(Material material, LilToonGlobalOverrides overrides)
         {
             if (overrides == null) return;
+            SetIfExists(material, "_ShadowReceive", overrides.shadowReceive);
             SetIfExists(material, "_ShadowBorderColor", overrides.shadowBorderColor);
             SetIfExists(material, "_ShadowBorderRange", overrides.shadowBorderStrength);
             SetIfExists(material, "_DistanceFadeColor", overrides.distanceFadeColor);
