@@ -82,14 +82,14 @@ namespace NdmfMToon10ToLilToon
                 new GUIContent(T("境界の色", "Shadow Border Color")));
             EditorGUILayout.PropertyField(overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.shadowBorderStrength)),
                 new GUIContent(T("境界の幅", "Shadow Border Strength")));
-            EditorGUILayout.PropertyField(overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.distanceFadeColor)),
-                new GUIContent(T("距離フェード（色）", "Distance Fade Color")));
-            EditorGUILayout.PropertyField(overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.distanceFadeStrength)),
-                new GUIContent(T("距離フェード（強さ）", "Distance Fade Strength")));
             EditorGUILayout.PropertyField(overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.backlightColor)),
                 new GUIContent(T("逆光ライト（色）", "Backlight Color")));
             EditorGUILayout.PropertyField(overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.backlightStrength)),
                 new GUIContent(T("逆光ライト（強さ）", "Backlight Strength")));
+            EditorGUILayout.PropertyField(overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.distanceFadeColor)),
+                new GUIContent(T("距離フェード（色）", "Distance Fade Color")));
+            EditorGUILayout.PropertyField(overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.distanceFadeStrength)),
+                new GUIContent(T("距離フェード（強さ）", "Distance Fade Strength")));
             EditorGUILayout.PropertyField(overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.outlineZBias)),
                 new GUIContent(T("輪郭線のZ Bias", "Outline Z Bias")));
         }
