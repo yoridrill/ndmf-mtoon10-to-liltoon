@@ -726,6 +726,7 @@ namespace NdmfMToon10ToLilToon
                 var doubleSided = source.GetFloat("_DoubleSided") > 0.5f;
                 var cull = doubleSided ? (float)CullMode.Off : (float)CullMode.Back;
                 SetIfExists(destination, "_Cull", cull);
+                ApplyBackfaceRenderStateForCull(destination, cull);
                 return;
             }
 
@@ -733,17 +734,31 @@ namespace NdmfMToon10ToLilToon
             {
                 var cull = source.GetFloat(sourceCull);
                 SetIfExists(destination, "_Cull", cull);
+                ApplyBackfaceRenderStateForCull(destination, cull);
                 return;
             }
 
             // 旧式 MToon では culling が keyword で制御される場合がある。
             if (source.IsKeywordEnabled("_CULL_OFF"))
             {
-                SetIfExists(destination, "_Cull", (float)CullMode.Off);
+                var cull = (float)CullMode.Off;
+                SetIfExists(destination, "_Cull", cull);
+                ApplyBackfaceRenderStateForCull(destination, cull);
                 return;
             }
 
             report?.RegisterUnsupported("CullMode");
+        }
+
+        private static void ApplyBackfaceRenderStateForCull(Material destination, float cull)
+        {
+            if (destination == null) return;
+
+            var cullMode = (CullMode)Mathf.Clamp(Mathf.RoundToInt(cull), (int)CullMode.Off, (int)CullMode.Back);
+            if (cullMode != CullMode.Off) return;
+
+            SetIfExists(destination, "_FlipNormal", 1f);
+            SetIfExists(destination, "_BackfaceForceShadow", 0.5f);
         }
 
         private static void ApplyShadow2OpacityZero(Material destination)
