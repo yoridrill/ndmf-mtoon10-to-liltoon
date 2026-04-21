@@ -1,3 +1,4 @@
+using System.Linq;
 using nadena.dev.ndmf;
 using UnityEngine;
 
@@ -22,10 +23,21 @@ namespace NdmfMToon10ToLilToon
             if (root == null) return;
 
             var components = root.GetComponentsInChildren<MToonLilToonComponent>(true);
+            if (components.Any(c => c != null && c.isPreviewing))
+            {
+                MToonLilToonPreviewUtility.StopPreview();
+                foreach (var component in components.Where(c => c != null))
+                {
+                    component.isPreviewing = false;
+                }
+            }
+
             foreach (var component in components)
             {
                 ApplyOnBuild(component);
             }
+
+            RemoveComponents(components);
         }
 
         private static GameObject ResolveAvatarRoot(BuildContext context)
@@ -42,6 +54,16 @@ namespace NdmfMToon10ToLilToon
         private static void ApplyOnBuild(MToonLilToonComponent component)
         {
             MToonLilToonProcessor.ApplyOnBuild(component);
+        }
+
+        private static void RemoveComponents(MToonLilToonComponent[] components)
+        {
+            if (components == null) return;
+            for (var i = 0; i < components.Length; i++)
+            {
+                if (components[i] == null) continue;
+                Object.DestroyImmediate(components[i]);
+            }
         }
     }
 }

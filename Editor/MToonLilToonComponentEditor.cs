@@ -33,7 +33,7 @@ namespace NdmfMToon10ToLilToon
             var directValueChanged = DrawHairMergeToggle(component);
 
             directValueChanged |= DrawHairSelections(component);
-            DrawReport(component);
+            directValueChanged |= DrawAdvancedSection(component);
 
             var serializedChanged = serializedObject.ApplyModifiedProperties();
             if (directValueChanged)
@@ -76,18 +76,20 @@ namespace NdmfMToon10ToLilToon
             var overridesProp = serializedObject.FindProperty(nameof(MToonLilToonComponent.globalOverrides));
             EditorGUILayout.Space();
             EditorGUILayout.LabelField(T("lilToon固有機能の一括設定", "Bulk Settings for lilToon-specific Features"), EditorStyles.boldLabel);
+            EditorGUILayout.PropertyField(overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.shadowReceive)),
+                new GUIContent(T("影を受け取る", "Receive Shadow")));
             EditorGUILayout.PropertyField(overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.shadowBorderColor)),
                 new GUIContent(T("境界の色", "Shadow Border Color")));
             EditorGUILayout.PropertyField(overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.shadowBorderStrength)),
                 new GUIContent(T("境界の幅", "Shadow Border Strength")));
-            EditorGUILayout.PropertyField(overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.distanceFadeColor)),
-                new GUIContent(T("距離フェード（色）", "Distance Fade Color")));
-            EditorGUILayout.PropertyField(overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.distanceFadeStrength)),
-                new GUIContent(T("距離フェード（強さ）", "Distance Fade Strength")));
             EditorGUILayout.PropertyField(overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.backlightColor)),
                 new GUIContent(T("逆光ライト（色）", "Backlight Color")));
             EditorGUILayout.PropertyField(overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.backlightStrength)),
                 new GUIContent(T("逆光ライト（強さ）", "Backlight Strength")));
+            EditorGUILayout.PropertyField(overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.distanceFadeColor)),
+                new GUIContent(T("距離フェード（色）", "Distance Fade Color")));
+            EditorGUILayout.PropertyField(overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.distanceFadeStrength)),
+                new GUIContent(T("距離フェード（強さ）", "Distance Fade Strength")));
             EditorGUILayout.PropertyField(overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.outlineZBias)),
                 new GUIContent(T("輪郭線のZ Bias", "Outline Z Bias")));
         }
@@ -228,23 +230,38 @@ namespace NdmfMToon10ToLilToon
             return changed;
         }
 
-        private void DrawReport(MToonLilToonComponent component)
+        private bool DrawAdvancedSection(MToonLilToonComponent component)
         {
+            var changed = false;
             EditorGUILayout.Space();
-            EditorGUILayout.LabelField(T("レポート", "Last Report"), EditorStyles.boldLabel);
-            EditorGUILayout.LabelField($"{T("scanned material count", "scanned material count")}: {component.scannedMaterialCount}");
-            EditorGUILayout.LabelField($"{T("converted material count", "converted material count")}: {component.convertedMaterialCount}");
-            EditorGUILayout.LabelField($"{T("skipped material count", "skipped material count")}: {component.skippedMaterialCount}");
 
-            if (component.warnings.Count > 0)
+            var showAdvancedProp = serializedObject.FindProperty(nameof(MToonLilToonComponent.showAdvanced));
+            showAdvancedProp.boolValue = EditorGUILayout.Foldout(showAdvancedProp.boolValue, "Advanced", true);
+            if (!showAdvancedProp.boolValue) return changed;
+
+            using (new EditorGUI.IndentLevelScope())
             {
-                EditorGUILayout.HelpBox(string.Join("\n", component.warnings), MessageType.Warning);
+                EditorGUILayout.PropertyField(
+                    serializedObject.FindProperty(nameof(MToonLilToonComponent.verboseLog)),
+                    new GUIContent("Verbose Log"));
+
+                var rawButtonRect = EditorGUILayout.GetControlRect(false, EditorGUIUtility.singleLineHeight);
+                var buttonRect = EditorGUI.IndentedRect(rawButtonRect);
+                if (GUI.Button(buttonRect, "Reset Preview"))
+                {
+                    MToonLilToonPreviewUtility.ResetSavedPreviewState(component);
+                    EditorUtility.SetDirty(component);
+                    changed = true;
+                }
+
+                EditorGUILayout.HelpBox(
+                    T(
+                        "モデルが重複したり、見えない場合に押してください。\nPreview オブジェクトを削除し、Renderer を再表示します。",
+                        "Use this if the avatar stays hidden, frozen, or stuck after Preview.\nThis removes temporary Preview objects and re-enables renderers."),
+                    MessageType.Warning);
             }
 
-            if (component.unsupportedProperties.Count > 0)
-            {
-                EditorGUILayout.HelpBox($"{T("unsupported property summary", "unsupported property summary")}: {string.Join(", ", component.unsupportedProperties)}", MessageType.Info);
-            }
+            return changed;
         }
 
         private static void ScanMaterials(MToonLilToonComponent component)

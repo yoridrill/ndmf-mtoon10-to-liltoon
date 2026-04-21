@@ -16,6 +16,7 @@ namespace NdmfMToon10ToLilToon
     [Serializable]
     public sealed class LilToonGlobalOverrides
     {
+        [Range(0f, 1f)] public float shadowReceive = 0.5f;
         public Color shadowBorderColor = Color.black;
         [Range(0f, 1f)] public float shadowBorderStrength = 0f;
         public Color distanceFadeColor = Color.black;
@@ -288,17 +289,17 @@ namespace NdmfMToon10ToLilToon
                 CopyColor(source, converted, new[] { "_ShadeColor", "_ShadeColorFactor" }, new[] { "_ShadowColor", "_Shadow1stColor" }, report);
                 ApplyShadeTextureMapping(source, converted, report);
                 ApplyShadingFactorMapping(source, converted);
-                CopyTexture(source, converted, new[] { "_NormalMap", "_BumpMap" }, new[] { "_BumpMap", "_NormalMap" }, report);
+                CopyTexture(source, converted, new[] { "_NormalMap", "_BumpMap" }, new[] { "_BumpMap", "_NormalMap" }, report, ignoreTinyDummyTexture: true);
                 CopyFloat(source, converted, new[] { "_BumpScale" }, new[] { "_BumpScale" }, report);
                 CopyColor(source, converted, new[] { "_EmissiveFactor", "_EmissionColor" }, new[] { "_EmissionColor" }, report);
-                CopyTexture(source, converted, new[] { "_EmissiveMap", "_EmissionMap" }, new[] { "_EmissionMap" }, report);
+                CopyTexture(source, converted, new[] { "_EmissiveMap", "_EmissionMap" }, new[] { "_EmissionMap" }, report, ignoreTinyDummyTexture: true);
                 CopyColor(source, converted, new[] { "_MatcapColor" }, new[] { "_MatCapColor" }, report);
-                CopyTexture(source, converted, new[] { "_MatcapTex" }, new[] { "_MatCapTex" }, report);
+                CopyTexture(source, converted, new[] { "_MatcapTex" }, new[] { "_MatCapTex" }, report, ignoreTinyDummyTexture: true);
                 CopyColor(source, converted, new[] { "_RimColor" }, new[] { "_RimColor" }, report);
-                CopyTexture(source, converted, new[] { "_RimTex" }, new[] { "_RimColorTex" }, report);
+                CopyTexture(source, converted, new[] { "_RimTex" }, new[] { "_RimColorTex" }, report, ignoreTinyDummyTexture: true);
                 CopyFloat(source, converted, new[] { "_RimFresnelPower" }, new[] { "_RimFresnelPower" }, report);
                 CopyColor(source, converted, new[] { "_OutlineColorFactor", "_OutlineColor" }, new[] { "_OutlineColor" }, report);
-                CopyTexture(source, converted, new[] { "_OutlineWidthTex", "_OutlineWidthMultiplyTexture", "_OutlineMask" }, new[] { "_OutlineWidthMask", "_OutlineTex", "_OutlineMask" }, report);
+                CopyTexture(source, converted, new[] { "_OutlineWidthTex", "_OutlineWidthMultiplyTexture", "_OutlineMask" }, new[] { "_OutlineWidthMask", "_OutlineTex", "_OutlineMask" }, report, ignoreTinyDummyTexture: true);
 
                 ApplyRenderState(source, converted, report);
                 ApplyOutlineState(source, converted);
@@ -306,7 +307,7 @@ namespace NdmfMToon10ToLilToon
                 ApplyRimState(source, converted);
                 ApplyUvAnimationMapping(source, converted);
                 ApplyFeatureEnables(source, converted);
-                ApplyFallback(source, converted, renderType);
+                ApplyFallback(converted, renderType);
                 ApplyRenderQueue(source, converted, renderType);
                 ApplyTransparentMode(converted, renderType);
                 ApplyTransparentZWrite(converted, renderType, transparentWithZWrite);
@@ -464,6 +465,7 @@ namespace NdmfMToon10ToLilToon
         private static void ApplyLilToonOverrides(Material material, LilToonGlobalOverrides overrides)
         {
             if (overrides == null) return;
+            SetIfExists(material, "_ShadowReceive", overrides.shadowReceive);
             SetIfExists(material, "_ShadowBorderColor", overrides.shadowBorderColor);
             SetIfExists(material, "_ShadowBorderRange", overrides.shadowBorderStrength);
             SetIfExists(material, "_DistanceFadeColor", overrides.distanceFadeColor);
@@ -516,21 +518,20 @@ namespace NdmfMToon10ToLilToon
         {
             if (source == null || destination == null) return;
 
-            var useEmission = HasNonDefaultColor(source, new[] { "_EmissiveFactor", "_EmissionColor" }, Color.black)
-                || HasTexture(source, "_EmissiveMap", "_EmissionMap");
+            var hasEmissionTexture = HasTexture(source, true, "_EmissiveMap", "_EmissionMap");
+            var useEmission = hasEmissionTexture;
             SetIfExists(destination, "_UseEmission", useEmission ? 1f : 0f);
 
-            var useMatCap = HasNonDefaultColor(source, new[] { "_MatcapColor" }, Color.black)
-                || HasTexture(source, "_MatcapTex")
-                || HasNonDefaultFloat(source, new[] { "_MatcapBlendFactor" }, 0f);
+            var hasMatCapTexture = HasTexture(source, true, "_MatcapTex");
+            var useMatCap = hasMatCapTexture;
             SetIfExists(destination, "_UseMatCap", useMatCap ? 1f : 0f);
 
+            var hasRimTexture = HasTexture(source, true, "_RimTex");
             var useRim = HasNonDefaultColor(source, new[] { "_RimColor" }, Color.black)
-                || HasTexture(source, "_RimTex")
-                || HasNonDefaultFloat(source, new[] { "_RimFresnelPower", "_RimLightingMix", "_RimLift" }, 0f);
+                || hasRimTexture;
             SetIfExists(destination, "_UseRim", useRim ? 1f : 0f);
 
-            var useNormalMap = HasTexture(source, "_NormalMap", "_BumpMap")
+            var useNormalMap = HasTexture(source, true, "_NormalMap", "_BumpMap")
                 && HasNonDefaultFloat(source, new[] { "_BumpScale" }, 0f);
             SetIfExists(destination, "_UseBumpMap", useNormalMap ? 1f : 0f);
             SetIfExists(destination, "_UseNormalMap", useNormalMap ? 1f : 0f);
@@ -591,6 +592,10 @@ namespace NdmfMToon10ToLilToon
                     : source.HasProperty("_OutlineMask")
                         ? source.GetTexture("_OutlineMask")
                         : null;
+            if (IsLikelyDummyTexture(sourceOutlineMask))
+            {
+                sourceOutlineMask = null;
+            }
 
             // MToon には _OutlineTex がないため、mask がある場合はそれを優先、
             // 無い場合のみメインテクスチャを輪郭線テクスチャへ入れる。
@@ -619,16 +624,14 @@ namespace NdmfMToon10ToLilToon
             SetIfExists(destination, "_OutlineVertexR2Width", vertexR2Width);
         }
 
-        private static void ApplyFallback(Material source, Material destination, RenderType renderType)
+        private static void ApplyFallback(Material destination, RenderType renderType)
         {
-            var hasOutline = HasOutline(source);
-
-            var fallback = renderType == RenderType.Transparent
-                ? "Unlit/Transparent"
-                : hasOutline
-                    ? "ToonStandardOutline"
-                    : "ToonStandard";
-
+            var fallback = renderType switch
+            {
+                RenderType.Cutout => "UnlitCutout",
+                RenderType.Transparent => "Unlit/Transparent",
+                _ => "Unlit"
+            };
             destination.SetOverrideTag("VRCFallback", fallback);
         }
 
@@ -726,6 +729,7 @@ namespace NdmfMToon10ToLilToon
                 var doubleSided = source.GetFloat("_DoubleSided") > 0.5f;
                 var cull = doubleSided ? (float)CullMode.Off : (float)CullMode.Back;
                 SetIfExists(destination, "_Cull", cull);
+                ApplyBackfaceRenderStateForCull(destination, cull);
                 return;
             }
 
@@ -733,17 +737,31 @@ namespace NdmfMToon10ToLilToon
             {
                 var cull = source.GetFloat(sourceCull);
                 SetIfExists(destination, "_Cull", cull);
+                ApplyBackfaceRenderStateForCull(destination, cull);
                 return;
             }
 
             // 旧式 MToon では culling が keyword で制御される場合がある。
             if (source.IsKeywordEnabled("_CULL_OFF"))
             {
-                SetIfExists(destination, "_Cull", (float)CullMode.Off);
+                var cull = (float)CullMode.Off;
+                SetIfExists(destination, "_Cull", cull);
+                ApplyBackfaceRenderStateForCull(destination, cull);
                 return;
             }
 
             report?.RegisterUnsupported("CullMode");
+        }
+
+        private static void ApplyBackfaceRenderStateForCull(Material destination, float cull)
+        {
+            if (destination == null) return;
+
+            var cullMode = (CullMode)Mathf.Clamp(Mathf.RoundToInt(cull), (int)CullMode.Off, (int)CullMode.Back);
+            if (cullMode != CullMode.Off) return;
+
+            SetIfExists(destination, "_FlipNormal", 1f);
+            SetIfExists(destination, "_BackfaceForceShadow", 0.5f);
         }
 
         private static void ApplyShadow2OpacityZero(Material destination)
@@ -754,7 +772,7 @@ namespace NdmfMToon10ToLilToon
             destination.SetColor("_Shadow2ndColor", shadow2);
         }
 
-        private static void CopyTexture(Material source, Material destination, IReadOnlyList<string> fromCandidates, IReadOnlyList<string> toCandidates, ConversionReport report)
+        private static void CopyTexture(Material source, Material destination, IReadOnlyList<string> fromCandidates, IReadOnlyList<string> toCandidates, ConversionReport report, bool ignoreTinyDummyTexture = false)
         {
             if (!TryFindExistingProperty(source, fromCandidates, out var from)) return;
             if (!TryFindExistingProperty(destination, toCandidates, out var to))
@@ -762,7 +780,14 @@ namespace NdmfMToon10ToLilToon
                 report?.RegisterUnsupported(from);
                 return;
             }
-            destination.SetTexture(to, source.GetTexture(from));
+            var texture = source.GetTexture(from);
+            if (ignoreTinyDummyTexture && IsLikelyDummyTexture(texture))
+            {
+                destination.SetTexture(to, null);
+                return;
+            }
+
+            destination.SetTexture(to, texture);
         }
 
         private static void CopyColor(Material source, Material destination, IReadOnlyList<string> fromCandidates, IReadOnlyList<string> toCandidates, ConversionReport report)
@@ -855,17 +880,26 @@ namespace NdmfMToon10ToLilToon
             return true;
         }
 
-        private static bool HasTexture(Material material, params string[] properties)
+        private static bool HasTexture(Material material, bool ignoreTinyDummyTexture, params string[] properties)
         {
             if (material == null) return false;
             for (var i = 0; i < properties.Length; i++)
             {
                 var propertyName = properties[i];
                 if (!material.HasProperty(propertyName)) continue;
-                if (material.GetTexture(propertyName) != null) return true;
+                var texture = material.GetTexture(propertyName);
+                if (texture == null) continue;
+                if (ignoreTinyDummyTexture && IsLikelyDummyTexture(texture)) continue;
+                return true;
             }
 
             return false;
+        }
+
+        private static bool IsLikelyDummyTexture(Texture texture)
+        {
+            if (texture == null) return false;
+            return texture.width == 8 && texture.height == 8;
         }
 
         private static bool HasNonDefaultColor(Material material, IReadOnlyList<string> candidates, Color defaultColor, float epsilon = 0.0001f)
