@@ -245,21 +245,21 @@ namespace NdmfMToon10ToLilToon
                     serializedObject.FindProperty(nameof(MToonLilToonComponent.verboseLog)),
                     new GUIContent("Verbose Log"));
 
-                var previewing = MToonLilToonPreviewUtility.IsPreviewing(component);
-                var stalePreviewState = MToonLilToonPreviewUtility.HasStalePreviewState(component);
                 EditorGUILayout.HelpBox(
-                    previewing
-                        ? T("Preview中でも Reset Preview を実行できます。表示が崩れた場合の復旧に使ってください。", "Reset Preview is available even during preview. Use it to recover from broken visual states.")
-                        : stalePreviewState
-                            ? T("Scene保存時に Preview 状態が残った場合の復旧ができます。", "Recover from a preview state that remained after saving the scene.")
-                            : T("モデルの状態が崩れたときに Reset Preview で復旧できます。", "Use Reset Preview to recover when the model state appears broken."),
-                    (previewing || stalePreviewState) ? MessageType.Warning : MessageType.Info);
+                    T(
+                        "Preview状態が不正に残ったり、モデル表示が崩れた場合は Reset Preview で復旧してください。\nこの操作はいつ実行しても問題ありません。",
+                        "If preview state remains unexpectedly or the model view looks broken, use Reset Preview to recover.\nThis action is safe to run at any time."),
+                    MessageType.Warning);
 
-                if (GUILayout.Button("Reset Preview"))
+                using (new EditorGUILayout.HorizontalScope())
                 {
-                    MToonLilToonPreviewUtility.ResetSavedPreviewState(component);
-                    EditorUtility.SetDirty(component);
-                    changed = true;
+                    GUILayout.FlexibleSpace();
+                    if (GUILayout.Button("Reset Preview", GUILayout.Width(140f)))
+                    {
+                        MToonLilToonPreviewUtility.ResetSavedPreviewState(component);
+                        EditorUtility.SetDirty(component);
+                        changed = true;
+                    }
                 }
             }
 
