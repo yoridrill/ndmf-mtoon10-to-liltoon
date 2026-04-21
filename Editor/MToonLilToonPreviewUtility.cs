@@ -71,7 +71,7 @@ namespace NdmfMToon10ToLilToon
 
             if (IsPreviewing(avatarRoot))
             {
-                return;
+                StopPreview();
             }
 
             CleanupOrphanPreviewObjects();

@@ -249,20 +249,17 @@ namespace NdmfMToon10ToLilToon
                 var stalePreviewState = MToonLilToonPreviewUtility.HasStalePreviewState(component);
                 EditorGUILayout.HelpBox(
                     previewing
-                        ? T("Preview中は Reset Preview を使いません。通常の Preview ボタンで解除してください。", "Do not use Reset Preview while preview is active. Turn it off with the Preview button.")
+                        ? T("Preview中でも Reset Preview を実行できます。表示が崩れた場合の復旧に使ってください。", "Reset Preview is available even during preview. Use it to recover from broken visual states.")
                         : stalePreviewState
                             ? T("Scene保存時に Preview 状態が残った場合の復旧ができます。", "Recover from a preview state that remained after saving the scene.")
-                            : T("詳細ログの出力設定と、保存済み Preview 状態の復旧は Advanced にあります。", "Verbose logging and saved preview-state recovery are available in Advanced."),
+                            : T("モデルの状態が崩れたときに Reset Preview で復旧できます。", "Use Reset Preview to recover when the model state appears broken."),
                     (previewing || stalePreviewState) ? MessageType.Warning : MessageType.Info);
 
-                using (new EditorGUI.DisabledScope(!stalePreviewState))
+                if (GUILayout.Button("Reset Preview"))
                 {
-                    if (GUILayout.Button("Reset Preview"))
-                    {
-                        MToonLilToonPreviewUtility.ResetSavedPreviewState(component);
-                        EditorUtility.SetDirty(component);
-                        changed = true;
-                    }
+                    MToonLilToonPreviewUtility.ResetSavedPreviewState(component);
+                    EditorUtility.SetDirty(component);
+                    changed = true;
                 }
             }
 
