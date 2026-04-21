@@ -245,22 +245,18 @@ namespace NdmfMToon10ToLilToon
                     serializedObject.FindProperty(nameof(MToonLilToonComponent.verboseLog)),
                     new GUIContent("Verbose Log"));
 
+                if (GUILayout.Button("Reset Preview"))
+                {
+                    MToonLilToonPreviewUtility.ResetSavedPreviewState(component);
+                    EditorUtility.SetDirty(component);
+                    changed = true;
+                }
+
                 EditorGUILayout.HelpBox(
                     T(
-                        "Preview状態が不正に残ったり、モデル表示が崩れた場合は Reset Preview で復旧してください。\nこの操作はいつ実行しても問題ありません。",
-                        "If preview state remains unexpectedly or the model view looks broken, use Reset Preview to recover.\nThis action is safe to run at any time."),
+                        "モデルが重複したり、見えない場合に押してください。\nPreview オブジェクトを削除し、Renderer を再表示します。",
+                        "Use this if the avatar stays hidden, frozen, or stuck after Preview.\nThis removes temporary Preview objects and re-enables renderers."),
                     MessageType.Warning);
-
-                using (new EditorGUILayout.HorizontalScope())
-                {
-                    GUILayout.FlexibleSpace();
-                    if (GUILayout.Button("Reset Preview", GUILayout.Width(140f)))
-                    {
-                        MToonLilToonPreviewUtility.ResetSavedPreviewState(component);
-                        EditorUtility.SetDirty(component);
-                        changed = true;
-                    }
-                }
             }
 
             return changed;
