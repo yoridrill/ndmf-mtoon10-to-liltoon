@@ -36,6 +36,8 @@ namespace NdmfMToon10ToLilToon
             {
                 ApplyOnBuild(component);
             }
+
+            RemoveComponents(components);
         }
 
         private static GameObject ResolveAvatarRoot(BuildContext context)
@@ -52,6 +54,16 @@ namespace NdmfMToon10ToLilToon
         private static void ApplyOnBuild(MToonLilToonComponent component)
         {
             MToonLilToonProcessor.ApplyOnBuild(component);
+        }
+
+        private static void RemoveComponents(MToonLilToonComponent[] components)
+        {
+            if (components == null) return;
+            for (var i = 0; i < components.Length; i++)
+            {
+                if (components[i] == null) continue;
+                Object.DestroyImmediate(components[i]);
+            }
         }
     }
 }
