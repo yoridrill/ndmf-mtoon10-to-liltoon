@@ -467,9 +467,17 @@ namespace NdmfMToon10ToLilToon
             SetIfExists(material, "_ShadowBorderColor", overrides.shadowBorderColor);
             SetIfExists(material, "_ShadowBorderRange", overrides.shadowBorderStrength);
             SetIfExists(material, "_DistanceFadeColor", overrides.distanceFadeColor);
-            SetIfExists(material, "_DistanceFade", overrides.distanceFadeStrength);
-            SetIfExists(material, "_BacklightColor", overrides.backlightColor);
-            SetIfExists(material, "_BacklightStrength", overrides.backlightStrength);
+            SetVectorComponentIfExists(material, "_DistanceFade", 2, overrides.distanceFadeStrength);
+
+            var useBacklight = overrides.backlightStrength > 0f;
+            SetIfExists(material, "_UseBacklight", useBacklight ? 1f : 0f);
+            if (useBacklight)
+            {
+                var backlightColor = overrides.backlightColor;
+                backlightColor.a = overrides.backlightStrength;
+                SetIfExists(material, "_BacklightColor", backlightColor);
+                SetIfExists(material, "_BacklightMainStrength", 0.5f);
+            }
 
             var hasOutline = (material.HasProperty("_UseOutline") && material.GetFloat("_UseOutline") > 0.5f)
                 || (material.HasProperty("_OutlineEnable") && material.GetFloat("_OutlineEnable") > 0.5f)
@@ -800,6 +808,19 @@ namespace NdmfMToon10ToLilToon
             if (material == null) return;
             if (!material.HasProperty(propertyName)) return;
             material.SetTexture(propertyName, texture);
+        }
+
+        private static void SetVectorComponentIfExists(Material material, string propertyName, int componentIndex, float value)
+        {
+            if (material == null) return;
+            if (!material.HasProperty(propertyName)) return;
+            if (!TryGetPropertyType(material, propertyName, out var propertyType)
+                || propertyType != ShaderPropertyType.Vector) return;
+            if (componentIndex < 0 || componentIndex > 3) return;
+
+            var vector = material.GetVector(propertyName);
+            vector[componentIndex] = value;
+            material.SetVector(propertyName, vector);
         }
 
         private static void ApplyUvAnimationMapping(Material source, Material destination)
