@@ -518,8 +518,8 @@ namespace NdmfMToon10ToLilToon
         {
             if (source == null || destination == null) return;
 
-            var useEmission = HasNonDefaultColor(source, new[] { "_EmissiveFactor", "_EmissionColor" }, Color.black)
-                || HasTexture(source, true, "_EmissiveMap", "_EmissionMap");
+            var hasEmissionTexture = HasTexture(source, true, "_EmissiveMap", "_EmissionMap");
+            var useEmission = hasEmissionTexture;
             SetIfExists(destination, "_UseEmission", useEmission ? 1f : 0f);
 
             var hasMatCapTexture = HasTexture(source, true, "_MatcapTex");
