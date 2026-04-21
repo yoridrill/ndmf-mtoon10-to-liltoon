@@ -245,7 +245,9 @@ namespace NdmfMToon10ToLilToon
                     serializedObject.FindProperty(nameof(MToonLilToonComponent.verboseLog)),
                     new GUIContent("Verbose Log"));
 
-                if (GUILayout.Button("Reset Preview"))
+                var rawButtonRect = EditorGUILayout.GetControlRect(false, EditorGUIUtility.singleLineHeight);
+                var buttonRect = EditorGUI.IndentedRect(rawButtonRect);
+                if (GUI.Button(buttonRect, "Reset Preview"))
                 {
                     MToonLilToonPreviewUtility.ResetSavedPreviewState(component);
                     EditorUtility.SetDirty(component);
