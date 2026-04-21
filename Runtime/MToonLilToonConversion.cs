@@ -307,7 +307,7 @@ namespace NdmfMToon10ToLilToon
                 ApplyRimState(source, converted);
                 ApplyUvAnimationMapping(source, converted);
                 ApplyFeatureEnables(source, converted);
-                ApplyFallback(source, converted, renderType);
+                ApplyFallback(source, converted);
                 ApplyRenderQueue(source, converted, renderType);
                 ApplyTransparentMode(converted, renderType);
                 ApplyTransparentZWrite(converted, renderType, transparentWithZWrite);
@@ -624,16 +624,14 @@ namespace NdmfMToon10ToLilToon
             SetIfExists(destination, "_OutlineVertexR2Width", vertexR2Width);
         }
 
-        private static void ApplyFallback(Material source, Material destination, RenderType renderType)
+        private static void ApplyFallback(Material source, Material destination)
         {
             var hasOutline = HasOutline(source);
-
-            var fallback = renderType == RenderType.Transparent
-                ? "Unlit/Transparent"
-                : hasOutline
-                    ? "ToonStandardOutline"
-                    : "ToonStandard";
-
+            // VRChat Custom Safety Fallback:
+            // ShaderType=ToonStandard(Outline), RenderingMode=Cutout, Shading=Realistic
+            var fallback = hasOutline
+                ? "toonstandardoutlineCutout"
+                : "toonstandardCutout";
             destination.SetOverrideTag("VRCFallback", fallback);
         }
 
