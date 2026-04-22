@@ -15,6 +15,7 @@ namespace NdmfMToon10ToLilToon
         private static GameObject _sourceAvatarRoot;
         private static GameObject _previewRoot;
         private static GameObject _previewAvatar;
+        private static GameObject _pendingAvatarRoot;
         private static string _previewProgress = string.Empty;
         private static bool _isProcessingPreview;
         private static int _progressVersion;
@@ -46,7 +47,7 @@ namespace NdmfMToon10ToLilToon
                 return;
             }
 
-            StartPreview(avatarRoot);
+            QueueStartPreview(avatarRoot);
         }
 
         internal static void RestartPreviewIfActive(MToonLilToonComponent component)
@@ -55,7 +56,7 @@ namespace NdmfMToon10ToLilToon
             var avatarRoot = FindAvatarRoot(component.gameObject);
             if (avatarRoot == null || !IsPreviewing(avatarRoot)) return;
 
-            StartPreview(avatarRoot);
+            QueueStartPreview(avatarRoot);
         }
 
         internal static void ApplyGlobalOverridesIfActive(MToonLilToonComponent sourceComponent)
@@ -126,11 +127,19 @@ namespace NdmfMToon10ToLilToon
             return _sourceAvatarRoot != null && _sourceAvatarRoot == avatarRoot && _previewAvatar != null;
         }
 
-        private static void StartPreview(GameObject avatarRoot)
+        private static void QueueStartPreview(GameObject avatarRoot)
         {
             StopPreview();
+            _pendingAvatarRoot = avatarRoot;
             _isProcessingPreview = true;
             SetProgress("Processing...");
+            EditorApplication.delayCall += StartPendingPreview;
+        }
+
+        private static void StartPendingPreview()
+        {
+            var avatarRoot = _pendingAvatarRoot;
+            _pendingAvatarRoot = null;
             if (avatarRoot == null)
             {
                 _isProcessingPreview = false;
@@ -183,6 +192,7 @@ namespace NdmfMToon10ToLilToon
             _previewRoot = null;
             _previewAvatar = null;
             _sourceAvatarRoot = null;
+            _pendingAvatarRoot = null;
             _isProcessingPreview = false;
             SetProgress(string.Empty);
             CleanupOrphanPreviewObjects();
