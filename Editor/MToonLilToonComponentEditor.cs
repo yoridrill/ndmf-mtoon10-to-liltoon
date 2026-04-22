@@ -87,10 +87,8 @@ namespace NdmfMToon10ToLilToon
             var progressMessage = MToonLilToonPreviewUtility.IsProcessingPreview()
                 ? "Processing..."
                 : MToonLilToonPreviewUtility.GetPreviewProgressMessage();
-            if (!string.IsNullOrEmpty(progressMessage))
-            {
-                EditorGUILayout.LabelField(progressMessage, EditorStyles.miniLabel);
-            }
+            var debugText = $"DEBUG STATUS TEXT >>> {progressMessage} <<< / このテキストが見えていればボタン右側の表示領域は有効です";
+            EditorGUILayout.LabelField(debugText, EditorStyles.miniLabel);
             GUILayout.FlexibleSpace();
             EditorGUI.BeginChangeCheck();
             var nextLanguage = (Language)EditorGUILayout.EnumPopup(_language, GUILayout.Width(90f));
