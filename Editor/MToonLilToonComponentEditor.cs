@@ -84,7 +84,9 @@ namespace NdmfMToon10ToLilToon
             }
 
             GUI.backgroundColor = previous;
-            var progressMessage = MToonLilToonPreviewUtility.GetPreviewProgressMessage();
+            var progressMessage = MToonLilToonPreviewUtility.IsProcessingPreview()
+                ? "Processing..."
+                : MToonLilToonPreviewUtility.GetPreviewProgressMessage();
             if (!string.IsNullOrEmpty(progressMessage))
             {
                 EditorGUILayout.LabelField(progressMessage, EditorStyles.miniLabel);

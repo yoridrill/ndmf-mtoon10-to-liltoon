@@ -79,6 +79,7 @@ namespace NdmfMToon10ToLilToon
         }
 
         internal static string GetPreviewProgressMessage() => _previewProgress;
+        internal static bool IsProcessingPreview() => _isProcessingPreview;
 
 
         internal static bool HasStalePreviewState(MToonLilToonComponent component)
@@ -129,6 +130,7 @@ namespace NdmfMToon10ToLilToon
         {
             StopPreview();
             _isProcessingPreview = true;
+            SetProgress("Processing...");
             if (avatarRoot == null)
             {
                 _isProcessingPreview = false;
@@ -159,8 +161,7 @@ namespace NdmfMToon10ToLilToon
             }
             finally
             {
-                _isProcessingPreview = false;
-                QueueClearProgress();
+                QueueFinishProcessing();
                 SceneView.RepaintAll();
             }
         }
@@ -280,12 +281,13 @@ namespace NdmfMToon10ToLilToon
             InternalEditorUtility.RepaintAllViews();
         }
 
-        private static void QueueClearProgress()
+        private static void QueueFinishProcessing()
         {
             var version = ++_progressVersion;
             EditorApplication.delayCall += () =>
             {
                 if (version != _progressVersion) return;
+                _isProcessingPreview = false;
                 _previewProgress = string.Empty;
                 InternalEditorUtility.RepaintAllViews();
             };
