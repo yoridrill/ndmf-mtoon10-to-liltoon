@@ -146,25 +146,26 @@ namespace NdmfMToon10ToLilToon
             using (new EditorGUILayout.HorizontalScope())
             {
                 enabledProp.boolValue = EditorGUILayout.Toggle(enabledProp.boolValue, GUILayout.Width(18f));
-                using (new EditorGUILayout.VerticalScope())
+                EditorGUILayout.LabelField(groupLabel, GUILayout.Width(140f));
+                using (new EditorGUI.DisabledScope(!enabledProp.boolValue))
                 {
-                    EditorGUILayout.LabelField(groupLabel);
-                    using (new EditorGUI.DisabledScope(!enabledProp.boolValue))
-                    {
-                        DrawTwoColumnPropertyRow(firstLabel, firstValueProp);
-                        DrawTwoColumnPropertyRow(secondLabel, secondValueProp);
-                    }
+                    DrawTwoColumnPropertyRow(firstLabel, firstValueProp);
                 }
+            }
+
+            using (new EditorGUI.DisabledScope(!enabledProp.boolValue))
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                GUILayout.Space(18f);
+                EditorGUILayout.LabelField(string.Empty, GUILayout.Width(140f));
+                DrawTwoColumnPropertyRow(secondLabel, secondValueProp);
             }
         }
 
         private static void DrawTwoColumnPropertyRow(string label, SerializedProperty valueProp)
         {
-            using (new EditorGUILayout.HorizontalScope())
-            {
-                EditorGUILayout.LabelField(label, GUILayout.Width(140f));
-                EditorGUILayout.PropertyField(valueProp, GUIContent.none);
-            }
+            EditorGUILayout.LabelField(label, GUILayout.Width(140f));
+            EditorGUILayout.PropertyField(valueProp, GUIContent.none);
         }
 
         private bool DrawHairMergeToggle(MToonLilToonComponent component)
