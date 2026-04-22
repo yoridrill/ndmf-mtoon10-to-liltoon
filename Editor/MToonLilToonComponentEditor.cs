@@ -15,8 +15,7 @@ namespace NdmfMToon10ToLilToon
         }
 
         private const string PrefKeyLanguage = "MToonLilToonComponentEditor.Language";
-        private const string DefaultFaceShadowSdfTexturePath = "Assets/Runtime/Textures/FaceShadowSDF/VRoidFaceShadowSDF.png";
-        private const string FallbackFaceShadowSdfTexturePath = "Runtime/Textures/FaceShadowSDF/VRoidFaceShadowSDF.png";
+        private const string DefaultFaceShadowSdfTextureGuid = "27ce95861122c4390a22413b48ea1e34";
         private Language _language;
 
         private void OnEnable()
@@ -431,10 +430,10 @@ namespace NdmfMToon10ToLilToon
 
         private static Texture2D LoadDefaultFaceShadowSdfTexture()
         {
-            var texture = AssetDatabase.LoadAssetAtPath<Texture2D>(DefaultFaceShadowSdfTexturePath);
-            if (texture != null) return texture;
-
-            texture = AssetDatabase.LoadAssetAtPath<Texture2D>(FallbackFaceShadowSdfTexturePath);
+            var texturePath = AssetDatabase.GUIDToAssetPath(DefaultFaceShadowSdfTextureGuid);
+            var texture = !string.IsNullOrEmpty(texturePath)
+                ? AssetDatabase.LoadAssetAtPath<Texture2D>(texturePath)
+                : null;
             if (texture != null) return texture;
 
             var guids = AssetDatabase.FindAssets("VRoidFaceShadowSDF t:Texture2D");
