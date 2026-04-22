@@ -17,6 +17,7 @@ namespace NdmfMToon10ToLilToon
         private static GameObject _previewAvatar;
         private static string _previewProgress = string.Empty;
         private static bool _isProcessingPreview;
+        private static int _progressVersion;
         private static readonly List<RendererState> HiddenRenderers = new();
 
         private struct RendererState
@@ -159,7 +160,7 @@ namespace NdmfMToon10ToLilToon
             finally
             {
                 _isProcessingPreview = false;
-                SetProgress(string.Empty);
+                QueueClearProgress();
                 SceneView.RepaintAll();
             }
         }
@@ -275,15 +276,19 @@ namespace NdmfMToon10ToLilToon
         private static void SetProgress(string message)
         {
             _previewProgress = message ?? string.Empty;
-            if (string.IsNullOrEmpty(_previewProgress))
-            {
-                EditorUtility.ClearProgressBar();
-            }
-            else
-            {
-                EditorUtility.DisplayProgressBar("MToon10 to lilToon Preview", _previewProgress, 0.5f);
-            }
+            _progressVersion++;
             InternalEditorUtility.RepaintAllViews();
+        }
+
+        private static void QueueClearProgress()
+        {
+            var version = ++_progressVersion;
+            EditorApplication.delayCall += () =>
+            {
+                if (version != _progressVersion) return;
+                _previewProgress = string.Empty;
+                InternalEditorUtility.RepaintAllViews();
+            };
         }
     }
 }
