@@ -17,7 +17,6 @@ namespace NdmfMToon10ToLilToon
         private static GameObject _previewAvatar;
         private static string _previewProgress = string.Empty;
         private static bool _isProcessingPreview;
-        private static int _previewRequestId;
         private static readonly List<RendererState> HiddenRenderers = new();
 
         private struct RendererState
@@ -46,7 +45,7 @@ namespace NdmfMToon10ToLilToon
                 return;
             }
 
-            StartPreviewAsync(avatarRoot);
+            StartPreview(avatarRoot);
         }
 
         internal static void RestartPreviewIfActive(MToonLilToonComponent component)
@@ -55,7 +54,7 @@ namespace NdmfMToon10ToLilToon
             var avatarRoot = FindAvatarRoot(component.gameObject);
             if (avatarRoot == null || !IsPreviewing(avatarRoot)) return;
 
-            StartPreviewAsync(avatarRoot);
+            StartPreview(avatarRoot);
         }
 
         internal static void ApplyGlobalOverridesIfActive(MToonLilToonComponent sourceComponent)
@@ -125,21 +124,10 @@ namespace NdmfMToon10ToLilToon
             return _sourceAvatarRoot != null && _sourceAvatarRoot == avatarRoot && _previewAvatar != null;
         }
 
-        private static void StartPreviewAsync(GameObject avatarRoot)
+        private static void StartPreview(GameObject avatarRoot)
         {
             StopPreview();
             _isProcessingPreview = true;
-            var requestId = ++_previewRequestId;
-            SetProgress("Converting materials...");
-            EditorApplication.delayCall += () =>
-            {
-                if (requestId != _previewRequestId) return;
-                StartPreviewInternal(avatarRoot, requestId);
-            };
-        }
-
-        private static void StartPreviewInternal(GameObject avatarRoot, int requestId)
-        {
             if (avatarRoot == null)
             {
                 _isProcessingPreview = false;
@@ -170,20 +158,14 @@ namespace NdmfMToon10ToLilToon
             }
             finally
             {
-                if (requestId != _previewRequestId) return;
                 _isProcessingPreview = false;
-                EditorApplication.delayCall += () =>
-                {
-                    if (requestId != _previewRequestId) return;
-                    SetProgress(string.Empty);
-                };
+                SetProgress(string.Empty);
                 SceneView.RepaintAll();
             }
         }
 
         internal static void StopPreview()
         {
-            _previewRequestId++;
             RestoreSourceRenderers();
 
             if (_previewRoot != null)
@@ -293,6 +275,14 @@ namespace NdmfMToon10ToLilToon
         private static void SetProgress(string message)
         {
             _previewProgress = message ?? string.Empty;
+            if (string.IsNullOrEmpty(_previewProgress))
+            {
+                EditorUtility.ClearProgressBar();
+            }
+            else
+            {
+                EditorUtility.DisplayProgressBar("MToon10 to lilToon Preview", _previewProgress, 0.5f);
+            }
             InternalEditorUtility.RepaintAllViews();
         }
     }
