@@ -16,6 +16,11 @@ namespace NdmfMToon10ToLilToon
         public bool enableFakeShadow;
         public Vector3 fakeShadowDirection = new Vector3(0.5f, 1f, 0f);
         public float fakeShadowOffset = 0.003f;
+        public bool enableFaceShadowTuning;
+        public Material faceShadowFaceMaterial;
+        public Texture2D faceShadowSdfTexture;
+        public bool disableShadowReceiveForFace;
+        public bool disableBacklightStrengthForFace;
         public LilToonGlobalOverrides globalOverrides = new();
         public bool verboseLog;
         [HideInInspector] public bool showAdvanced;

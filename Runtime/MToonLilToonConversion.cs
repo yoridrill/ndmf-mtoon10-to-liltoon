@@ -312,7 +312,7 @@ namespace NdmfMToon10ToLilToon
                 ApplyTransparentMode(converted, renderType);
                 ApplyTransparentZWrite(converted, renderType, transparentWithZWrite);
                 ApplyRenderTypeTag(converted, renderType);
-                ApplyLilToonOverrides(converted, overrides);
+                ApplyGlobalOverridesToMaterial(converted, overrides);
                 ApplyShadow2OpacityZero(converted);
 
                 return true;
@@ -462,7 +462,7 @@ namespace NdmfMToon10ToLilToon
             SetIfExists(destination, "_UseShadow1stColorTex", enabled ? 1f : 0f);
         }
 
-        private static void ApplyLilToonOverrides(Material material, LilToonGlobalOverrides overrides)
+        public static void ApplyGlobalOverridesToMaterial(Material material, LilToonGlobalOverrides overrides)
         {
             if (overrides == null) return;
             SetIfExists(material, "_ShadowReceive", overrides.shadowReceive);

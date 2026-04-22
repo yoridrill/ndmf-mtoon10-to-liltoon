@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using UnityEditor;
+using UnityEditorInternal;
 using UnityEngine;
 
 namespace NdmfMToon10ToLilToon
@@ -14,6 +15,10 @@ namespace NdmfMToon10ToLilToon
         private static GameObject _sourceAvatarRoot;
         private static GameObject _previewRoot;
         private static GameObject _previewAvatar;
+        private static GameObject _pendingAvatarRoot;
+        private static string _previewProgress = string.Empty;
+        private static bool _isProcessingPreview;
+        private static int _progressVersion;
         private static readonly List<RendererState> HiddenRenderers = new();
 
         private struct RendererState
@@ -32,6 +37,7 @@ namespace NdmfMToon10ToLilToon
 
         internal static void TogglePreview(MToonLilToonComponent component)
         {
+            if (_isProcessingPreview) return;
             var avatarRoot = FindAvatarRoot(component.gameObject);
             if (avatarRoot == null) return;
 
@@ -41,16 +47,40 @@ namespace NdmfMToon10ToLilToon
                 return;
             }
 
-            StartPreview(avatarRoot);
+            QueueStartPreview(avatarRoot);
         }
 
         internal static void RestartPreviewIfActive(MToonLilToonComponent component)
         {
+            if (_isProcessingPreview) return;
             var avatarRoot = FindAvatarRoot(component.gameObject);
             if (avatarRoot == null || !IsPreviewing(avatarRoot)) return;
 
-            StartPreview(avatarRoot);
+            QueueStartPreview(avatarRoot);
         }
+
+        internal static void ApplyGlobalOverridesIfActive(MToonLilToonComponent sourceComponent)
+        {
+            if (_isProcessingPreview) return;
+            if (sourceComponent == null) return;
+            var avatarRoot = FindAvatarRoot(sourceComponent.gameObject);
+            if (avatarRoot == null || !IsPreviewing(avatarRoot) || _previewAvatar == null) return;
+
+            var sourcePath = BuildRelativePath(avatarRoot.transform, sourceComponent.transform);
+            var previewTransform = string.IsNullOrEmpty(sourcePath)
+                ? _previewAvatar.transform
+                : _previewAvatar.transform.Find(sourcePath);
+            if (previewTransform == null) return;
+
+            var previewComponent = previewTransform.GetComponent<MToonLilToonComponent>();
+            if (previewComponent == null) return;
+
+            MToonLilToonProcessor.ApplyGlobalOverridesToConvertedMaterials(previewComponent, sourceComponent.globalOverrides);
+            SceneView.RepaintAll();
+        }
+
+        internal static string GetPreviewProgressMessage() => _previewProgress;
+        internal static bool IsProcessingPreview() => _isProcessingPreview;
 
 
         internal static bool HasStalePreviewState(MToonLilToonComponent component)
@@ -97,28 +127,52 @@ namespace NdmfMToon10ToLilToon
             return _sourceAvatarRoot != null && _sourceAvatarRoot == avatarRoot && _previewAvatar != null;
         }
 
-        private static void StartPreview(GameObject avatarRoot)
+        private static void QueueStartPreview(GameObject avatarRoot)
         {
             StopPreview();
-            _sourceAvatarRoot = avatarRoot;
+            _pendingAvatarRoot = avatarRoot;
+            _isProcessingPreview = true;
+            SetProgress("Processing...");
+            EditorApplication.delayCall += StartPendingPreview;
+        }
 
-            _previewRoot = new GameObject(PreviewRootName)
+        private static void StartPendingPreview()
+        {
+            var avatarRoot = _pendingAvatarRoot;
+            _pendingAvatarRoot = null;
+            if (avatarRoot == null)
             {
-                hideFlags = HideFlags.HideInHierarchy | HideFlags.DontSaveInEditor,
-            };
-            _previewAvatar = Object.Instantiate(avatarRoot, _previewRoot.transform);
-            _previewAvatar.name = PreviewAvatarName;
-            _previewAvatar.hideFlags = HideFlags.HideInHierarchy | HideFlags.DontSaveInEditor;
-
-            foreach (var component in _previewAvatar.GetComponentsInChildren<MToonLilToonComponent>(true))
-            {
-                MToonLilToonProcessor.ApplyOnBuild(component);
-                component.isPreviewing = true;
+                _isProcessingPreview = false;
+                SetProgress(string.Empty);
+                return;
             }
 
-            HideSourceRenderers(avatarRoot);
-            SyncSourcePreviewFlag(avatarRoot, true);
-            SceneView.RepaintAll();
+            try
+            {
+                _sourceAvatarRoot = avatarRoot;
+
+                _previewRoot = new GameObject(PreviewRootName)
+                {
+                    hideFlags = HideFlags.HideInHierarchy | HideFlags.DontSaveInEditor,
+                };
+                _previewAvatar = Object.Instantiate(avatarRoot, _previewRoot.transform);
+                _previewAvatar.name = PreviewAvatarName;
+                _previewAvatar.hideFlags = HideFlags.HideInHierarchy | HideFlags.DontSaveInEditor;
+
+                foreach (var component in _previewAvatar.GetComponentsInChildren<MToonLilToonComponent>(true))
+                {
+                    MToonLilToonProcessor.ApplyOnBuild(component, SetProgress);
+                    component.isPreviewing = true;
+                }
+
+                HideSourceRenderers(avatarRoot);
+                SyncSourcePreviewFlag(avatarRoot, true);
+            }
+            finally
+            {
+                QueueFinishProcessing();
+                SceneView.RepaintAll();
+            }
         }
 
         internal static void StopPreview()
@@ -138,6 +192,9 @@ namespace NdmfMToon10ToLilToon
             _previewRoot = null;
             _previewAvatar = null;
             _sourceAvatarRoot = null;
+            _pendingAvatarRoot = null;
+            _isProcessingPreview = false;
+            SetProgress(string.Empty);
             CleanupOrphanPreviewObjects();
             SceneView.RepaintAll();
         }
@@ -201,12 +258,49 @@ namespace NdmfMToon10ToLilToon
             return transform.gameObject;
         }
 
+        private static string BuildRelativePath(Transform root, Transform target)
+        {
+            if (root == null || target == null) return string.Empty;
+            if (root == target) return string.Empty;
+
+            var segments = new List<string>();
+            var current = target;
+            while (current != null && current != root)
+            {
+                segments.Add(current.name);
+                current = current.parent;
+            }
+
+            if (current != root) return string.Empty;
+            segments.Reverse();
+            return string.Join("/", segments);
+        }
+
         private static void OnPlayModeStateChanged(PlayModeStateChange change)
         {
             if (change == PlayModeStateChange.ExitingEditMode || change == PlayModeStateChange.ExitingPlayMode)
             {
                 StopPreview();
             }
+        }
+
+        private static void SetProgress(string message)
+        {
+            _previewProgress = message ?? string.Empty;
+            _progressVersion++;
+            InternalEditorUtility.RepaintAllViews();
+        }
+
+        private static void QueueFinishProcessing()
+        {
+            var version = ++_progressVersion;
+            EditorApplication.delayCall += () =>
+            {
+                if (version != _progressVersion) return;
+                _isProcessingPreview = false;
+                _previewProgress = string.Empty;
+                InternalEditorUtility.RepaintAllViews();
+            };
         }
     }
 }
