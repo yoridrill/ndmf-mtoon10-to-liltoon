@@ -653,8 +653,8 @@ namespace NdmfMToon10ToLilToon
             if (faceMaterial == null) return;
 
             SetFloatIfAnyExists(faceMaterial, new[] { "_UseShadowMask", "_UseShadowStrengthMask" }, 1f);
-            SetFloatIfAnyExists(faceMaterial, new[] { "_ShadowMaskType" }, 4f);
-            SetTextureIfAnyExists(faceMaterial, new[] { "_ShadowStrengthMask", "_ShadowMask", "_ShadowBorderMask", "_ShadowMaskTex" }, sdfTexture);
+            SetFloatIfAnyExists(faceMaterial, new[] { "_ShadowMaskType" }, 2f);
+            SetTextureIfAnyExists(faceMaterial, new[] { "_ShadowStrengthMask" }, sdfTexture);
 
             if (disableShadowReceiveForFace)
             {
