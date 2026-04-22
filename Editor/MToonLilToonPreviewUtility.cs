@@ -17,6 +17,7 @@ namespace NdmfMToon10ToLilToon
         private static GameObject _previewAvatar;
         private static string _previewProgress = string.Empty;
         private static bool _isProcessingPreview;
+        private static int _previewRequestId;
         private static readonly List<RendererState> HiddenRenderers = new();
 
         private struct RendererState
@@ -45,7 +46,7 @@ namespace NdmfMToon10ToLilToon
                 return;
             }
 
-            StartPreview(avatarRoot);
+            StartPreviewAsync(avatarRoot);
         }
 
         internal static void RestartPreviewIfActive(MToonLilToonComponent component)
@@ -54,7 +55,7 @@ namespace NdmfMToon10ToLilToon
             var avatarRoot = FindAvatarRoot(component.gameObject);
             if (avatarRoot == null || !IsPreviewing(avatarRoot)) return;
 
-            StartPreview(avatarRoot);
+            StartPreviewAsync(avatarRoot);
         }
 
         internal static void ApplyGlobalOverridesIfActive(MToonLilToonComponent sourceComponent)
@@ -124,13 +125,30 @@ namespace NdmfMToon10ToLilToon
             return _sourceAvatarRoot != null && _sourceAvatarRoot == avatarRoot && _previewAvatar != null;
         }
 
-        private static void StartPreview(GameObject avatarRoot)
+        private static void StartPreviewAsync(GameObject avatarRoot)
         {
             StopPreview();
             _isProcessingPreview = true;
+            var requestId = ++_previewRequestId;
+            SetProgress("Converting materials...");
+            EditorApplication.delayCall += () =>
+            {
+                if (requestId != _previewRequestId) return;
+                StartPreviewInternal(avatarRoot, requestId);
+            };
+        }
+
+        private static void StartPreviewInternal(GameObject avatarRoot, int requestId)
+        {
+            if (avatarRoot == null)
+            {
+                _isProcessingPreview = false;
+                SetProgress(string.Empty);
+                return;
+            }
+
             try
             {
-                SetProgress("Converting materials...");
                 _sourceAvatarRoot = avatarRoot;
 
                 _previewRoot = new GameObject(PreviewRootName)
@@ -152,14 +170,20 @@ namespace NdmfMToon10ToLilToon
             }
             finally
             {
+                if (requestId != _previewRequestId) return;
                 _isProcessingPreview = false;
-                SetProgress(string.Empty);
+                EditorApplication.delayCall += () =>
+                {
+                    if (requestId != _previewRequestId) return;
+                    SetProgress(string.Empty);
+                };
                 SceneView.RepaintAll();
             }
         }
 
         internal static void StopPreview()
         {
+            _previewRequestId++;
             RestoreSourceRenderers();
 
             if (_previewRoot != null)
