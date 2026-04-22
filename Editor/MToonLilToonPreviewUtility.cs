@@ -52,6 +52,25 @@ namespace NdmfMToon10ToLilToon
             StartPreview(avatarRoot);
         }
 
+        internal static void ApplyGlobalOverridesIfActive(MToonLilToonComponent sourceComponent)
+        {
+            if (sourceComponent == null) return;
+            var avatarRoot = FindAvatarRoot(sourceComponent.gameObject);
+            if (avatarRoot == null || !IsPreviewing(avatarRoot) || _previewAvatar == null) return;
+
+            var sourcePath = BuildRelativePath(avatarRoot.transform, sourceComponent.transform);
+            var previewTransform = string.IsNullOrEmpty(sourcePath)
+                ? _previewAvatar.transform
+                : _previewAvatar.transform.Find(sourcePath);
+            if (previewTransform == null) return;
+
+            var previewComponent = previewTransform.GetComponent<MToonLilToonComponent>();
+            if (previewComponent == null) return;
+
+            MToonLilToonProcessor.ApplyGlobalOverridesToConvertedMaterials(previewComponent, sourceComponent.globalOverrides);
+            SceneView.RepaintAll();
+        }
+
 
         internal static bool HasStalePreviewState(MToonLilToonComponent component)
         {
@@ -199,6 +218,24 @@ namespace NdmfMToon10ToLilToon
             }
 
             return transform.gameObject;
+        }
+
+        private static string BuildRelativePath(Transform root, Transform target)
+        {
+            if (root == null || target == null) return string.Empty;
+            if (root == target) return string.Empty;
+
+            var segments = new List<string>();
+            var current = target;
+            while (current != null && current != root)
+            {
+                segments.Add(current.name);
+                current = current.parent;
+            }
+
+            if (current != root) return string.Empty;
+            segments.Reverse();
+            return string.Join("/", segments);
         }
 
         private static void OnPlayModeStateChanged(PlayModeStateChange change)

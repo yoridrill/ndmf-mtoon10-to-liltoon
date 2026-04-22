@@ -8,6 +8,24 @@ namespace NdmfMToon10ToLilToon
 {
     internal static class MToonLilToonProcessor
     {
+        internal static void ApplyGlobalOverridesToConvertedMaterials(MToonLilToonComponent component, LilToonGlobalOverrides overrides)
+        {
+            if (component == null || overrides == null) return;
+
+            var materials = component.GetComponentsInChildren<Renderer>(true)
+                .SelectMany(renderer => renderer != null ? renderer.sharedMaterials : System.Array.Empty<Material>())
+                .Where(material => material != null
+                    && material.shader != null
+                    && material.shader.name.IndexOf("liltoon", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                .Distinct()
+                .ToList();
+
+            for (var i = 0; i < materials.Count; i++)
+            {
+                MToonToLilToonMapper.ApplyGlobalOverridesToMaterial(materials[i], overrides);
+            }
+        }
+
         internal static void ApplyOnBuild(MToonLilToonComponent component)
         {
             if (component == null) return;

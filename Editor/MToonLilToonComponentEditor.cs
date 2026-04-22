@@ -30,12 +30,21 @@ namespace NdmfMToon10ToLilToon
             var previousPreviewing = MToonLilToonPreviewUtility.IsPreviewing(component);
 
             DrawPreviewButton(component);
-            DrawLilToonUserSettings();
+            var globalOverridesChanged = DrawLilToonUserSettings();
+
+            EditorGUI.BeginChangeCheck();
             var directValueChanged = DrawHairMergeToggle(component);
+            var hairSettingsChanged = EditorGUI.EndChangeCheck();
 
             directValueChanged |= DrawHairSelections(component);
+
+            EditorGUI.BeginChangeCheck();
             directValueChanged |= DrawFaceShadowTuningSection(component);
+            var faceShadowSettingsChanged = EditorGUI.EndChangeCheck();
+
+            EditorGUI.BeginChangeCheck();
             directValueChanged |= DrawAdvancedSection(component);
+            var advancedSettingsChanged = EditorGUI.EndChangeCheck();
 
             var serializedChanged = serializedObject.ApplyModifiedProperties();
             if (directValueChanged)
@@ -43,7 +52,19 @@ namespace NdmfMToon10ToLilToon
                 EditorUtility.SetDirty(component);
             }
 
-            if ((serializedChanged || directValueChanged) && previousPreviewing)
+            var onlyGlobalOverridesChanged = previousPreviewing
+                && serializedChanged
+                && !directValueChanged
+                && globalOverridesChanged
+                && !hairSettingsChanged
+                && !faceShadowSettingsChanged
+                && !advancedSettingsChanged;
+
+            if (onlyGlobalOverridesChanged)
+            {
+                MToonLilToonPreviewUtility.ApplyGlobalOverridesIfActive(component);
+            }
+            else if ((serializedChanged || directValueChanged) && previousPreviewing)
             {
                 MToonLilToonPreviewUtility.RestartPreviewIfActive(component);
             }
@@ -73,8 +94,9 @@ namespace NdmfMToon10ToLilToon
             }
         }
 
-        private void DrawLilToonUserSettings()
+        private bool DrawLilToonUserSettings()
         {
+            EditorGUI.BeginChangeCheck();
             var overridesProp = serializedObject.FindProperty(nameof(MToonLilToonComponent.globalOverrides));
             EditorGUILayout.Space();
             EditorGUILayout.LabelField(T("lilToon固有機能の一括設定", "Bulk Settings for lilToon-specific Features"), EditorStyles.boldLabel);
@@ -94,6 +116,7 @@ namespace NdmfMToon10ToLilToon
                 new GUIContent(T("距離フェード（強さ）", "Distance Fade Strength")));
             EditorGUILayout.PropertyField(overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.outlineZBias)),
                 new GUIContent(T("輪郭線のZ Bias", "Outline Z Bias")));
+            return EditorGUI.EndChangeCheck();
         }
 
         private bool DrawHairMergeToggle(MToonLilToonComponent component)
