@@ -8,6 +8,15 @@ namespace NdmfMToon10ToLilToon
 {
     internal static class MToonLilToonProcessor
     {
+        private sealed class HairMergeCacheEntry
+        {
+            public Material mergedTemplate;
+            public Material fakeShadowTemplate;
+            public List<Rect> atlasRects;
+        }
+
+        private static readonly Dictionary<string, HairMergeCacheEntry> HairMergeCache = new();
+
         internal static void ApplyGlobalOverridesToConvertedMaterials(MToonLilToonComponent component, LilToonGlobalOverrides overrides)
         {
             if (component == null || overrides == null) return;
@@ -26,7 +35,7 @@ namespace NdmfMToon10ToLilToon
             }
         }
 
-        internal static void ApplyOnBuild(MToonLilToonComponent component)
+        internal static void ApplyOnBuild(MToonLilToonComponent component, System.Action<string> onProgress = null)
         {
             if (component == null) return;
 
@@ -61,6 +70,7 @@ namespace NdmfMToon10ToLilToon
             var convertedBySource = new Dictionary<Material, Material>();
             var fakeShadowPairs = new List<(Material hair, Material fake)>();
             var mergedHairMaterials = new List<Material>();
+            onProgress?.Invoke("Converting materials...");
             foreach (var renderer in component.GetComponentsInChildren<Renderer>(true))
             {
                 ProcessRenderer(
@@ -74,7 +84,8 @@ namespace NdmfMToon10ToLilToon
                     convertedBySource,
                     fakeShadowPairs,
                     mergedHairMaterials,
-                    report);
+                    report,
+                    onProgress);
             }
 
             var resolvedFaceMaterial = component.fakeShadowFaceMaterial != null
@@ -169,7 +180,8 @@ namespace NdmfMToon10ToLilToon
             IDictionary<Material, Material> convertedBySource,
             IList<(Material hair, Material fake)> fakeShadowPairs,
             IList<Material> mergedHairMaterials,
-            ConversionReport report)
+            ConversionReport report,
+            System.Action<string> onProgress)
         {
             if (renderer == null) return;
 
@@ -241,10 +253,12 @@ namespace NdmfMToon10ToLilToon
                     report,
                     out mergedMaterial,
                     out fakeShadowMaterial,
-                    out mergedRects))
+                    out mergedRects,
+                    onProgress))
             {
                 mergedMaterialCreated = true;
                 var mergedRepresentativeIndex = ResolveMergedRepresentativeIndex(original, mergedIndices, transparentRanks, mergedOutputRenderType);
+                onProgress?.Invoke("Rebuilding mesh...");
                 ApplyMergedMaterialAndMesh(renderer, result, resultSourceIndices, mergedIndices, mergedRepresentativeIndex, mergedMaterial, fakeShadowMaterial, mergedRects, report);
                 if (mergedHairMaterials != null && mergedMaterial != null)
                 {
@@ -299,11 +313,18 @@ namespace NdmfMToon10ToLilToon
             ConversionReport report,
             out Material mergedMaterial,
             out Material fakeShadowMaterial,
-            out List<Rect> atlasRects)
+            out List<Rect> atlasRects,
+            System.Action<string> onProgress)
         {
             mergedMaterial = null;
             fakeShadowMaterial = null;
             atlasRects = null;
+
+            var cacheKey = BuildHairMergeCacheKey(original, mergedIndices, mergedOutputRenderType, enableFakeShadow);
+            if (TryGetCachedHairMergeResult(cacheKey, overrides, fakeShadowDirection, fakeShadowOffset, out mergedMaterial, out fakeShadowMaterial, out atlasRects))
+            {
+                return true;
+            }
 
             if (!MToonToLilToonMapper.TryConvert(original[mergedIndices[0]], lilToonShader, overrides, out mergedMaterial, report))
             {
@@ -318,6 +339,7 @@ namespace NdmfMToon10ToLilToon
                 return true;
             }
 
+            onProgress?.Invoke("Baking atlas...");
             var atlasTextures = new List<Texture2D>();
             for (var i = 0; i < mergedIndices.Count; i++)
             {
@@ -367,8 +389,94 @@ namespace NdmfMToon10ToLilToon
             BakeOptionalAtlas(new[] { "_EmissionMap" }, original, mergedIndices, mergedMaterial, new[] { "_EmissiveMap", "_EmissionMap" }, atlas.width, atlas.height, atlasRects);
             BakeOptionalAtlas(new[] { "_BumpMap" }, original, mergedIndices, mergedMaterial, new[] { "_NormalMap", "_BumpMap" }, atlas.width, atlas.height, atlasRects);
             BakeOptionalAtlas(new[] { "_OutlineTex", "_OutlineMask" }, original, mergedIndices, mergedMaterial, new[] { "_OutlineWidthMultiplyTexture", "_OutlineMask" }, atlas.width, atlas.height, atlasRects);
+            CacheHairMergeResult(cacheKey, mergedMaterial, fakeShadowMaterial, atlasRects);
 
             return true;
+        }
+
+        private static string BuildHairMergeCacheKey(
+            IReadOnlyList<Material> original,
+            IReadOnlyList<int> mergedIndices,
+            RenderType mergedOutputRenderType,
+            bool enableFakeShadow)
+        {
+            var parts = new List<string> { mergedOutputRenderType.ToString(), enableFakeShadow ? "1" : "0" };
+            for (var i = 0; i < mergedIndices.Count; i++)
+            {
+                var index = mergedIndices[i];
+                if (index < 0 || index >= original.Count) continue;
+                var mat = original[index];
+                if (mat == null)
+                {
+                    parts.Add("null");
+                    continue;
+                }
+
+                var tex = mat.HasProperty("_BaseMap") ? mat.GetTexture("_BaseMap") : (mat.HasProperty("_MainTex") ? mat.GetTexture("_MainTex") : null);
+                var texId = tex != null ? tex.GetInstanceID() : 0;
+                var scale = mat.HasProperty("_BaseMap")
+                    ? mat.GetTextureScale("_BaseMap")
+                    : (mat.HasProperty("_MainTex") ? mat.GetTextureScale("_MainTex") : Vector2.one);
+                var offset = mat.HasProperty("_BaseMap")
+                    ? mat.GetTextureOffset("_BaseMap")
+                    : (mat.HasProperty("_MainTex") ? mat.GetTextureOffset("_MainTex") : Vector2.zero);
+                parts.Add($"{index}:{mat.GetInstanceID()}:{texId}:{scale.x:G5},{scale.y:G5}:{offset.x:G5},{offset.y:G5}");
+            }
+
+            return string.Join("|", parts);
+        }
+
+        private static bool TryGetCachedHairMergeResult(
+            string cacheKey,
+            LilToonGlobalOverrides overrides,
+            Vector3 fakeShadowDirection,
+            float fakeShadowOffset,
+            out Material mergedMaterial,
+            out Material fakeShadowMaterial,
+            out List<Rect> atlasRects)
+        {
+            mergedMaterial = null;
+            fakeShadowMaterial = null;
+            atlasRects = null;
+            if (string.IsNullOrEmpty(cacheKey)) return false;
+            if (!HairMergeCache.TryGetValue(cacheKey, out var cached) || cached == null || cached.mergedTemplate == null) return false;
+
+            mergedMaterial = new Material(cached.mergedTemplate)
+            {
+                name = $"{cached.mergedTemplate.name}_Cached",
+            };
+            MToonToLilToonMapper.ApplyGlobalOverridesToMaterial(mergedMaterial, overrides);
+            atlasRects = cached.atlasRects?.Select(rect => rect).ToList() ?? new List<Rect>();
+
+            if (cached.fakeShadowTemplate != null)
+            {
+                fakeShadowMaterial = new Material(cached.fakeShadowTemplate)
+                {
+                    name = $"{cached.fakeShadowTemplate.name}_Cached",
+                };
+                ApplyFakeShadowOverrides(fakeShadowMaterial, true, fakeShadowDirection, fakeShadowOffset);
+            }
+
+            return true;
+        }
+
+        private static void CacheHairMergeResult(string cacheKey, Material mergedMaterial, Material fakeShadowMaterial, IReadOnlyList<Rect> atlasRects)
+        {
+            if (string.IsNullOrEmpty(cacheKey) || mergedMaterial == null) return;
+
+            var mergedTemplate = new Material(mergedMaterial)
+            {
+                name = $"{mergedMaterial.name}_Template",
+            };
+            var fakeTemplate = fakeShadowMaterial != null
+                ? new Material(fakeShadowMaterial) { name = $"{fakeShadowMaterial.name}_Template" }
+                : null;
+            HairMergeCache[cacheKey] = new HairMergeCacheEntry
+            {
+                mergedTemplate = mergedTemplate,
+                fakeShadowTemplate = fakeTemplate,
+                atlasRects = atlasRects?.Select(rect => rect).ToList() ?? new List<Rect>(),
+            };
         }
 
         private static void ForceMergedRenderType(Material destination, Material source, RenderType outputRenderType)

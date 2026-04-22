@@ -84,6 +84,11 @@ namespace NdmfMToon10ToLilToon
             }
 
             GUI.backgroundColor = previous;
+            var progressMessage = MToonLilToonPreviewUtility.GetPreviewProgressMessage();
+            if (!string.IsNullOrEmpty(progressMessage))
+            {
+                EditorGUILayout.LabelField(progressMessage, EditorStyles.miniLabel);
+            }
             GUILayout.FlexibleSpace();
             EditorGUI.BeginChangeCheck();
             var nextLanguage = (Language)EditorGUILayout.EnumPopup(_language, GUILayout.Width(90f));

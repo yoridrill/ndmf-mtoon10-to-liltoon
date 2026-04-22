@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using UnityEditor;
+using UnityEditorInternal;
 using UnityEngine;
 
 namespace NdmfMToon10ToLilToon
@@ -14,6 +15,8 @@ namespace NdmfMToon10ToLilToon
         private static GameObject _sourceAvatarRoot;
         private static GameObject _previewRoot;
         private static GameObject _previewAvatar;
+        private static string _previewProgress = string.Empty;
+        private static bool _isProcessingPreview;
         private static readonly List<RendererState> HiddenRenderers = new();
 
         private struct RendererState
@@ -32,6 +35,7 @@ namespace NdmfMToon10ToLilToon
 
         internal static void TogglePreview(MToonLilToonComponent component)
         {
+            if (_isProcessingPreview) return;
             var avatarRoot = FindAvatarRoot(component.gameObject);
             if (avatarRoot == null) return;
 
@@ -46,6 +50,7 @@ namespace NdmfMToon10ToLilToon
 
         internal static void RestartPreviewIfActive(MToonLilToonComponent component)
         {
+            if (_isProcessingPreview) return;
             var avatarRoot = FindAvatarRoot(component.gameObject);
             if (avatarRoot == null || !IsPreviewing(avatarRoot)) return;
 
@@ -54,6 +59,7 @@ namespace NdmfMToon10ToLilToon
 
         internal static void ApplyGlobalOverridesIfActive(MToonLilToonComponent sourceComponent)
         {
+            if (_isProcessingPreview) return;
             if (sourceComponent == null) return;
             var avatarRoot = FindAvatarRoot(sourceComponent.gameObject);
             if (avatarRoot == null || !IsPreviewing(avatarRoot) || _previewAvatar == null) return;
@@ -70,6 +76,8 @@ namespace NdmfMToon10ToLilToon
             MToonLilToonProcessor.ApplyGlobalOverridesToConvertedMaterials(previewComponent, sourceComponent.globalOverrides);
             SceneView.RepaintAll();
         }
+
+        internal static string GetPreviewProgressMessage() => _previewProgress;
 
 
         internal static bool HasStalePreviewState(MToonLilToonComponent component)
@@ -119,25 +127,35 @@ namespace NdmfMToon10ToLilToon
         private static void StartPreview(GameObject avatarRoot)
         {
             StopPreview();
-            _sourceAvatarRoot = avatarRoot;
-
-            _previewRoot = new GameObject(PreviewRootName)
+            _isProcessingPreview = true;
+            try
             {
-                hideFlags = HideFlags.HideInHierarchy | HideFlags.DontSaveInEditor,
-            };
-            _previewAvatar = Object.Instantiate(avatarRoot, _previewRoot.transform);
-            _previewAvatar.name = PreviewAvatarName;
-            _previewAvatar.hideFlags = HideFlags.HideInHierarchy | HideFlags.DontSaveInEditor;
+                SetProgress("Converting materials...");
+                _sourceAvatarRoot = avatarRoot;
 
-            foreach (var component in _previewAvatar.GetComponentsInChildren<MToonLilToonComponent>(true))
-            {
-                MToonLilToonProcessor.ApplyOnBuild(component);
-                component.isPreviewing = true;
+                _previewRoot = new GameObject(PreviewRootName)
+                {
+                    hideFlags = HideFlags.HideInHierarchy | HideFlags.DontSaveInEditor,
+                };
+                _previewAvatar = Object.Instantiate(avatarRoot, _previewRoot.transform);
+                _previewAvatar.name = PreviewAvatarName;
+                _previewAvatar.hideFlags = HideFlags.HideInHierarchy | HideFlags.DontSaveInEditor;
+
+                foreach (var component in _previewAvatar.GetComponentsInChildren<MToonLilToonComponent>(true))
+                {
+                    MToonLilToonProcessor.ApplyOnBuild(component, SetProgress);
+                    component.isPreviewing = true;
+                }
+
+                HideSourceRenderers(avatarRoot);
+                SyncSourcePreviewFlag(avatarRoot, true);
             }
-
-            HideSourceRenderers(avatarRoot);
-            SyncSourcePreviewFlag(avatarRoot, true);
-            SceneView.RepaintAll();
+            finally
+            {
+                _isProcessingPreview = false;
+                SetProgress(string.Empty);
+                SceneView.RepaintAll();
+            }
         }
 
         internal static void StopPreview()
@@ -157,6 +175,8 @@ namespace NdmfMToon10ToLilToon
             _previewRoot = null;
             _previewAvatar = null;
             _sourceAvatarRoot = null;
+            _isProcessingPreview = false;
+            SetProgress(string.Empty);
             CleanupOrphanPreviewObjects();
             SceneView.RepaintAll();
         }
@@ -244,6 +264,12 @@ namespace NdmfMToon10ToLilToon
             {
                 StopPreview();
             }
+        }
+
+        private static void SetProgress(string message)
+        {
+            _previewProgress = message ?? string.Empty;
+            InternalEditorUtility.RepaintAllViews();
         }
     }
 }
