@@ -19,6 +19,8 @@ namespace NdmfMToon10ToLilToon
         public bool enableFaceShadowTuning;
         public Material faceShadowFaceMaterial;
         public Texture2D faceShadowSdfTexture;
+        public bool disableShadowReceiveForFace;
+        public bool disableBacklightStrengthForFace;
         public LilToonGlobalOverrides globalOverrides = new();
         public bool verboseLog;
         [HideInInspector] public bool showAdvanced;

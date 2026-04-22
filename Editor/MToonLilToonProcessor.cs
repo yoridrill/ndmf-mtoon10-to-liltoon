@@ -109,7 +109,11 @@ namespace NdmfMToon10ToLilToon
             if (component.enableFaceShadowTuning
                 && resolvedFaceShadowMaterial != null)
             {
-                ApplyFaceShadowSdfSettings(resolvedFaceShadowMaterial, component.faceShadowSdfTexture);
+                ApplyFaceShadowSdfSettings(
+                    resolvedFaceShadowMaterial,
+                    component.faceShadowSdfTexture,
+                    component.disableShadowReceiveForFace,
+                    component.disableBacklightStrengthForFace);
             }
 
             component.scannedMaterialCount = report.ScannedMaterialCount;
@@ -494,13 +498,33 @@ namespace NdmfMToon10ToLilToon
             }
         }
 
-        private static void ApplyFaceShadowSdfSettings(Material faceMaterial, Texture sdfTexture)
+        private static void ApplyFaceShadowSdfSettings(
+            Material faceMaterial,
+            Texture sdfTexture,
+            bool disableShadowReceiveForFace,
+            bool disableBacklightStrengthForFace)
         {
             if (faceMaterial == null) return;
 
             SetFloatIfAnyExists(faceMaterial, new[] { "_UseShadowMask", "_UseShadowStrengthMask" }, 1f);
             SetFloatIfAnyExists(faceMaterial, new[] { "_ShadowMaskType" }, 4f);
             SetTextureIfAnyExists(faceMaterial, new[] { "_ShadowStrengthMask", "_ShadowMask", "_ShadowBorderMask", "_ShadowMaskTex" }, sdfTexture);
+
+            if (disableShadowReceiveForFace)
+            {
+                SetFloatIfAnyExists(faceMaterial, new[] { "_ShadowReceive", "_ReceiveShadowRate" }, 0f);
+            }
+
+            if (disableBacklightStrengthForFace)
+            {
+                SetFloatIfAnyExists(faceMaterial, new[] { "_UseBacklight", "_BacklightMainStrength" }, 0f);
+                if (faceMaterial.HasProperty("_BacklightColor"))
+                {
+                    var backlightColor = faceMaterial.GetColor("_BacklightColor");
+                    backlightColor.a = 0f;
+                    faceMaterial.SetColor("_BacklightColor", backlightColor);
+                }
+            }
         }
 
         private static void ApplyStencilSettings(Material material, float reference, float readMask, float writeMask, float compare, float pass, float fail, float zFail)

@@ -162,6 +162,12 @@ namespace NdmfMToon10ToLilToon
             {
                 changed |= DrawFaceShadowFaceMaterialSelector(component);
                 DrawFaceShadowSdfTextureField(component);
+                EditorGUILayout.PropertyField(
+                    serializedObject.FindProperty(nameof(MToonLilToonComponent.disableShadowReceiveForFace)),
+                    new GUIContent(T("影を受け取るを顔だけ0にする", "Set Receive Shadow to 0 (Face Only)")));
+                EditorGUILayout.PropertyField(
+                    serializedObject.FindProperty(nameof(MToonLilToonComponent.disableBacklightStrengthForFace)),
+                    new GUIContent(T("逆光ライトの強度を顔だけ0にする", "Set Backlight Strength to 0 (Face Only)")));
             }
 
             return changed;
