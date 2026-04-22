@@ -288,7 +288,10 @@ namespace NdmfMToon10ToLilToon
             {
                 if (version != _progressVersion) return;
                 _isProcessingPreview = false;
-                _previewProgress = string.Empty;
+                if (!string.IsNullOrEmpty(_previewProgress))
+                {
+                    _previewProgress = $"{_previewProgress} (completed)";
+                }
                 InternalEditorUtility.RepaintAllViews();
             };
         }
