@@ -109,21 +109,62 @@ namespace NdmfMToon10ToLilToon
             EditorGUILayout.LabelField(T("lilToon固有機能の一括設定", "Bulk Settings for lilToon-specific Features"), EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.shadowReceive)),
                 new GUIContent(T("影を受け取る", "Receive Shadow")));
-            EditorGUILayout.PropertyField(overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.shadowBorderColor)),
-                new GUIContent(T("境界の色", "Shadow Border Color")));
-            EditorGUILayout.PropertyField(overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.shadowBorderStrength)),
-                new GUIContent(T("境界の幅", "Shadow Border Strength")));
-            EditorGUILayout.PropertyField(overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.backlightColor)),
-                new GUIContent(T("逆光ライト（色）", "Backlight Color")));
-            EditorGUILayout.PropertyField(overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.backlightStrength)),
-                new GUIContent(T("逆光ライト（強さ）", "Backlight Strength")));
-            EditorGUILayout.PropertyField(overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.distanceFadeColor)),
-                new GUIContent(T("距離フェード（色）", "Distance Fade Color")));
-            EditorGUILayout.PropertyField(overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.distanceFadeStrength)),
-                new GUIContent(T("距離フェード（強さ）", "Distance Fade Strength")));
+            DrawOverrideGroup(
+                overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.enableShadowBorder)),
+                T("影の境界", "Shadow Border"),
+                T("色", "Color"),
+                overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.shadowBorderColor)),
+                T("幅", "Width"),
+                overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.shadowBorderStrength)));
+            DrawOverrideGroup(
+                overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.enableBacklight)),
+                T("逆光ライト", "Backlight"),
+                T("色", "Color"),
+                overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.backlightColor)),
+                T("メインカラーの強度", "Main Color Strength"),
+                overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.backlightMainStrength)));
+            DrawOverrideGroup(
+                overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.enableDistanceFade)),
+                T("距離フェード", "Distance Fade"),
+                T("色", "Color"),
+                overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.distanceFadeColor)),
+                T("強度", "Strength"),
+                overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.distanceFadeStrength)));
             EditorGUILayout.PropertyField(overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.outlineZBias)),
                 new GUIContent(T("輪郭線のZ Bias", "Outline Z Bias")));
             return EditorGUI.EndChangeCheck();
+        }
+
+        private void DrawOverrideGroup(
+            SerializedProperty enabledProp,
+            string groupLabel,
+            string firstLabel,
+            SerializedProperty firstValueProp,
+            string secondLabel,
+            SerializedProperty secondValueProp)
+        {
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                enabledProp.boolValue = EditorGUILayout.Toggle(enabledProp.boolValue, GUILayout.Width(18f));
+                using (new EditorGUILayout.VerticalScope())
+                {
+                    EditorGUILayout.LabelField(groupLabel);
+                    using (new EditorGUI.DisabledScope(!enabledProp.boolValue))
+                    {
+                        DrawTwoColumnPropertyRow(firstLabel, firstValueProp);
+                        DrawTwoColumnPropertyRow(secondLabel, secondValueProp);
+                    }
+                }
+            }
+        }
+
+        private static void DrawTwoColumnPropertyRow(string label, SerializedProperty valueProp)
+        {
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                EditorGUILayout.LabelField(label, GUILayout.Width(140f));
+                EditorGUILayout.PropertyField(valueProp, GUIContent.none);
+            }
         }
 
         private bool DrawHairMergeToggle(MToonLilToonComponent component)
@@ -131,7 +172,7 @@ namespace NdmfMToon10ToLilToon
             var changed = false;
             var enableHairMergeProp = serializedObject.FindProperty(nameof(MToonLilToonComponent.enableHairMerge));
             EditorGUI.BeginChangeCheck();
-            EditorGUILayout.PropertyField(enableHairMergeProp, new GUIContent(T("髪周りのルック調整", "Hair Look Adjustments")));
+            DrawLeftToggle(enableHairMergeProp, T("髪周りのルック調整", "Hair Look Adjustments"));
             var mergeToggleChanged = EditorGUI.EndChangeCheck();
             if (mergeToggleChanged)
             {
@@ -185,7 +226,7 @@ namespace NdmfMToon10ToLilToon
             var changed = false;
             EditorGUILayout.Space();
             var enableFaceShadowTuningProp = serializedObject.FindProperty(nameof(MToonLilToonComponent.enableFaceShadowTuning));
-            EditorGUILayout.PropertyField(enableFaceShadowTuningProp, new GUIContent(T("顔の影を整える", "Tune Face Shadow")));
+            DrawLeftToggle(enableFaceShadowTuningProp, T("顔の影を整える", "Tune Face Shadow"));
             if (!enableFaceShadowTuningProp.boolValue) return changed;
 
             using (new EditorGUI.IndentLevelScope())
@@ -463,6 +504,15 @@ namespace NdmfMToon10ToLilToon
         private string T(string ja, string en)
         {
             return _language == Language.Japanese ? ja : en;
+        }
+
+        private static void DrawLeftToggle(SerializedProperty boolProperty, string label)
+        {
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                boolProperty.boolValue = EditorGUILayout.Toggle(boolProperty.boolValue, GUILayout.Width(18f));
+                EditorGUILayout.LabelField(label);
+            }
         }
     }
 }
