@@ -15,7 +15,8 @@ namespace NdmfMToon10ToLilToon
         }
 
         private const string PrefKeyLanguage = "MToonLilToonComponentEditor.Language";
-        private const string DefaultFaceShadowSdfTexturePath = "Runtime/Textures/FaceShadowSDF/VRoidFaceShadowSDF.png";
+        private const string DefaultFaceShadowSdfTexturePath = "Assets/Runtime/Textures/FaceShadowSDF/VRoidFaceShadowSDF.png";
+        private const string FallbackFaceShadowSdfTexturePath = "Runtime/Textures/FaceShadowSDF/VRoidFaceShadowSDF.png";
         private Language _language;
 
         private void OnEnable()
@@ -87,8 +88,10 @@ namespace NdmfMToon10ToLilToon
             var progressMessage = MToonLilToonPreviewUtility.IsProcessingPreview()
                 ? "Processing..."
                 : MToonLilToonPreviewUtility.GetPreviewProgressMessage();
-            var debugText = $"DEBUG STATUS TEXT >>> {progressMessage} <<< / このテキストが見えていればボタン右側の表示領域は有効です";
-            EditorGUILayout.LabelField(debugText, EditorStyles.miniLabel);
+            if (!string.IsNullOrEmpty(progressMessage))
+            {
+                EditorGUILayout.LabelField(progressMessage, EditorStyles.miniLabel);
+            }
             GUILayout.FlexibleSpace();
             EditorGUI.BeginChangeCheck();
             var nextLanguage = (Language)EditorGUILayout.EnumPopup(_language, GUILayout.Width(90f));
@@ -251,7 +254,7 @@ namespace NdmfMToon10ToLilToon
         {
             if (component.faceShadowSdfTexture == null)
             {
-                component.faceShadowSdfTexture = AssetDatabase.LoadAssetAtPath<Texture2D>(DefaultFaceShadowSdfTexturePath);
+                component.faceShadowSdfTexture = LoadDefaultFaceShadowSdfTexture();
             }
 
             var textureProperty = serializedObject.FindProperty(nameof(MToonLilToonComponent.faceShadowSdfTexture));
@@ -391,7 +394,7 @@ namespace NdmfMToon10ToLilToon
 
             if (component.faceShadowSdfTexture == null)
             {
-                component.faceShadowSdfTexture = AssetDatabase.LoadAssetAtPath<Texture2D>(DefaultFaceShadowSdfTexturePath);
+                component.faceShadowSdfTexture = LoadDefaultFaceShadowSdfTexture();
             }
 
             if (component.eyebrowStencilMaterial == null || !scannedMaterials.Contains(component.eyebrowStencilMaterial))
@@ -424,6 +427,25 @@ namespace NdmfMToon10ToLilToon
             if (face != null) return face;
 
             return materials.FirstOrDefault();
+        }
+
+        private static Texture2D LoadDefaultFaceShadowSdfTexture()
+        {
+            var texture = AssetDatabase.LoadAssetAtPath<Texture2D>(DefaultFaceShadowSdfTexturePath);
+            if (texture != null) return texture;
+
+            texture = AssetDatabase.LoadAssetAtPath<Texture2D>(FallbackFaceShadowSdfTexturePath);
+            if (texture != null) return texture;
+
+            var guids = AssetDatabase.FindAssets("VRoidFaceShadowSDF t:Texture2D");
+            for (var i = 0; i < guids.Length; i++)
+            {
+                var path = AssetDatabase.GUIDToAssetPath(guids[i]);
+                texture = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+                if (texture != null) return texture;
+            }
+
+            return null;
         }
 
         private static Material DetectDefaultEyebrowMaterial(IReadOnlyList<Material> materials)
