@@ -285,7 +285,7 @@ namespace NdmfMToon10ToLilToon
         {
             if (!component.enableHairMerge) return false;
 
-            if (component.hairSelections == null || component.hairSelections.Count == 0)
+            if (component.hairSelections == null || component.hairSelections.Count == 0 || HasExternalHairSelectionReference(component))
             {
                 ScanMaterials(component);
             }
@@ -316,6 +316,21 @@ namespace NdmfMToon10ToLilToon
             }
 
             return changed;
+        }
+
+        private static bool HasExternalHairSelectionReference(MToonLilToonComponent component)
+        {
+            if (component == null || component.hairSelections == null || component.hairSelections.Count == 0) return false;
+
+            var scannedMaterials = GetRendererMaterials(component).ToHashSet();
+            for (var i = 0; i < component.hairSelections.Count; i++)
+            {
+                var selection = component.hairSelections[i];
+                if (selection == null || selection.material == null) continue;
+                if (!scannedMaterials.Contains(selection.material)) return true;
+            }
+
+            return false;
         }
 
         private bool DrawAdvancedSection(MToonLilToonComponent component)

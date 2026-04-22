@@ -38,6 +38,7 @@ namespace NdmfMToon10ToLilToon
         internal static void ApplyOnBuild(MToonLilToonComponent component, System.Action<string> onProgress = null)
         {
             if (component == null) return;
+            EnsureHairSelectionsMatchAvatarMaterials(component);
 
             if (component.isPreviewing)
             {
@@ -151,6 +152,25 @@ namespace NdmfMToon10ToLilToon
             component.warnings = report.Warnings.Select(w => w.Message).ToList();
             component.unsupportedProperties = report.UnsupportedPropertySummary.Select(kv => $"{kv.Key}:{kv.Value}").ToList();
             LogVerboseReportIfNeeded(component, report);
+        }
+
+        private static void EnsureHairSelectionsMatchAvatarMaterials(MToonLilToonComponent component)
+        {
+            if (component == null || !component.enableHairMerge || component.hairSelections == null || component.hairSelections.Count == 0) return;
+
+            var avatarMaterials = component.GetComponentsInChildren<Renderer>(true)
+                .SelectMany(renderer => renderer != null ? renderer.sharedMaterials : System.Array.Empty<Material>())
+                .Where(material => material != null)
+                .Distinct()
+                .ToHashSet();
+
+            var hasExternalReference = component.hairSelections
+                .Where(selection => selection != null && selection.material != null)
+                .Any(selection => !avatarMaterials.Contains(selection.material));
+            if (!hasExternalReference) return;
+
+            component.hairSelections = HairMaterialSelector.BuildDefaultSelections(
+                avatarMaterials.Where(MToonDetector.IsMToonLike));
         }
 
         private static void LogVerboseReportIfNeeded(MToonLilToonComponent component, ConversionReport report)
