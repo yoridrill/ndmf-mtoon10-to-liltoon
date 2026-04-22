@@ -8,6 +8,9 @@ namespace NdmfMToon10ToLilToon
     [CustomEditor(typeof(MToonLilToonComponent))]
     public sealed class MToonLilToonComponentEditor : Editor
     {
+        private const float CategoryColumnWidth = 190f;
+        private const float ItemLabelColumnWidth = 140f;
+
         private enum Language
         {
             Japanese,
@@ -145,8 +148,7 @@ namespace NdmfMToon10ToLilToon
         {
             using (new EditorGUILayout.HorizontalScope())
             {
-                enabledProp.boolValue = EditorGUILayout.Toggle(enabledProp.boolValue, GUILayout.Width(18f));
-                EditorGUILayout.LabelField(groupLabel, GUILayout.Width(140f));
+                DrawCategoryColumn(enabledProp, groupLabel, showToggle: true);
                 using (new EditorGUI.DisabledScope(!enabledProp.boolValue))
                 {
                     DrawTwoColumnPropertyRow(firstLabel, firstValueProp);
@@ -156,15 +158,31 @@ namespace NdmfMToon10ToLilToon
             using (new EditorGUI.DisabledScope(!enabledProp.boolValue))
             using (new EditorGUILayout.HorizontalScope())
             {
-                GUILayout.Space(18f);
-                EditorGUILayout.LabelField(string.Empty, GUILayout.Width(140f));
+                DrawCategoryColumn(enabledProp, string.Empty, showToggle: false);
                 DrawTwoColumnPropertyRow(secondLabel, secondValueProp);
+            }
+        }
+
+        private static void DrawCategoryColumn(SerializedProperty enabledProp, string label, bool showToggle)
+        {
+            using (new EditorGUILayout.HorizontalScope(GUILayout.Width(CategoryColumnWidth)))
+            {
+                if (showToggle)
+                {
+                    enabledProp.boolValue = EditorGUILayout.Toggle(enabledProp.boolValue, GUILayout.Width(18f));
+                }
+                else
+                {
+                    EditorGUILayout.LabelField(GUIContent.none, GUILayout.Width(18f));
+                }
+
+                EditorGUILayout.LabelField(label);
             }
         }
 
         private static void DrawTwoColumnPropertyRow(string label, SerializedProperty valueProp)
         {
-            EditorGUILayout.LabelField(label, GUILayout.Width(140f));
+            EditorGUILayout.LabelField(label, GUILayout.Width(ItemLabelColumnWidth));
             EditorGUILayout.PropertyField(valueProp, GUIContent.none);
         }
 
