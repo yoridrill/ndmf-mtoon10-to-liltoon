@@ -37,6 +37,7 @@ namespace NdmfMToon10ToLilToon
             }
 
             DrawPreviewButton(component);
+            EditorGUILayout.Space(4f);
             DrawSharedFaceMaterialSelector(component);
             var globalOverridesChanged = DrawLilToonUserSettings();
             DrawSpecificPartAdjustmentsHeading();
@@ -116,8 +117,6 @@ namespace NdmfMToon10ToLilToon
             var overridesProp = serializedObject.FindProperty(nameof(MToonLilToonComponent.globalOverrides));
             EditorGUILayout.Space();
             EditorGUILayout.LabelField(T("lilToon固有機能の一括設定", "Bulk Settings for lilToon-specific Features"), EditorStyles.boldLabel);
-            EditorGUILayout.PropertyField(overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.outlineZBias)),
-                new GUIContent(T("輪郭線のZ Bias", "Outline Z Bias")));
             DrawOverrideGroup(
                 overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.enableShadowReceive)),
                 T("影を受け取る", "Receive Shadow"),
@@ -148,6 +147,8 @@ namespace NdmfMToon10ToLilToon
                 overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.distanceFadeColor)),
                 T("強度", "Strength"),
                 overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.distanceFadeStrength)));
+            EditorGUILayout.PropertyField(overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.outlineZBias)),
+                new GUIContent(T("輪郭線のZ Bias", "Outline Z Bias")));
             return EditorGUI.EndChangeCheck();
         }
 
@@ -384,13 +385,17 @@ namespace NdmfMToon10ToLilToon
             var changed = false;
             using (new EditorGUI.IndentLevelScope())
             {
+                EditorGUILayout.HelpBox(
+                    T(
+                        "この機能が有効な場合は髪マテリアルを結合します。\n結合されたくないマテリアルは対象から外してください。",
+                        "When this feature is enabled, hair materials are merged.\nExclude any materials you do not want to merge."),
+                    MessageType.Info);
                 component.showHairMaterials = EditorGUILayout.Foldout(
                     component.showHairMaterials,
                     T("対象マテリアル", "Target Materials"),
                     true);
                 if (!component.showHairMaterials) return false;
 
-                EditorGUILayout.HelpBox(T("チェックを入れたマテリアルは結合されます。", "Checked materials will be merged."), MessageType.Info);
                 if (component.hairSelections == null || component.hairSelections.Count == 0)
                 {
                     EditorGUILayout.HelpBox(T("まだスキャンされていません。", "No materials scanned yet."), MessageType.Info);
