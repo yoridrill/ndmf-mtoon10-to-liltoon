@@ -150,56 +150,51 @@ namespace NdmfMToon10ToLilToon
             string secondLabel,
             SerializedProperty secondValueProp)
         {
-            GetOverrideColumnWidths(out var categoryWidth, out var itemLabelWidth, out var valueWidth);
-
-            using (new EditorGUILayout.HorizontalScope())
-            {
-                DrawCategoryColumn(enabledProp, groupLabel, showToggle: true, categoryWidth);
-                using (new EditorGUI.DisabledScope(!enabledProp.boolValue))
-                {
-                    DrawTwoColumnPropertyRow(firstLabel, firstValueProp, itemLabelWidth, valueWidth);
-                }
-            }
-
+            var firstRowRect = EditorGUILayout.GetControlRect();
+            GetOverrideColumnRects(firstRowRect, out var firstCategoryRect, out var firstItemLabelRect, out var firstValueRect);
+            DrawCategoryColumn(firstCategoryRect, enabledProp, groupLabel, showToggle: true);
             using (new EditorGUI.DisabledScope(!enabledProp.boolValue))
-            using (new EditorGUILayout.HorizontalScope())
             {
-                DrawCategoryColumn(enabledProp, string.Empty, showToggle: false, categoryWidth);
-                DrawTwoColumnPropertyRow(secondLabel, secondValueProp, itemLabelWidth, valueWidth);
+                DrawTwoColumnPropertyRow(firstItemLabelRect, firstValueRect, firstLabel, firstValueProp);
+            }
+
+            var secondRowRect = EditorGUILayout.GetControlRect();
+            GetOverrideColumnRects(secondRowRect, out var secondCategoryRect, out var secondItemLabelRect, out var secondValueRect);
+            DrawCategoryColumn(secondCategoryRect, enabledProp, string.Empty, showToggle: false);
+            using (new EditorGUI.DisabledScope(!enabledProp.boolValue))
+            {
+                DrawTwoColumnPropertyRow(secondItemLabelRect, secondValueRect, secondLabel, secondValueProp);
             }
         }
 
-        private static void DrawCategoryColumn(SerializedProperty enabledProp, string label, bool showToggle, float width)
+        private static void DrawCategoryColumn(Rect categoryRect, SerializedProperty enabledProp, string label, bool showToggle)
         {
-            using (new EditorGUILayout.HorizontalScope(GUILayout.Width(width)))
+            var toggleRect = new Rect(categoryRect.x, categoryRect.y, 18f, categoryRect.height);
+            var labelRect = new Rect(categoryRect.x + 22f, categoryRect.y, Mathf.Max(0f, categoryRect.width - 22f), categoryRect.height);
+
+            if (showToggle)
             {
-                if (showToggle)
-                {
-                    enabledProp.boolValue = EditorGUILayout.Toggle(enabledProp.boolValue, GUILayout.Width(18f));
-                }
-                else
-                {
-                    EditorGUILayout.LabelField(GUIContent.none, GUILayout.Width(18f));
-                }
-
-                EditorGUILayout.LabelField(label);
+                enabledProp.boolValue = EditorGUI.Toggle(toggleRect, enabledProp.boolValue);
             }
+            EditorGUI.LabelField(labelRect, label);
         }
 
-        private static void DrawTwoColumnPropertyRow(string label, SerializedProperty valueProp, float itemLabelWidth, float valueWidth)
+        private static void DrawTwoColumnPropertyRow(Rect itemLabelRect, Rect valueRect, string label, SerializedProperty valueProp)
         {
-            EditorGUILayout.LabelField(label, GUILayout.Width(itemLabelWidth));
-            EditorGUILayout.PropertyField(valueProp, GUIContent.none, GUILayout.Width(valueWidth));
+            EditorGUI.LabelField(itemLabelRect, label);
+            EditorGUI.PropertyField(valueRect, valueProp, GUIContent.none);
         }
 
-        private static void GetOverrideColumnWidths(out float categoryWidth, out float itemLabelWidth, out float valueWidth)
+        private static void GetOverrideColumnRects(
+            Rect rowRect,
+            out Rect categoryRect,
+            out Rect itemLabelRect,
+            out Rect valueRect)
         {
-            // Inspector 内で見た目が崩れないよう余白を差し引いたうえで 1:1:2 に分配する。
-            var usableWidth = Mathf.Max(320f, EditorGUIUtility.currentViewWidth - 50f);
-            var unit = usableWidth / 4f;
-            categoryWidth = unit;
-            itemLabelWidth = unit;
-            valueWidth = unit * 2f;
+            var unit = rowRect.width / 4f;
+            categoryRect = new Rect(rowRect.x, rowRect.y, unit, rowRect.height);
+            itemLabelRect = new Rect(categoryRect.xMax, rowRect.y, unit, rowRect.height);
+            valueRect = new Rect(itemLabelRect.xMax, rowRect.y, unit * 2f, rowRect.height);
         }
 
         private bool DrawHairMergeToggle(MToonLilToonComponent component)
