@@ -8,6 +8,9 @@ namespace NdmfMToon10ToLilToon
     [CustomEditor(typeof(MToonLilToonComponent))]
     public sealed class MToonLilToonComponentEditor : Editor
     {
+        private const float OverrideGroupSpacing = 4f;
+        private const float SectionHeadingSpacing = 8f;
+
         private enum Language
         {
             Japanese,
@@ -108,6 +111,8 @@ namespace NdmfMToon10ToLilToon
             var overridesProp = serializedObject.FindProperty(nameof(MToonLilToonComponent.globalOverrides));
             EditorGUILayout.Space();
             EditorGUILayout.LabelField(T("lilToon固有機能の一括設定", "Bulk Settings for lilToon-specific Features"), EditorStyles.boldLabel);
+            EditorGUILayout.PropertyField(overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.outlineZBias)),
+                new GUIContent(T("輪郭線のZ Bias", "Outline Z Bias")));
             EditorGUILayout.PropertyField(overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.shadowReceive)),
                 new GUIContent(T("影を受け取る", "Receive Shadow")));
             DrawOverrideGroup(
@@ -131,15 +136,14 @@ namespace NdmfMToon10ToLilToon
                 overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.distanceFadeColor)),
                 T("強度", "Strength"),
                 overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.distanceFadeStrength)));
-            EditorGUILayout.PropertyField(overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.outlineZBias)),
-                new GUIContent(T("輪郭線のZ Bias", "Outline Z Bias")));
             return EditorGUI.EndChangeCheck();
         }
 
         private void DrawSpecificPartAdjustmentsHeading()
         {
-            EditorGUILayout.Space();
+            EditorGUILayout.Space(SectionHeadingSpacing);
             EditorGUILayout.LabelField(T("特定部位への調整", "Adjustments for Specific Parts"), EditorStyles.boldLabel);
+            EditorGUILayout.Space(2f);
         }
 
         private void DrawOverrideGroup(
@@ -165,6 +169,8 @@ namespace NdmfMToon10ToLilToon
             {
                 DrawTwoColumnPropertyRow(secondItemLabelRect, secondValueRect, secondLabel, secondValueProp);
             }
+
+            EditorGUILayout.Space(OverrideGroupSpacing);
         }
 
         private static void DrawCategoryColumn(Rect categoryRect, SerializedProperty enabledProp, string label, bool showToggle)
@@ -192,9 +198,9 @@ namespace NdmfMToon10ToLilToon
             out Rect valueRect)
         {
             var unit = rowRect.width / 4f;
-            categoryRect = new Rect(rowRect.x, rowRect.y, unit, rowRect.height);
-            itemLabelRect = new Rect(categoryRect.xMax, rowRect.y, unit, rowRect.height);
-            valueRect = new Rect(itemLabelRect.xMax, rowRect.y, unit * 2f, rowRect.height);
+            categoryRect = new Rect(rowRect.x, rowRect.y, unit * 2f, rowRect.height);
+            itemLabelRect = new Rect(categoryRect.xMax, rowRect.y, unit * 2f, rowRect.height);
+            valueRect = new Rect(itemLabelRect.xMax, rowRect.y, unit * 3f, rowRect.height);
         }
 
         private bool DrawHairMergeToggle(MToonLilToonComponent component)
