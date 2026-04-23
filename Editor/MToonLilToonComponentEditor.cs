@@ -8,9 +8,6 @@ namespace NdmfMToon10ToLilToon
     [CustomEditor(typeof(MToonLilToonComponent))]
     public sealed class MToonLilToonComponentEditor : Editor
     {
-        private const float CategoryColumnWidth = 190f;
-        private const float ItemLabelColumnWidth = 140f;
-
         private enum Language
         {
             Japanese,
@@ -34,6 +31,7 @@ namespace NdmfMToon10ToLilToon
 
             DrawPreviewButton(component);
             var globalOverridesChanged = DrawLilToonUserSettings();
+            DrawSpecificPartAdjustmentsHeading();
 
             EditorGUI.BeginChangeCheck();
             var directValueChanged = DrawHairMergeToggle(component);
@@ -138,6 +136,12 @@ namespace NdmfMToon10ToLilToon
             return EditorGUI.EndChangeCheck();
         }
 
+        private void DrawSpecificPartAdjustmentsHeading()
+        {
+            EditorGUILayout.Space();
+            EditorGUILayout.LabelField(T("特定部位への調整", "Adjustments for Specific Parts"), EditorStyles.boldLabel);
+        }
+
         private void DrawOverrideGroup(
             SerializedProperty enabledProp,
             string groupLabel,
@@ -146,26 +150,28 @@ namespace NdmfMToon10ToLilToon
             string secondLabel,
             SerializedProperty secondValueProp)
         {
+            GetOverrideColumnWidths(out var categoryWidth, out var itemLabelWidth, out var valueWidth);
+
             using (new EditorGUILayout.HorizontalScope())
             {
-                DrawCategoryColumn(enabledProp, groupLabel, showToggle: true);
+                DrawCategoryColumn(enabledProp, groupLabel, showToggle: true, categoryWidth);
                 using (new EditorGUI.DisabledScope(!enabledProp.boolValue))
                 {
-                    DrawTwoColumnPropertyRow(firstLabel, firstValueProp);
+                    DrawTwoColumnPropertyRow(firstLabel, firstValueProp, itemLabelWidth, valueWidth);
                 }
             }
 
             using (new EditorGUI.DisabledScope(!enabledProp.boolValue))
             using (new EditorGUILayout.HorizontalScope())
             {
-                DrawCategoryColumn(enabledProp, string.Empty, showToggle: false);
-                DrawTwoColumnPropertyRow(secondLabel, secondValueProp);
+                DrawCategoryColumn(enabledProp, string.Empty, showToggle: false, categoryWidth);
+                DrawTwoColumnPropertyRow(secondLabel, secondValueProp, itemLabelWidth, valueWidth);
             }
         }
 
-        private static void DrawCategoryColumn(SerializedProperty enabledProp, string label, bool showToggle)
+        private static void DrawCategoryColumn(SerializedProperty enabledProp, string label, bool showToggle, float width)
         {
-            using (new EditorGUILayout.HorizontalScope(GUILayout.Width(CategoryColumnWidth)))
+            using (new EditorGUILayout.HorizontalScope(GUILayout.Width(width)))
             {
                 if (showToggle)
                 {
@@ -180,10 +186,20 @@ namespace NdmfMToon10ToLilToon
             }
         }
 
-        private static void DrawTwoColumnPropertyRow(string label, SerializedProperty valueProp)
+        private static void DrawTwoColumnPropertyRow(string label, SerializedProperty valueProp, float itemLabelWidth, float valueWidth)
         {
-            EditorGUILayout.LabelField(label, GUILayout.Width(ItemLabelColumnWidth));
-            EditorGUILayout.PropertyField(valueProp, GUIContent.none);
+            EditorGUILayout.LabelField(label, GUILayout.Width(itemLabelWidth));
+            EditorGUILayout.PropertyField(valueProp, GUIContent.none, GUILayout.Width(valueWidth));
+        }
+
+        private static void GetOverrideColumnWidths(out float categoryWidth, out float itemLabelWidth, out float valueWidth)
+        {
+            // Inspector 内で見た目が崩れないよう余白を差し引いたうえで 1:1:2 に分配する。
+            var usableWidth = Mathf.Max(320f, EditorGUIUtility.currentViewWidth - 50f);
+            var unit = usableWidth / 4f;
+            categoryWidth = unit;
+            itemLabelWidth = unit;
+            valueWidth = unit * 2f;
         }
 
         private bool DrawHairMergeToggle(MToonLilToonComponent component)
