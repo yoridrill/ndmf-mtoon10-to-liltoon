@@ -31,8 +31,13 @@ namespace NdmfMToon10ToLilToon
             serializedObject.Update();
             var component = (MToonLilToonComponent)target;
             var previousPreviewing = MToonLilToonPreviewUtility.IsPreviewing(component);
+            if (EnsureFaceMaterialsDetected(component))
+            {
+                EditorUtility.SetDirty(component);
+            }
 
             DrawPreviewButton(component);
+            DrawSharedFaceMaterialSelector(component);
             var globalOverridesChanged = DrawLilToonUserSettings();
             DrawSpecificPartAdjustmentsHeading();
 
@@ -113,8 +118,13 @@ namespace NdmfMToon10ToLilToon
             EditorGUILayout.LabelField(T("lilToon固有機能の一括設定", "Bulk Settings for lilToon-specific Features"), EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.outlineZBias)),
                 new GUIContent(T("輪郭線のZ Bias", "Outline Z Bias")));
-            EditorGUILayout.PropertyField(overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.shadowReceive)),
-                new GUIContent(T("影を受け取る", "Receive Shadow")));
+            DrawOverrideGroup(
+                overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.enableShadowReceive)),
+                T("影を受け取る", "Receive Shadow"),
+                T("強度", "Strength"),
+                overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.shadowReceive)),
+                T("顔だけ除外する", "Exclude Face Only"),
+                serializedObject.FindProperty(nameof(MToonLilToonComponent.disableShadowReceiveForFace)));
             DrawOverrideGroup(
                 overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.enableShadowBorder)),
                 T("影の境界", "Shadow Border"),
@@ -122,13 +132,15 @@ namespace NdmfMToon10ToLilToon
                 overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.shadowBorderColor)),
                 T("幅", "Width"),
                 overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.shadowBorderStrength)));
-            DrawOverrideGroup(
+            DrawOverrideGroupWithThirdRow(
                 overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.enableBacklight)),
                 T("逆光ライト", "Backlight"),
                 T("色", "Color"),
                 overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.backlightColor)),
                 T("メインカラーの強度", "Main Color Strength"),
-                overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.backlightMainStrength)));
+                overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.backlightMainStrength)),
+                T("顔だけ除外する", "Exclude Face Only"),
+                serializedObject.FindProperty(nameof(MToonLilToonComponent.disableBacklightStrengthForFace)));
             DrawOverrideGroup(
                 overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.enableDistanceFade)),
                 T("距離フェード", "Distance Fade"),
@@ -171,6 +183,60 @@ namespace NdmfMToon10ToLilToon
             }
 
             EditorGUILayout.Space(OverrideGroupSpacing);
+        }
+
+        private void DrawOverrideGroupWithThirdRow(
+            SerializedProperty enabledProp,
+            string groupLabel,
+            string firstLabel,
+            SerializedProperty firstValueProp,
+            string secondLabel,
+            SerializedProperty secondValueProp,
+            string thirdLabel,
+            SerializedProperty thirdValueProp)
+        {
+            DrawOverrideGroup(enabledProp, groupLabel, firstLabel, firstValueProp, secondLabel, secondValueProp, addBottomSpacing: false);
+
+            var thirdRowRect = EditorGUILayout.GetControlRect();
+            GetOverrideColumnRects(thirdRowRect, out var thirdCategoryRect, out var thirdItemLabelRect, out var thirdValueRect);
+            DrawCategoryColumn(thirdCategoryRect, enabledProp, string.Empty, showToggle: false);
+            using (new EditorGUI.DisabledScope(!enabledProp.boolValue))
+            {
+                DrawTwoColumnPropertyRow(thirdItemLabelRect, thirdValueRect, thirdLabel, thirdValueProp);
+            }
+
+            EditorGUILayout.Space(OverrideGroupSpacing);
+        }
+
+        private void DrawOverrideGroup(
+            SerializedProperty enabledProp,
+            string groupLabel,
+            string firstLabel,
+            SerializedProperty firstValueProp,
+            string secondLabel,
+            SerializedProperty secondValueProp,
+            bool addBottomSpacing)
+        {
+            var firstRowRect = EditorGUILayout.GetControlRect();
+            GetOverrideColumnRects(firstRowRect, out var firstCategoryRect, out var firstItemLabelRect, out var firstValueRect);
+            DrawCategoryColumn(firstCategoryRect, enabledProp, groupLabel, showToggle: true);
+            using (new EditorGUI.DisabledScope(!enabledProp.boolValue))
+            {
+                DrawTwoColumnPropertyRow(firstItemLabelRect, firstValueRect, firstLabel, firstValueProp);
+            }
+
+            var secondRowRect = EditorGUILayout.GetControlRect();
+            GetOverrideColumnRects(secondRowRect, out var secondCategoryRect, out var secondItemLabelRect, out var secondValueRect);
+            DrawCategoryColumn(secondCategoryRect, enabledProp, string.Empty, showToggle: false);
+            using (new EditorGUI.DisabledScope(!enabledProp.boolValue))
+            {
+                DrawTwoColumnPropertyRow(secondItemLabelRect, secondValueRect, secondLabel, secondValueProp);
+            }
+
+            if (addBottomSpacing)
+            {
+                EditorGUILayout.Space(OverrideGroupSpacing);
+            }
         }
 
         private static void DrawCategoryColumn(Rect categoryRect, SerializedProperty enabledProp, string label, bool showToggle)
@@ -244,7 +310,6 @@ namespace NdmfMToon10ToLilToon
                 {
                     using (new EditorGUI.IndentLevelScope())
                     {
-                        changed |= DrawFakeShadowFaceMaterialSelector(component);
                         EditorGUILayout.PropertyField(serializedObject.FindProperty(nameof(MToonLilToonComponent.fakeShadowDirection)),
                             new GUIContent(T("向き", "Direction")));
                         EditorGUILayout.PropertyField(serializedObject.FindProperty(nameof(MToonLilToonComponent.fakeShadowOffset)),
@@ -267,63 +332,10 @@ namespace NdmfMToon10ToLilToon
 
             using (new EditorGUI.IndentLevelScope())
             {
-                changed |= DrawFaceShadowFaceMaterialSelector(component);
                 DrawFaceShadowSdfTextureField(component);
-                EditorGUILayout.PropertyField(
-                    serializedObject.FindProperty(nameof(MToonLilToonComponent.disableShadowReceiveForFace)),
-                    new GUIContent(T("影を受け取るを顔だけ0にする", "Set Receive Shadow to 0 (Face Only)")));
-                EditorGUILayout.PropertyField(
-                    serializedObject.FindProperty(nameof(MToonLilToonComponent.disableBacklightStrengthForFace)),
-                    new GUIContent(T("逆光ライトの強度を顔だけ0にする", "Set Backlight Strength to 0 (Face Only)")));
             }
 
             return changed;
-        }
-
-        private bool DrawFakeShadowFaceMaterialSelector(MToonLilToonComponent component)
-        {
-            var candidates = GetRendererMaterials(component);
-            if (candidates.Count == 0) return false;
-
-            if (component.fakeShadowFaceMaterial == null || !candidates.Contains(component.fakeShadowFaceMaterial))
-            {
-                component.fakeShadowFaceMaterial = DetectDefaultFaceMaterial(candidates);
-            }
-
-            var labels = new[] { T("未設定", "None") }.Concat(candidates.Select(m => m != null ? m.name : "(null)")).ToArray();
-            var currentIndex = component.fakeShadowFaceMaterial != null
-                ? candidates.IndexOf(component.fakeShadowFaceMaterial) + 1
-                : 0;
-
-            var nextIndex = EditorGUILayout.Popup(T("顔マテリアル", "Face Material"), currentIndex, labels);
-            var nextMaterial = nextIndex <= 0 ? null : candidates[nextIndex - 1];
-            if (nextMaterial == component.fakeShadowFaceMaterial) return false;
-
-            component.fakeShadowFaceMaterial = nextMaterial;
-            return true;
-        }
-
-        private bool DrawFaceShadowFaceMaterialSelector(MToonLilToonComponent component)
-        {
-            var candidates = GetRendererMaterials(component);
-            if (candidates.Count == 0) return false;
-
-            if (component.faceShadowFaceMaterial == null || !candidates.Contains(component.faceShadowFaceMaterial))
-            {
-                component.faceShadowFaceMaterial = DetectDefaultFaceMaterial(candidates);
-            }
-
-            var labels = new[] { T("未設定", "None") }.Concat(candidates.Select(m => m != null ? m.name : "(null)")).ToArray();
-            var currentIndex = component.faceShadowFaceMaterial != null
-                ? candidates.IndexOf(component.faceShadowFaceMaterial) + 1
-                : 0;
-
-            var nextIndex = EditorGUILayout.Popup(T("顔マテリアル", "Face Material"), currentIndex, labels);
-            var nextMaterial = nextIndex <= 0 ? null : candidates[nextIndex - 1];
-            if (nextMaterial == component.faceShadowFaceMaterial) return false;
-
-            component.faceShadowFaceMaterial = nextMaterial;
-            return true;
         }
 
         private void DrawFaceShadowSdfTextureField(MToonLilToonComponent component)
@@ -369,28 +381,34 @@ namespace NdmfMToon10ToLilToon
                 ScanMaterials(component);
             }
 
-            EditorGUILayout.Space();
-            EditorGUILayout.LabelField(T("結合対象マテリアル", "Materials to Merge"), EditorStyles.boldLabel);
-            EditorGUILayout.HelpBox(T("チェックを入れたマテリアルは結合されます。", "Checked materials will be merged."), MessageType.Info);
-
-            if (component.hairSelections == null || component.hairSelections.Count == 0)
-            {
-                EditorGUILayout.HelpBox(T("まだスキャンされていません。", "No materials scanned yet."), MessageType.Info);
-                return false;
-            }
-
             var changed = false;
-            foreach (var entry in component.hairSelections)
+            using (new EditorGUI.IndentLevelScope())
             {
-                using (new EditorGUILayout.HorizontalScope())
+                component.showHairMaterials = EditorGUILayout.Foldout(
+                    component.showHairMaterials,
+                    T("対象マテリアル", "Target Materials"),
+                    true);
+                if (!component.showHairMaterials) return false;
+
+                EditorGUILayout.HelpBox(T("チェックを入れたマテリアルは結合されます。", "Checked materials will be merged."), MessageType.Info);
+                if (component.hairSelections == null || component.hairSelections.Count == 0)
                 {
-                    var nextSelected = EditorGUILayout.Toggle(entry.selected, GUILayout.Width(20));
-                    if (nextSelected != entry.selected)
+                    EditorGUILayout.HelpBox(T("まだスキャンされていません。", "No materials scanned yet."), MessageType.Info);
+                    return false;
+                }
+
+                foreach (var entry in component.hairSelections)
+                {
+                    using (new EditorGUILayout.HorizontalScope())
                     {
-                        entry.selected = nextSelected;
-                        changed = true;
+                        var nextSelected = EditorGUILayout.Toggle(entry.selected, GUILayout.Width(20));
+                        if (nextSelected != entry.selected)
+                        {
+                            entry.selected = nextSelected;
+                            changed = true;
+                        }
+                        EditorGUILayout.ObjectField(entry.material, typeof(Material), false);
                     }
-                    EditorGUILayout.ObjectField(entry.material, typeof(Material), false);
                 }
             }
 
@@ -458,15 +476,7 @@ namespace NdmfMToon10ToLilToon
             component.hairSelections = HairMaterialSelector.BuildDefaultSelections(
                 scannedMaterials.Where(m => m != null && MToonDetector.IsMToonLike(m)));
 
-            if (component.fakeShadowFaceMaterial == null || !scannedMaterials.Contains(component.fakeShadowFaceMaterial))
-            {
-                component.fakeShadowFaceMaterial = DetectDefaultFaceMaterial(scannedMaterials);
-            }
-
-            if (component.faceShadowFaceMaterial == null || !scannedMaterials.Contains(component.faceShadowFaceMaterial))
-            {
-                component.faceShadowFaceMaterial = DetectDefaultFaceMaterial(scannedMaterials);
-            }
+            EnsureFaceMaterialsDetected(component, scannedMaterials);
 
             if (component.faceShadowSdfTexture == null)
             {
@@ -540,6 +550,51 @@ namespace NdmfMToon10ToLilToon
         private string T(string ja, string en)
         {
             return _language == Language.Japanese ? ja : en;
+        }
+
+        private void DrawSharedFaceMaterialSelector(MToonLilToonComponent component)
+        {
+            var candidates = GetRendererMaterials(component);
+            if (candidates.Count == 0) return;
+
+            var labels = new[] { T("未設定", "None") }.Concat(candidates.Select(m => m != null ? m.name : "(null)")).ToArray();
+            var currentFaceMaterial = component.faceShadowFaceMaterial;
+            var currentIndex = currentFaceMaterial != null ? candidates.IndexOf(currentFaceMaterial) + 1 : 0;
+
+            EditorGUI.BeginChangeCheck();
+            var nextIndex = EditorGUILayout.Popup(T("顔マテリアル", "Face Material"), currentIndex, labels);
+            if (!EditorGUI.EndChangeCheck()) return;
+
+            var nextMaterial = nextIndex <= 0 ? null : candidates[nextIndex - 1];
+            component.faceShadowFaceMaterial = nextMaterial;
+            component.fakeShadowFaceMaterial = nextMaterial;
+            EditorUtility.SetDirty(component);
+        }
+
+        private static bool EnsureFaceMaterialsDetected(MToonLilToonComponent component)
+        {
+            return EnsureFaceMaterialsDetected(component, GetRendererMaterials(component));
+        }
+
+        private static bool EnsureFaceMaterialsDetected(MToonLilToonComponent component, IReadOnlyList<Material> scannedMaterials)
+        {
+            if (component == null || scannedMaterials == null || scannedMaterials.Count == 0) return false;
+
+            var changed = false;
+            var defaultFaceMaterial = DetectDefaultFaceMaterial(scannedMaterials);
+            if (component.faceShadowFaceMaterial == null || !scannedMaterials.Contains(component.faceShadowFaceMaterial))
+            {
+                component.faceShadowFaceMaterial = defaultFaceMaterial;
+                changed = true;
+            }
+
+            if (component.fakeShadowFaceMaterial == null || !scannedMaterials.Contains(component.fakeShadowFaceMaterial))
+            {
+                component.fakeShadowFaceMaterial = component.faceShadowFaceMaterial;
+                changed = true;
+            }
+
+            return changed;
         }
 
         private static void DrawLeftToggle(SerializedProperty boolProperty, string label)

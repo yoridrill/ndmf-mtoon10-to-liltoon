@@ -17,6 +17,7 @@ namespace NdmfMToon10ToLilToon
     [Serializable]
     public sealed class LilToonGlobalOverrides
     {
+        public bool enableShadowReceive = true;
         [Range(0f, 1f)] public float shadowReceive = 0.5f;
         public bool enableShadowBorder = true;
         public Color shadowBorderColor = new(1f, 25f / 255f, 0f, 1f);
@@ -470,7 +471,10 @@ namespace NdmfMToon10ToLilToon
         public static void ApplyGlobalOverridesToMaterial(Material material, LilToonGlobalOverrides overrides)
         {
             if (overrides == null) return;
-            SetIfExists(material, "_ShadowReceive", overrides.shadowReceive);
+            if (overrides.enableShadowReceive)
+            {
+                SetIfExists(material, "_ShadowReceive", overrides.shadowReceive);
+            }
 
             if (overrides.enableShadowBorder)
             {
