@@ -197,7 +197,7 @@ namespace NdmfMToon10ToLilToon
             out Rect itemLabelRect,
             out Rect valueRect)
         {
-            var unit = rowRect.width / 4f;
+            var unit = rowRect.width / 7f;
             categoryRect = new Rect(rowRect.x, rowRect.y, unit * 2f, rowRect.height);
             itemLabelRect = new Rect(categoryRect.xMax, rowRect.y, unit * 2f, rowRect.height);
             valueRect = new Rect(itemLabelRect.xMax, rowRect.y, unit * 3f, rowRect.height);
