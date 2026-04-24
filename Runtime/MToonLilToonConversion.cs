@@ -477,7 +477,7 @@ namespace NdmfMToon10ToLilToon
             }
             else
             {
-                SetIfExists(material, "_ShadowReceive", 1f);
+                SetIfExists(material, "_ShadowReceive", 0f);
             }
 
             if (overrides.enableShadowBorder)
