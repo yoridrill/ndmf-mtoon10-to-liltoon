@@ -403,16 +403,18 @@ namespace NdmfMToon10ToLilToon
                     var selectedProp = entryProp.FindPropertyRelative(nameof(HairMaterialSelection.selected));
                     if (selectedProp == null || materialProp == null) continue;
 
-                    using (new EditorGUILayout.HorizontalScope())
+                    var rowRect = EditorGUILayout.GetControlRect();
+                    var toggleRect = new Rect(rowRect.x, rowRect.y, 18f, rowRect.height);
+                    var materialRect = new Rect(rowRect.x + 22f, rowRect.y, Mathf.Max(0f, rowRect.width - 22f), rowRect.height);
+
+                    var nextSelected = EditorGUI.Toggle(toggleRect, selectedProp.boolValue);
+                    if (nextSelected != selectedProp.boolValue)
                     {
-                        var nextSelected = EditorGUILayout.Toggle(selectedProp.boolValue, GUILayout.Width(20));
-                        if (nextSelected != selectedProp.boolValue)
-                        {
-                            selectedProp.boolValue = nextSelected;
-                            changed = true;
-                        }
-                        EditorGUILayout.PropertyField(materialProp, GUIContent.none);
+                        selectedProp.boolValue = nextSelected;
+                        changed = true;
                     }
+
+                    EditorGUI.ObjectField(materialRect, materialProp, typeof(Material), GUIContent.none);
                 }
             }
 
