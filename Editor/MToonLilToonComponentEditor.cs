@@ -11,6 +11,8 @@ namespace NdmfMToon10ToLilToon
         private const float OverrideGroupSpacing = 4f;
         private const float SectionHeadingSpacing = 8f;
 
+        private List<Material> _cachedRendererMaterials;
+
         private enum Language
         {
             Japanese,
@@ -25,6 +27,7 @@ namespace NdmfMToon10ToLilToon
         {
             _language = (Language)EditorPrefs.GetInt(PrefKeyLanguage, 0);
             var component = (MToonLilToonComponent)target;
+            _cachedRendererMaterials = GetRendererMaterials(component);
             if (EnsureFaceMaterialsDetected(component))
             {
                 EditorUtility.SetDirty(component);
@@ -36,6 +39,7 @@ namespace NdmfMToon10ToLilToon
             serializedObject.Update();
             var component = (MToonLilToonComponent)target;
             var previousPreviewing = MToonLilToonPreviewUtility.IsPreviewing(component);
+            _cachedRendererMaterials ??= GetRendererMaterials(component);
 
             DrawPreviewButton(component);
             EditorGUILayout.Space(4f);
@@ -61,6 +65,7 @@ namespace NdmfMToon10ToLilToon
             if (requestHairScan)
             {
                 ScanMaterials(component);
+                _cachedRendererMaterials = GetRendererMaterials(component);
                 EditorUtility.SetDirty(component);
                 directValueChanged = true;
             }
@@ -344,7 +349,7 @@ namespace NdmfMToon10ToLilToon
 
         private bool DrawEyebrowStencilMaterialSelector(MToonLilToonComponent component)
         {
-            var candidates = GetRendererMaterials(component);
+            var candidates = _cachedRendererMaterials ?? GetRendererMaterials(component);
             if (candidates.Count == 0) return false;
 
             if (component.eyebrowStencilMaterial == null || !candidates.Contains(component.eyebrowStencilMaterial))
@@ -539,7 +544,7 @@ namespace NdmfMToon10ToLilToon
 
         private void DrawSharedFaceMaterialSelector(MToonLilToonComponent component)
         {
-            var candidates = GetRendererMaterials(component);
+            var candidates = _cachedRendererMaterials ?? GetRendererMaterials(component);
             if (candidates.Count == 0) return;
 
             var labels = new[] { T("未設定", "None") }.Concat(candidates.Select(m => m != null ? m.name : "(null)")).ToArray();
