@@ -53,7 +53,7 @@ namespace NdmfMToon10ToLilToon
             DrawSpecificPartAdjustmentsHeading();
 
             EditorGUI.BeginChangeCheck();
-            var directValueChanged = DrawHairMergeToggle(component);
+            var directValueChanged = DrawHairMergeToggle(component, out var requestHairScan);
             var hairSettingsChanged = EditorGUI.EndChangeCheck();
 
             directValueChanged |= DrawHairSelections(component);
@@ -67,6 +67,12 @@ namespace NdmfMToon10ToLilToon
             var advancedSettingsChanged = EditorGUI.EndChangeCheck();
 
             var serializedChanged = serializedObject.ApplyModifiedProperties();
+            if (requestHairScan)
+            {
+                ScanMaterials(component);
+                EditorUtility.SetDirty(component);
+                directValueChanged = true;
+            }
             if (directValueChanged)
             {
                 EditorUtility.SetDirty(component);
@@ -264,8 +270,9 @@ namespace NdmfMToon10ToLilToon
             valueRect = new Rect(itemLabelRect.xMax, rowRect.y, unit * 3f, rowRect.height);
         }
 
-        private bool DrawHairMergeToggle(MToonLilToonComponent component)
+        private bool DrawHairMergeToggle(MToonLilToonComponent component, out bool requestHairScan)
         {
+            requestHairScan = false;
             var changed = false;
             var enableHairMergeProp = serializedObject.FindProperty(nameof(MToonLilToonComponent.enableHairMerge));
             EditorGUI.BeginChangeCheck();
@@ -276,7 +283,7 @@ namespace NdmfMToon10ToLilToon
                 changed = true;
                 if (enableHairMergeProp.boolValue)
                 {
-                    ScanMaterials(component);
+                    requestHairScan = true;
                 }
                 else
                 {
