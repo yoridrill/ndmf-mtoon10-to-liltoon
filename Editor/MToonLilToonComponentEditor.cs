@@ -361,7 +361,7 @@ namespace NdmfMToon10ToLilToon
         {
             if (!component.enableHairMerge) return false;
 
-            if (component.hairSelections == null || component.hairSelections.Count == 0 || HasExternalHairSelectionReference(component))
+            if (component.hairSelections == null || component.hairSelections.Count == 0)
             {
                 ScanMaterials(component);
             }
@@ -369,6 +369,21 @@ namespace NdmfMToon10ToLilToon
             var changed = false;
             using (new EditorGUI.IndentLevelScope())
             {
+                var hasExternalReferences = HasExternalHairSelectionReference(component);
+                if (hasExternalReferences)
+                {
+                    EditorGUILayout.HelpBox(
+                        T(
+                            "現在のモデル構成と選択リストに差分があります。必要なら再スキャンしてください。",
+                            "The current model materials differ from the saved selection list. Re-scan if needed."),
+                        MessageType.Warning);
+                    if (GUILayout.Button(T("マテリアルを再スキャン", "Re-scan Materials")))
+                    {
+                        ScanMaterials(component);
+                        changed = true;
+                    }
+                }
+
                 EditorGUILayout.HelpBox(
                     T(
                         "この機能が有効な場合は髪マテリアルを結合します。\n結合されたくないマテリアルは対象から外してください。",
