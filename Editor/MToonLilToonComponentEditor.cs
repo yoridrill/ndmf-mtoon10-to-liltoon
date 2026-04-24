@@ -378,6 +378,7 @@ namespace NdmfMToon10ToLilToon
         {
             if (!component.enableHairMerge) return false;
 
+            var hairSelectionsProp = serializedObject.FindProperty(nameof(MToonLilToonComponent.hairSelections));
             var changed = false;
             using (new EditorGUI.IndentLevelScope())
             {
@@ -392,23 +393,29 @@ namespace NdmfMToon10ToLilToon
                     true);
                 if (!component.showHairMaterials) return false;
 
-                if (component.hairSelections == null || component.hairSelections.Count == 0)
+                if (hairSelectionsProp == null || hairSelectionsProp.arraySize == 0)
                 {
                     EditorGUILayout.HelpBox(T("まだスキャンされていません。", "No materials scanned yet."), MessageType.Info);
                     return false;
                 }
 
-                foreach (var entry in component.hairSelections)
+                for (var i = 0; i < hairSelectionsProp.arraySize; i++)
                 {
+                    var entryProp = hairSelectionsProp.GetArrayElementAtIndex(i);
+                    if (entryProp == null) continue;
+                    var materialProp = entryProp.FindPropertyRelative(nameof(HairMaterialSelection.material));
+                    var selectedProp = entryProp.FindPropertyRelative(nameof(HairMaterialSelection.selected));
+                    if (selectedProp == null || materialProp == null) continue;
+
                     using (new EditorGUILayout.HorizontalScope())
                     {
-                        var nextSelected = EditorGUILayout.Toggle(entry.selected, GUILayout.Width(20));
-                        if (nextSelected != entry.selected)
+                        var nextSelected = EditorGUILayout.Toggle(selectedProp.boolValue, GUILayout.Width(20));
+                        if (nextSelected != selectedProp.boolValue)
                         {
-                            entry.selected = nextSelected;
+                            selectedProp.boolValue = nextSelected;
                             changed = true;
                         }
-                        EditorGUILayout.ObjectField(entry.material, typeof(Material), false);
+                        EditorGUILayout.PropertyField(materialProp, GUIContent.none);
                     }
                 }
             }
