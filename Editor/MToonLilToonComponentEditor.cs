@@ -34,6 +34,10 @@ namespace NdmfMToon10ToLilToon
                 ScanMaterials(component);
                 EditorUtility.SetDirty(component);
             }
+            if (EnsureFaceMaterialsDetected(component))
+            {
+                EditorUtility.SetDirty(component);
+            }
         }
 
         public override void OnInspectorGUI()
@@ -41,10 +45,6 @@ namespace NdmfMToon10ToLilToon
             serializedObject.Update();
             var component = (MToonLilToonComponent)target;
             var previousPreviewing = MToonLilToonPreviewUtility.IsPreviewing(component);
-            if (EnsureFaceMaterialsDetected(component))
-            {
-                EditorUtility.SetDirty(component);
-            }
 
             DrawPreviewButton(component);
             EditorGUILayout.Space(4f);
