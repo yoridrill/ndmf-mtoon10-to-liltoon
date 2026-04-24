@@ -365,7 +365,7 @@ namespace NdmfMToon10ToLilToon
                 ? candidates.IndexOf(component.eyebrowStencilMaterial) + 1
                 : 0;
 
-            var nextIndex = EditorGUILayout.Popup(T("対象マテリアル", "Target Material"), currentIndex, labels);
+            var nextIndex = EditorGUILayout.Popup(T("眉マテリアル", "Eyebrow Material"), currentIndex, labels);
             var nextMaterial = nextIndex <= 0 ? null : candidates[nextIndex - 1];
             if (nextMaterial == component.eyebrowStencilMaterial) return false;
 
@@ -449,6 +449,7 @@ namespace NdmfMToon10ToLilToon
                 EditorGUILayout.PropertyField(
                     serializedObject.FindProperty(nameof(MToonLilToonComponent.verboseLog)),
                     new GUIContent("Verbose Log"));
+                EditorGUILayout.Space(4f);
 
                 var rawButtonRect = EditorGUILayout.GetControlRect(false, EditorGUIUtility.singleLineHeight);
                 var buttonRect = EditorGUI.IndentedRect(rawButtonRect);
