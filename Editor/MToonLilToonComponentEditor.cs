@@ -167,23 +167,7 @@ namespace NdmfMToon10ToLilToon
             string secondLabel,
             SerializedProperty secondValueProp)
         {
-            var firstRowRect = EditorGUILayout.GetControlRect();
-            GetOverrideColumnRects(firstRowRect, out var firstCategoryRect, out var firstItemLabelRect, out var firstValueRect);
-            DrawCategoryColumn(firstCategoryRect, enabledProp, groupLabel, showToggle: true);
-            using (new EditorGUI.DisabledScope(!enabledProp.boolValue))
-            {
-                DrawTwoColumnPropertyRow(firstItemLabelRect, firstValueRect, firstLabel, firstValueProp);
-            }
-
-            var secondRowRect = EditorGUILayout.GetControlRect();
-            GetOverrideColumnRects(secondRowRect, out var secondCategoryRect, out var secondItemLabelRect, out var secondValueRect);
-            DrawCategoryColumn(secondCategoryRect, enabledProp, string.Empty, showToggle: false);
-            using (new EditorGUI.DisabledScope(!enabledProp.boolValue))
-            {
-                DrawTwoColumnPropertyRow(secondItemLabelRect, secondValueRect, secondLabel, secondValueProp);
-            }
-
-            EditorGUILayout.Space(OverrideGroupSpacing);
+            DrawOverrideGroup(enabledProp, groupLabel, firstLabel, firstValueProp, secondLabel, secondValueProp, addBottomSpacing: true);
         }
 
         private void DrawOverrideGroupWithThirdRow(
