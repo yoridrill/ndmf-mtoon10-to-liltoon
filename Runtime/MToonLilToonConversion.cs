@@ -475,17 +475,31 @@ namespace NdmfMToon10ToLilToon
             {
                 SetIfExists(material, "_ShadowReceive", overrides.shadowReceive);
             }
+            else
+            {
+                SetIfExists(material, "_ShadowReceive", 1f);
+            }
 
             if (overrides.enableShadowBorder)
             {
                 SetIfExists(material, "_ShadowBorderColor", overrides.shadowBorderColor);
                 SetIfExists(material, "_ShadowBorderRange", overrides.shadowBorderStrength);
             }
+            else
+            {
+                SetIfExists(material, "_ShadowBorderColor", Color.black);
+                SetIfExists(material, "_ShadowBorderRange", 0f);
+            }
 
             if (overrides.enableDistanceFade)
             {
                 SetIfExists(material, "_DistanceFadeColor", overrides.distanceFadeColor);
                 SetVectorComponentIfExists(material, "_DistanceFade", 2, overrides.distanceFadeStrength);
+            }
+            else
+            {
+                SetIfExists(material, "_DistanceFadeColor", Color.black);
+                SetVectorComponentIfExists(material, "_DistanceFade", 2, 0f);
             }
 
             var useBacklight = overrides.enableBacklight;
