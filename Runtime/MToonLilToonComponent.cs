@@ -7,6 +7,13 @@ namespace NdmfMToon10ToLilToon
     [AddComponentMenu("NDMF/NDMF MToon10 to lilToon")]
     public sealed class MToonLilToonComponent : MonoBehaviour
     {
+        public enum FaceShadowMaskType
+        {
+            Strength = 1,
+            Flat = 0,
+            Sdf = 2
+        }
+
         public Shader lilToonShader;
         public bool enableHairMerge;
         public List<HairMaterialSelection> hairSelections = new();
@@ -19,6 +26,8 @@ namespace NdmfMToon10ToLilToon
         public bool enableFaceShadowTuning;
         public Material faceShadowFaceMaterial;
         public Texture2D faceShadowSdfTexture;
+        public FaceShadowMaskType faceShadowMaskType = FaceShadowMaskType.Flat;
+        public float shadowStrengthMaskLod;
         public bool disableShadowReceiveForFace;
         public bool disableBacklightStrengthForFace;
         public LilToonGlobalOverrides globalOverrides = new();

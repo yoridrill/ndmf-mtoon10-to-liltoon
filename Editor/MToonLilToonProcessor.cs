@@ -142,6 +142,8 @@ namespace NdmfMToon10ToLilToon
                 ApplyFaceShadowSdfSettings(
                     resolvedFaceShadowMaterial,
                     component.faceShadowSdfTexture,
+                    component.faceShadowMaskType,
+                    component.shadowStrengthMaskLod,
                     component.disableShadowReceiveForFace,
                     component.disableBacklightStrengthForFace);
             }
@@ -647,14 +649,24 @@ namespace NdmfMToon10ToLilToon
         private static void ApplyFaceShadowSdfSettings(
             Material faceMaterial,
             Texture sdfTexture,
+            MToonLilToonComponent.FaceShadowMaskType maskType,
+            float shadowStrengthMaskLod,
             bool disableShadowReceiveForFace,
             bool disableBacklightStrengthForFace)
         {
             if (faceMaterial == null) return;
 
             SetFloatIfAnyExists(faceMaterial, new[] { "_UseShadowMask", "_UseShadowStrengthMask" }, 1f);
-            SetFloatIfAnyExists(faceMaterial, new[] { "_ShadowMaskType" }, 2f);
+            var shadowMaskTypeValue = maskType switch
+            {
+                MToonLilToonComponent.FaceShadowMaskType.Strength => 0f,
+                MToonLilToonComponent.FaceShadowMaskType.Flat => 1f,
+                MToonLilToonComponent.FaceShadowMaskType.Sdf => 2f,
+                _ => 1f
+            };
+            SetFloatIfAnyExists(faceMaterial, new[] { "_ShadowMaskType" }, shadowMaskTypeValue);
             SetTextureIfAnyExists(faceMaterial, new[] { "_ShadowStrengthMask" }, sdfTexture);
+            SetFloatIfAnyExists(faceMaterial, new[] { "_ShadowStrengthMaskLOD" }, shadowStrengthMaskLod);
 
             if (disableShadowReceiveForFace)
             {

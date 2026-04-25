@@ -23,7 +23,7 @@ namespace NdmfMToon10ToLilToon
         }
 
         private const string PrefKeyLanguage = "MToonLilToonComponentEditor.Language";
-        private const string DefaultFaceShadowSdfTextureGuid = "27ce95861122c4390a22413b48ea1e34";
+        private const string DefaultFaceShadowMaskTextureGuid = "68acac0df33c74d6ba68772c4685986f";
         private Language _language;
 
         private void OnEnable()
@@ -343,21 +343,27 @@ namespace NdmfMToon10ToLilToon
 
             using (new EditorGUI.IndentLevelScope())
             {
-                DrawFaceShadowSdfTextureField(component);
+                DrawFaceShadowMaskSettings(component);
             }
 
             return changed;
         }
 
-        private void DrawFaceShadowSdfTextureField(MToonLilToonComponent component)
+        private void DrawFaceShadowMaskSettings(MToonLilToonComponent component)
         {
             if (component.faceShadowSdfTexture == null)
             {
-                component.faceShadowSdfTexture = LoadDefaultFaceShadowSdfTexture();
+                component.faceShadowSdfTexture = LoadDefaultFaceShadowMaskTexture();
             }
 
+            var maskTypeProperty = serializedObject.FindProperty(nameof(MToonLilToonComponent.faceShadowMaskType));
+            EditorGUILayout.PropertyField(maskTypeProperty, new GUIContent(T("マスクタイプ", "Mask Type")));
+
             var textureProperty = serializedObject.FindProperty(nameof(MToonLilToonComponent.faceShadowSdfTexture));
-            EditorGUILayout.PropertyField(textureProperty, new GUIContent(T("SDFテクスチャ", "SDF Texture")));
+            EditorGUILayout.PropertyField(textureProperty, new GUIContent(T("マスク", "Mask")));
+            EditorGUILayout.PropertyField(
+                serializedObject.FindProperty(nameof(MToonLilToonComponent.shadowStrengthMaskLod)),
+                new GUIContent(T("LOD", "LOD")));
         }
 
         private bool DrawEyebrowStencilMaterialSelector(MToonLilToonComponent component)
@@ -511,7 +517,7 @@ namespace NdmfMToon10ToLilToon
 
             if (component.faceShadowSdfTexture == null)
             {
-                component.faceShadowSdfTexture = LoadDefaultFaceShadowSdfTexture();
+                component.faceShadowSdfTexture = LoadDefaultFaceShadowMaskTexture();
             }
 
             if (component.eyebrowStencilMaterial == null || !scannedMaterials.Contains(component.eyebrowStencilMaterial))
@@ -546,15 +552,15 @@ namespace NdmfMToon10ToLilToon
             return materials.FirstOrDefault();
         }
 
-        private static Texture2D LoadDefaultFaceShadowSdfTexture()
+        private static Texture2D LoadDefaultFaceShadowMaskTexture()
         {
-            var texturePath = AssetDatabase.GUIDToAssetPath(DefaultFaceShadowSdfTextureGuid);
+            var texturePath = AssetDatabase.GUIDToAssetPath(DefaultFaceShadowMaskTextureGuid);
             var texture = !string.IsNullOrEmpty(texturePath)
                 ? AssetDatabase.LoadAssetAtPath<Texture2D>(texturePath)
                 : null;
             if (texture != null) return texture;
 
-            var guids = AssetDatabase.FindAssets("VRoidFaceShadowSDF t:Texture2D");
+            var guids = AssetDatabase.FindAssets("VRoidFaceShadowFlat t:Texture2D");
             for (var i = 0; i < guids.Length; i++)
             {
                 var path = AssetDatabase.GUIDToAssetPath(guids[i]);
