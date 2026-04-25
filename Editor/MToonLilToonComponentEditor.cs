@@ -10,6 +10,9 @@ namespace NdmfMToon10ToLilToon
     {
         private const float OverrideGroupSpacing = 4f;
         private const float SectionHeadingSpacing = 8f;
+        private const float ToggleOnlyWidth = 18f;
+        private const float ToggleWithSpacingWidth = 22f;
+        private const float HairSelectionToggleColumnWidth = 26f;
 
         private List<Material> _cachedRendererMaterials;
 
@@ -28,11 +31,7 @@ namespace NdmfMToon10ToLilToon
             _language = (Language)EditorPrefs.GetInt(PrefKeyLanguage, 0);
             var component = (MToonLilToonComponent)target;
             _cachedRendererMaterials = GetRendererMaterials(component);
-            if (component != null
-                && component.enableHairMerge
-                && (component.hairSelections == null
-                    || component.hairSelections.Count == 0
-                    || HasExternalHairSelectionReference(component, _cachedRendererMaterials)))
+            if (ShouldAutoScanHairSelectionsOnEnable(component, _cachedRendererMaterials))
             {
                 ScanMaterials(component);
                 _cachedRendererMaterials = GetRendererMaterials(component);
@@ -248,8 +247,12 @@ namespace NdmfMToon10ToLilToon
 
         private static void DrawCategoryColumn(Rect categoryRect, SerializedProperty enabledProp, string label, bool showToggle)
         {
-            var toggleRect = new Rect(categoryRect.x, categoryRect.y, 18f, categoryRect.height);
-            var labelRect = new Rect(categoryRect.x + 22f, categoryRect.y, Mathf.Max(0f, categoryRect.width - 22f), categoryRect.height);
+            var toggleRect = new Rect(categoryRect.x, categoryRect.y, ToggleOnlyWidth, categoryRect.height);
+            var labelRect = new Rect(
+                categoryRect.x + ToggleWithSpacingWidth,
+                categoryRect.y,
+                Mathf.Max(0f, categoryRect.width - ToggleWithSpacingWidth),
+                categoryRect.height);
 
             if (showToggle)
             {
@@ -414,9 +417,12 @@ namespace NdmfMToon10ToLilToon
                     if (selectedProp == null || materialProp == null) continue;
 
                     var rowRect = EditorGUILayout.GetControlRect();
-                    const float toggleColumnWidth = 26f;
-                    var toggleRect = new Rect(rowRect.x, rowRect.y, toggleColumnWidth, rowRect.height);
-                    var materialRect = new Rect(rowRect.x + toggleColumnWidth, rowRect.y, Mathf.Max(0f, rowRect.width - toggleColumnWidth), rowRect.height);
+                    var toggleRect = new Rect(rowRect.x, rowRect.y, HairSelectionToggleColumnWidth, rowRect.height);
+                    var materialRect = new Rect(
+                        rowRect.x + HairSelectionToggleColumnWidth,
+                        rowRect.y,
+                        Mathf.Max(0f, rowRect.width - HairSelectionToggleColumnWidth),
+                        rowRect.height);
 
                     var nextSelected = EditorGUI.Toggle(toggleRect, selectedProp.boolValue);
                     if (nextSelected != selectedProp.boolValue)
@@ -480,6 +486,13 @@ namespace NdmfMToon10ToLilToon
             }
 
             return false;
+        }
+
+        private static bool ShouldAutoScanHairSelectionsOnEnable(MToonLilToonComponent component, IReadOnlyCollection<Material> scannedMaterials)
+        {
+            if (component == null || !component.enableHairMerge) return false;
+            if (component.hairSelections == null || component.hairSelections.Count == 0) return true;
+            return HasExternalHairSelectionReference(component, scannedMaterials);
         }
 
         private static void ScanMaterials(MToonLilToonComponent component)
