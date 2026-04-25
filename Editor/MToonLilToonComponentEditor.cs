@@ -52,12 +52,12 @@ namespace NdmfMToon10ToLilToon
 
             DrawPreviewButton(component);
             EditorGUILayout.Space(4f);
-            DrawSharedFaceMaterialSelector(component);
+            var sharedFaceMaterialChanged = DrawSharedFaceMaterialSelector(component);
             var globalOverridesChanged = DrawLilToonUserSettings();
             DrawSpecificPartAdjustmentsHeading();
 
             EditorGUI.BeginChangeCheck();
-            var directValueChanged = DrawHairMergeToggle(component, out var requestHairScan);
+            var directValueChanged = sharedFaceMaterialChanged | DrawHairMergeToggle(component, out var requestHairScan);
             var hairSettingsChanged = EditorGUI.EndChangeCheck();
 
             directValueChanged |= DrawHairSelections(component);
@@ -620,10 +620,10 @@ namespace NdmfMToon10ToLilToon
             return _language == Language.Japanese ? ja : en;
         }
 
-        private void DrawSharedFaceMaterialSelector(MToonLilToonComponent component)
+        private bool DrawSharedFaceMaterialSelector(MToonLilToonComponent component)
         {
             var candidates = _cachedRendererMaterials ?? GetRendererMaterials(component);
-            if (candidates.Count == 0) return;
+            if (candidates.Count == 0) return false;
 
             var labels = new[] { T("未設定", "None") }.Concat(candidates.Select(m => m != null ? m.name : "(null)")).ToArray();
             var currentFaceMaterial = component.faceShadowFaceMaterial;
@@ -631,12 +631,13 @@ namespace NdmfMToon10ToLilToon
 
             EditorGUI.BeginChangeCheck();
             var nextIndex = EditorGUILayout.Popup(T("顔マテリアル", "Face Material"), currentIndex, labels);
-            if (!EditorGUI.EndChangeCheck()) return;
+            if (!EditorGUI.EndChangeCheck()) return false;
 
             var nextMaterial = nextIndex <= 0 ? null : candidates[nextIndex - 1];
             component.faceShadowFaceMaterial = nextMaterial;
             component.fakeShadowFaceMaterial = nextMaterial;
             EditorUtility.SetDirty(component);
+            return true;
         }
 
         private static bool EnsureFaceMaterialsDetected(MToonLilToonComponent component)
