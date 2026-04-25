@@ -646,11 +646,12 @@ namespace NdmfMToon10ToLilToon
             var mode = Mathf.RoundToInt(source.GetFloat("_OutlineWidthMode"));
             var useOutline = mode > 0 ? 1f : 0f;
             var fixWidth = mode == 2 ? 1f : 0f;
-            var vertexR2Width = mode == 1 ? 1f : 0f;
 
             SetIfExists(destination, "_UseOutline", useOutline);
             SetIfExists(destination, "_OutlineFixWidth", fixWidth);
-            SetIfExists(destination, "_OutlineVertexR2Width", vertexR2Width);
+            // 一括変換時は頂点カラー参照を使わない（None）に固定する。
+            // 髪統合メッシュのみ、専用オプション有効時に RGBA へ切り替える。
+            SetIfExists(destination, "_OutlineVertexR2Width", 0f);
         }
 
         private static void ApplyFallback(Material destination, RenderType renderType)
