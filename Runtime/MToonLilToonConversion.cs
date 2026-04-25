@@ -599,11 +599,15 @@ namespace NdmfMToon10ToLilToon
             }
 
             var sourceWidth = 0f;
-            if (source.HasProperty("_OutlineWidthFactor")) sourceWidth = source.GetFloat("_OutlineWidthFactor");
-            else if (source.HasProperty("_OutlineWidth")) sourceWidth = source.GetFloat("_OutlineWidth");
+            if (source.HasProperty("_OutlineWidth")) sourceWidth = source.GetFloat("_OutlineWidth");
+            else if (source.HasProperty("_OutlineWidthFactor")) sourceWidth = source.GetFloat("_OutlineWidthFactor");
 
-            // MToon と lilToon で輪郭線の幅スケールが大きく異なるため補正する。
-            SetIfExists(destination, "_OutlineWidth", sourceWidth * 100f);
+            var outlineWidthScale = IsLegacyMToon(source)
+                ? 1f
+                : IsMToon10(source)
+                    ? 100f
+                    : 100f;
+            SetIfExists(destination, "_OutlineWidth", sourceWidth * outlineWidthScale);
             SetIfExists(destination, "_OutlineCull", (float)CullMode.Front);
             ApplyOutlineWidthMode(source, destination);
 
@@ -710,24 +714,22 @@ namespace NdmfMToon10ToLilToon
         private static bool HasOutline(Material source)
         {
             if (source == null) return false;
-            if (source.IsKeywordEnabled("_OUTLINE_ON")) return true;
+            return source.HasProperty("_OutlineWidth") && source.GetFloat("_OutlineWidth") > 0f;
+        }
 
-            if (source.HasProperty("_OutlineWidthMode") && Mathf.RoundToInt(source.GetFloat("_OutlineWidthMode")) > 0)
-            {
-                return true;
-            }
+        private static bool IsLegacyMToon(Material material)
+        {
+            return material != null
+                && material.shader != null
+                && material.shader.name == "VRM/MToon";
+        }
 
-            if (source.HasProperty("_OutlineWidth") && source.GetFloat("_OutlineWidth") > 0f)
-            {
-                return true;
-            }
-
-            if (source.HasProperty("_OutlineWidthFactor") && source.GetFloat("_OutlineWidthFactor") > 0f)
-            {
-                return true;
-            }
-
-            return false;
+        private static bool IsMToon10(Material material)
+        {
+            if (material == null || material.shader == null) return false;
+            var shaderName = material.shader.name;
+            return shaderName == "VRM10/MToon10"
+                || shaderName == "VRM10/Universal Render Pipeline/MToon10";
         }
 
         private static void ApplyRenderState(Material source, Material destination, ConversionReport report)
