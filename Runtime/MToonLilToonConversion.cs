@@ -305,7 +305,13 @@ namespace NdmfMToon10ToLilToon
                 CopyTexture(source, converted, new[] { "_RimTex" }, new[] { "_RimColorTex" }, report, ignoreTinyDummyTexture: true);
                 CopyFloat(source, converted, new[] { "_RimFresnelPower" }, new[] { "_RimFresnelPower" }, report);
                 CopyColor(source, converted, new[] { "_OutlineColorFactor", "_OutlineColor" }, new[] { "_OutlineColor" }, report);
-                CopyTexture(source, converted, new[] { "_OutlineWidthTex", "_OutlineWidthMultiplyTexture", "_OutlineMask" }, new[] { "_OutlineWidthMask", "_OutlineTex", "_OutlineMask" }, report, ignoreTinyDummyTexture: true);
+                CopyTexture(
+                    source,
+                    converted,
+                    new[] { "_OutlineWidthTex", "_OutlineWidthMultiplyTexture" },
+                    new[] { "_OutlineWidthMask" },
+                    report,
+                    ignoreTinyDummyTexture: true);
 
                 ApplyRenderState(source, converted, report);
                 ApplyOutlineState(source, converted);
@@ -622,9 +628,7 @@ namespace NdmfMToon10ToLilToon
 
             var sourceOutlineMask = source.HasProperty("_OutlineWidthMultiplyTexture")
                 ? source.GetTexture("_OutlineWidthMultiplyTexture")
-                : source.HasProperty("_OutlineMask")
-                    ? source.GetTexture("_OutlineMask")
-                    : null;
+                : null;
             if (IsLikelyDummyTexture(sourceOutlineMask))
             {
                 sourceOutlineMask = null;
@@ -642,11 +646,6 @@ namespace NdmfMToon10ToLilToon
                 SetTextureIfExists(destination, "_OutlineWidthMask", outlineWidthMask);
             }
 
-            var outlineMask = sourceOutlineMask ?? sourceOutlineWidthTex;
-            if (outlineMask != null)
-            {
-                SetTextureIfExists(destination, "_OutlineMask", outlineMask);
-            }
         }
 
         private static void ApplyOutlineWidthMode(Material source, Material destination)
