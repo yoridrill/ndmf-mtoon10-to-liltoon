@@ -1240,6 +1240,7 @@ namespace NdmfMToon10ToLilToon
                 uv = expandedUv;
             }
             var uvList = uv.ToList();
+            var outlineAlphaByVertex = Enumerable.Repeat(1f, vertices.Count).ToList();
 
             var normals = meshCopy.normals;
             var tangents = meshCopy.tangents;
@@ -1255,6 +1256,7 @@ namespace NdmfMToon10ToLilToon
             {
                 rectBySubMesh[mergedIndices[i]] = rects[i];
             }
+            var uvRangeBySubMesh = BuildOriginalUvRangeBySubMesh(meshCopy, mergedIndices, uvList);
 
             var atlasTexture = mergedMaterial != null ? mergedMaterial.GetTexture("_MainTex") : null;
             const float paddingPixels = 1f;
@@ -1271,6 +1273,19 @@ namespace NdmfMToon10ToLilToon
                     if (!rectBySubMesh.TryGetValue(i, out var rect))
                     {
                         mergedTriangles.AddRange(triangles);
+                        if (uvRangeBySubMesh.TryGetValue(i, out var uvRange))
+                        {
+                            for (var t = 0; t < triangles.Length; t++)
+                            {
+                                var originalIndex = triangles[t];
+                                if (originalIndex < 0 || originalIndex >= uvList.Count) continue;
+                                var alpha = ComputeOutlineAlphaFromOriginalUv(uvList[originalIndex].y, uvRange, hairTipOutlineWidth);
+                                if (originalIndex < outlineAlphaByVertex.Count)
+                                {
+                                    outlineAlphaByVertex[originalIndex] = Mathf.Min(outlineAlphaByVertex[originalIndex], alpha);
+                                }
+                            }
+                        }
                         continue;
                     }
 
@@ -1303,6 +1318,12 @@ namespace NdmfMToon10ToLilToon
                         var newIndex = vertices.Count;
                         vertices.Add(vertices[originalIndex]);
                         uvList.Add(remappedUv);
+                        var outlineAlpha = 1f;
+                        if (uvRangeBySubMesh.TryGetValue(i, out var uvRange) && originalIndex >= 0 && originalIndex < uvList.Count)
+                        {
+                            outlineAlpha = ComputeOutlineAlphaFromOriginalUv(uvList[originalIndex].y, uvRange, hairTipOutlineWidth);
+                        }
+                        outlineAlphaByVertex.Add(outlineAlpha);
                         if (normalList != null) normalList.Add(normalList[originalIndex]);
                         if (tangentList != null) tangentList.Add(tangentList[originalIndex]);
                         if (colorList != null) colorList.Add(colorList[originalIndex]);
@@ -1338,7 +1359,7 @@ namespace NdmfMToon10ToLilToon
 
             if (enableHairOutlineCorrection)
             {
-                ApplyHairOutlineCorrection(meshCopy, hairTipOutlineWidth);
+                ApplyHairOutlineCorrection(meshCopy, outlineAlphaByVertex);
                 if (mergedMaterial != null && mergedMaterial.HasProperty("_OutlineVertexR2Width"))
                 {
                     // lilToon の _OutlineVertexR2Width: 0=None, 1=R, 2=RGBA
@@ -1381,7 +1402,59 @@ namespace NdmfMToon10ToLilToon
             public int count;
         }
 
-        private static void ApplyHairOutlineCorrection(Mesh mesh, float hairTipOutlineWidth)
+        private struct UvRange
+        {
+            public float minV;
+            public float maxV;
+        }
+
+        private static Dictionary<int, UvRange> BuildOriginalUvRangeBySubMesh(Mesh mesh, IReadOnlyList<int> mergedIndices, IReadOnlyList<Vector2> originalUv)
+        {
+            var result = new Dictionary<int, UvRange>();
+            if (mesh == null || mergedIndices == null || originalUv == null) return result;
+
+            for (var i = 0; i < mergedIndices.Count; i++)
+            {
+                var subMeshIndex = mergedIndices[i];
+                if (subMeshIndex < 0 || subMeshIndex >= mesh.subMeshCount) continue;
+                var triangles = mesh.GetTriangles(subMeshIndex);
+                if (triangles == null || triangles.Length == 0) continue;
+
+                var minV = float.PositiveInfinity;
+                var maxV = float.NegativeInfinity;
+                for (var t = 0; t < triangles.Length; t++)
+                {
+                    var vertexIndex = triangles[t];
+                    if (vertexIndex < 0 || vertexIndex >= originalUv.Count) continue;
+                    var v = WrapUv01(originalUv[vertexIndex].y);
+                    if (v < minV) minV = v;
+                    if (v > maxV) maxV = v;
+                }
+
+                if (!float.IsFinite(minV) || !float.IsFinite(maxV)) continue;
+                result[subMeshIndex] = new UvRange { minV = minV, maxV = maxV };
+            }
+
+            return result;
+        }
+
+        private static float ComputeOutlineAlphaFromOriginalUv(float originalV, UvRange uvRange, float hairTipOutlineWidth)
+        {
+            var wrappedV = WrapUv01(originalV);
+            var tipness = 0f;
+            if (uvRange.maxV > uvRange.minV)
+            {
+                // original UV の V 下端を毛先として扱う
+                tipness = 1f - Mathf.InverseLerp(uvRange.minV, uvRange.maxV, wrappedV);
+            }
+            // 減衰範囲を毛先近傍に寄せる
+            tipness = tipness * tipness * tipness * tipness;
+            var thickness = Mathf.Clamp01(hairTipOutlineWidth);
+            var alpha = 1f - 0.8f * tipness * (1f - thickness);
+            return Mathf.Clamp(alpha, 0.2f, 1f);
+        }
+
+        private static void ApplyHairOutlineCorrection(Mesh mesh, IReadOnlyList<float> outlineAlphaByVertex)
         {
             if (mesh == null) return;
 
@@ -1391,21 +1464,10 @@ namespace NdmfMToon10ToLilToon
             if (vertices == null || normals == null || tangents == null) return;
             var vertexCount = vertices.Length;
             if (vertexCount == 0 || normals.Length < vertexCount || tangents.Length < vertexCount) return;
+            if (outlineAlphaByVertex == null || outlineAlphaByVertex.Count < vertexCount) return;
 
             const float quantizationScale = 10000f;
             var groupedNormals = new Dictionary<Vector3Int, AveragedNormalAccumulator>(vertexCount);
-            var triangleConnectionCounts = new int[vertexCount];
-            var edgeConnectionCounts = new int[vertexCount];
-            BuildVertexConnectivity(mesh, triangleConnectionCounts, edgeConnectionCounts);
-
-            var minConnectivity = int.MaxValue;
-            var maxConnectivity = int.MinValue;
-            for (var i = 0; i < vertexCount; i++)
-            {
-                var connectivity = triangleConnectionCounts[i] + edgeConnectionCounts[i];
-                if (connectivity < minConnectivity) minConnectivity = connectivity;
-                if (connectivity > maxConnectivity) maxConnectivity = connectivity;
-            }
 
             for (var i = 0; i < vertexCount; i++)
             {
@@ -1440,71 +1502,11 @@ namespace NdmfMToon10ToLilToon
                     Vector3.Dot(averagedNormal, normalWs));
                 if (normalTs.sqrMagnitude > 0f) normalTs.Normalize();
                 var encoded = normalTs * 0.5f + Vector3.one * 0.5f;
-                var connectivity = triangleConnectionCounts[i] + edgeConnectionCounts[i];
-                var tipness = 0f;
-                if (maxConnectivity > minConnectivity)
-                {
-                    var tipnessRaw = 1f - Mathf.InverseLerp(minConnectivity, maxConnectivity, connectivity);
-                    // 低接続頂点すべてに効かせると輪郭線全体が細く見えるため、
-                    // 減衰範囲を狭めて「毛先に近い頂点」へ寄せる。
-                    tipness = tipnessRaw * tipnessRaw * tipnessRaw * tipnessRaw;
-                }
-
-                var thickness = Mathf.Clamp01(hairTipOutlineWidth);
-                var alpha = 1f - 0.8f * tipness * (1f - thickness);
-                alpha = Mathf.Clamp(alpha, 0.2f, 1f);
+                var alpha = Mathf.Clamp(outlineAlphaByVertex[i], 0.2f, 1f);
                 colors[i] = new Color(encoded.x, encoded.y, encoded.z, alpha);
             }
 
             mesh.colors = colors;
-        }
-
-        private static void BuildVertexConnectivity(Mesh mesh, int[] triangleConnectionCounts, int[] edgeConnectionCounts)
-        {
-            if (mesh == null || triangleConnectionCounts == null || edgeConnectionCounts == null) return;
-            var triangles = mesh.triangles;
-            if (triangles == null || triangles.Length < 3) return;
-
-            var uniqueEdges = new HashSet<ulong>(triangles.Length);
-            for (var i = 0; i <= triangles.Length - 3; i += 3)
-            {
-                var a = triangles[i];
-                var b = triangles[i + 1];
-                var c = triangles[i + 2];
-                if (!IsValidVertexIndex(a, triangleConnectionCounts.Length)
-                    || !IsValidVertexIndex(b, triangleConnectionCounts.Length)
-                    || !IsValidVertexIndex(c, triangleConnectionCounts.Length))
-                {
-                    continue;
-                }
-
-                triangleConnectionCounts[a]++;
-                triangleConnectionCounts[b]++;
-                triangleConnectionCounts[c]++;
-
-                AddUniqueEdgeConnection(a, b, edgeConnectionCounts, uniqueEdges);
-                AddUniqueEdgeConnection(b, c, edgeConnectionCounts, uniqueEdges);
-                AddUniqueEdgeConnection(c, a, edgeConnectionCounts, uniqueEdges);
-            }
-        }
-
-        private static void AddUniqueEdgeConnection(int v0, int v1, int[] edgeConnectionCounts, ISet<ulong> uniqueEdges)
-        {
-            if (v0 == v1) return;
-            if (!IsValidVertexIndex(v0, edgeConnectionCounts.Length) || !IsValidVertexIndex(v1, edgeConnectionCounts.Length)) return;
-
-            var min = (uint)Mathf.Min(v0, v1);
-            var max = (uint)Mathf.Max(v0, v1);
-            var key = ((ulong)min << 32) | max;
-            if (!uniqueEdges.Add(key)) return;
-
-            edgeConnectionCounts[v0]++;
-            edgeConnectionCounts[v1]++;
-        }
-
-        private static bool IsValidVertexIndex(int index, int vertexCount)
-        {
-            return index >= 0 && index < vertexCount;
         }
 
         private static Vector3Int QuantizePosition(Vector3 position, float scale)
