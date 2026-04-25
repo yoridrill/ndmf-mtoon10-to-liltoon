@@ -300,7 +300,7 @@ namespace NdmfMToon10ToLilToon
                 CopyColor(source, converted, new[] { "_EmissiveFactor", "_EmissionColor" }, new[] { "_EmissionColor" }, report);
                 CopyTexture(source, converted, new[] { "_EmissiveMap", "_EmissionMap" }, new[] { "_EmissionMap" }, report, ignoreTinyDummyTexture: true);
                 CopyColor(source, converted, new[] { "_MatcapColor" }, new[] { "_MatCapColor" }, report);
-                CopyTexture(source, converted, new[] { "_MatcapTex" }, new[] { "_MatCapTex" }, report, ignoreTinyDummyTexture: true);
+                CopyTexture(source, converted, new[] { "_MatcapTex", "_SphereAdd" }, new[] { "_MatCapTex" }, report, ignoreTinyDummyTexture: true);
                 CopyColor(source, converted, new[] { "_RimColor" }, new[] { "_RimColor" }, report);
                 CopyTexture(source, converted, new[] { "_RimTex" }, new[] { "_RimColorTex" }, report, ignoreTinyDummyTexture: true);
                 CopyFloat(source, converted, new[] { "_RimFresnelPower" }, new[] { "_RimFresnelPower" }, report);
@@ -424,7 +424,7 @@ namespace NdmfMToon10ToLilToon
         {
             if (source == null || destination == null) return;
 
-            if (!TryFindExistingProperty(source, new[] { "_ShadeTex", "_ShadeMap", "_ShadeMultiplyTexture", "_ShadeColorTexture" }, out var shadeProp))
+            if (!TryFindExistingProperty(source, new[] { "_ShadeTex", "_ShadeTexture", "_ShadeMap", "_ShadeMultiplyTexture", "_ShadeColorTexture" }, out var shadeProp))
             {
                 ApplyShadowTextureUsage(destination, false);
                 return;
@@ -551,7 +551,7 @@ namespace NdmfMToon10ToLilToon
             var useEmission = hasEmissionTexture;
             SetIfExists(destination, "_UseEmission", useEmission ? 1f : 0f);
 
-            var hasMatCapTexture = HasTexture(source, true, "_MatcapTex");
+            var hasMatCapTexture = HasTexture(source, true, "_MatcapTex", "_SphereAdd");
             var useMatCap = hasMatCapTexture;
             SetIfExists(destination, "_UseMatCap", useMatCap ? 1f : 0f);
 
@@ -908,9 +908,11 @@ namespace NdmfMToon10ToLilToon
                 destination.SetVector("_EmissionBlendMask_ScrollRotate", current);
             }
 
-            if (source.HasProperty("_UvAnimMaskTex"))
+            if (source.HasProperty("_UvAnimMaskTex") || source.HasProperty("_UvAnimMaskTexture"))
             {
-                var maskTex = source.GetTexture("_UvAnimMaskTex");
+                var maskTex = source.HasProperty("_UvAnimMaskTex")
+                    ? source.GetTexture("_UvAnimMaskTex")
+                    : source.GetTexture("_UvAnimMaskTexture");
                 SetTextureIfExists(destination, "_EmissionBlendMask", maskTex);
             }
         }
