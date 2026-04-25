@@ -355,8 +355,12 @@ namespace NdmfMToon10ToLilToon
                 DrawCategoryColumn(outlineCorrectionCategoryRect, enableHairOutlineCorrectionProp, T("輪郭線補正", "Outline Correction"), showToggle: true);
                 using (new EditorGUI.DisabledScope(!enableHairOutlineCorrectionProp.boolValue))
                 {
-                    EditorGUI.LabelField(outlineCorrectionLabelRect, T("頂点カラー", "Vertex Color"));
-                    EditorGUI.LabelField(outlineCorrectionValueRect, "RGBA");
+                    var hairTipOutlineWidthProp = serializedObject.FindProperty(nameof(MToonLilToonComponent.hairTipOutlineWidth));
+                    EditorGUI.LabelField(outlineCorrectionLabelRect, T("毛先の太さ", "Tip Width"));
+                    if (hairTipOutlineWidthProp != null)
+                    {
+                        hairTipOutlineWidthProp.floatValue = EditorGUI.Slider(outlineCorrectionValueRect, hairTipOutlineWidthProp.floatValue, 0f, 1f);
+                    }
                 }
                 EditorGUILayout.Space(OverrideGroupSpacing);
             }

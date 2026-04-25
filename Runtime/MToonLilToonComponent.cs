@@ -17,6 +17,7 @@ namespace NdmfMToon10ToLilToon
         public Shader lilToonShader;
         public bool enableHairMerge;
         public bool enableHairOutlineCorrection;
+        [Range(0f, 1f)] public float hairTipOutlineWidth = 0.5f;
         public List<HairMaterialSelection> hairSelections = new();
         public bool enableEyebrowStencil;
         public Material eyebrowStencilMaterial;

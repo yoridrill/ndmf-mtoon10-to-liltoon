@@ -95,6 +95,7 @@ namespace NdmfMToon10ToLilToon
                     component.fakeShadowDirection,
                     component.fakeShadowOffset,
                     component.enableHairOutlineCorrection,
+                    component.hairTipOutlineWidth,
                     convertedBySource,
                     fakeShadowPairs,
                     mergedHairMaterials,
@@ -229,6 +230,7 @@ namespace NdmfMToon10ToLilToon
             Vector3 fakeShadowDirection,
             float fakeShadowOffset,
             bool enableHairOutlineCorrection,
+            float hairTipOutlineWidth,
             IDictionary<Material, Material> convertedBySource,
             IList<(Material hair, Material fake)> fakeShadowPairs,
             IList<Material> mergedHairMaterials,
@@ -311,7 +313,7 @@ namespace NdmfMToon10ToLilToon
                 mergedMaterialCreated = true;
                 var mergedRepresentativeIndex = ResolveMergedRepresentativeIndex(original, mergedIndices, transparentRanks, mergedOutputRenderType);
                 onProgress?.Invoke("Rebuilding mesh...");
-                ApplyMergedMaterialAndMesh(renderer, result, resultSourceIndices, mergedIndices, mergedRepresentativeIndex, mergedMaterial, fakeShadowMaterial, mergedRects, enableHairOutlineCorrection, report);
+                ApplyMergedMaterialAndMesh(renderer, result, resultSourceIndices, mergedIndices, mergedRepresentativeIndex, mergedMaterial, fakeShadowMaterial, mergedRects, enableHairOutlineCorrection, hairTipOutlineWidth, report);
                 if (mergedHairMaterials != null && mergedMaterial != null)
                 {
                     mergedHairMaterials.Add(mergedMaterial);
@@ -1193,7 +1195,7 @@ namespace NdmfMToon10ToLilToon
             return texture.GetPixel(x, y);
         }
 
-        private static void ApplyMergedMaterialAndMesh(Renderer renderer, List<Material> materials, List<int> materialSourceIndices, IReadOnlyList<int> mergedIndices, int mergedRepresentativeSourceIndex, Material mergedMaterial, Material fakeShadowMaterial, IReadOnlyList<Rect> rects, bool enableHairOutlineCorrection, ConversionReport report)
+        private static void ApplyMergedMaterialAndMesh(Renderer renderer, List<Material> materials, List<int> materialSourceIndices, IReadOnlyList<int> mergedIndices, int mergedRepresentativeSourceIndex, Material mergedMaterial, Material fakeShadowMaterial, IReadOnlyList<Rect> rects, bool enableHairOutlineCorrection, float hairTipOutlineWidth, ConversionReport report)
         {
             var mergedIndexSet = mergedIndices.ToHashSet();
             var newMaterials = new List<Material>();
@@ -1336,7 +1338,7 @@ namespace NdmfMToon10ToLilToon
 
             if (enableHairOutlineCorrection)
             {
-                ApplyHairOutlineCorrection(meshCopy);
+                ApplyHairOutlineCorrection(meshCopy, hairTipOutlineWidth);
                 if (mergedMaterial != null && mergedMaterial.HasProperty("_OutlineVertexR2Width"))
                 {
                     // lilToon の _OutlineVertexR2Width: 0=None, 1=R, 2=RGBA
@@ -1379,7 +1381,7 @@ namespace NdmfMToon10ToLilToon
             public int count;
         }
 
-        private static void ApplyHairOutlineCorrection(Mesh mesh)
+        private static void ApplyHairOutlineCorrection(Mesh mesh, float hairTipOutlineWidth)
         {
             if (mesh == null) return;
 
@@ -1392,6 +1394,18 @@ namespace NdmfMToon10ToLilToon
 
             const float quantizationScale = 10000f;
             var groupedNormals = new Dictionary<Vector3Int, AveragedNormalAccumulator>(vertexCount);
+            var triangleConnectionCounts = new int[vertexCount];
+            var edgeConnectionCounts = new int[vertexCount];
+            BuildVertexConnectivity(mesh, triangleConnectionCounts, edgeConnectionCounts);
+
+            var minConnectivity = int.MaxValue;
+            var maxConnectivity = int.MinValue;
+            for (var i = 0; i < vertexCount; i++)
+            {
+                var connectivity = triangleConnectionCounts[i] + edgeConnectionCounts[i];
+                if (connectivity < minConnectivity) minConnectivity = connectivity;
+                if (connectivity > maxConnectivity) maxConnectivity = connectivity;
+            }
 
             for (var i = 0; i < vertexCount; i++)
             {
@@ -1426,10 +1440,68 @@ namespace NdmfMToon10ToLilToon
                     Vector3.Dot(averagedNormal, normalWs));
                 if (normalTs.sqrMagnitude > 0f) normalTs.Normalize();
                 var encoded = normalTs * 0.5f + Vector3.one * 0.5f;
-                colors[i] = new Color(encoded.x, encoded.y, encoded.z, 1f);
+                var connectivity = triangleConnectionCounts[i] + edgeConnectionCounts[i];
+                var tipness = 0f;
+                if (maxConnectivity > minConnectivity)
+                {
+                    tipness = 1f - Mathf.InverseLerp(minConnectivity, maxConnectivity, connectivity);
+                }
+
+                var thickness = Mathf.Clamp01(hairTipOutlineWidth);
+                var alpha = 1f - 0.8f * tipness * (1f - thickness);
+                alpha = Mathf.Clamp(alpha, 0.2f, 1f);
+                colors[i] = new Color(encoded.x, encoded.y, encoded.z, alpha);
             }
 
             mesh.colors = colors;
+        }
+
+        private static void BuildVertexConnectivity(Mesh mesh, int[] triangleConnectionCounts, int[] edgeConnectionCounts)
+        {
+            if (mesh == null || triangleConnectionCounts == null || edgeConnectionCounts == null) return;
+            var triangles = mesh.triangles;
+            if (triangles == null || triangles.Length < 3) return;
+
+            var uniqueEdges = new HashSet<ulong>(triangles.Length);
+            for (var i = 0; i <= triangles.Length - 3; i += 3)
+            {
+                var a = triangles[i];
+                var b = triangles[i + 1];
+                var c = triangles[i + 2];
+                if (!IsValidVertexIndex(a, triangleConnectionCounts.Length)
+                    || !IsValidVertexIndex(b, triangleConnectionCounts.Length)
+                    || !IsValidVertexIndex(c, triangleConnectionCounts.Length))
+                {
+                    continue;
+                }
+
+                triangleConnectionCounts[a]++;
+                triangleConnectionCounts[b]++;
+                triangleConnectionCounts[c]++;
+
+                AddUniqueEdgeConnection(a, b, edgeConnectionCounts, uniqueEdges);
+                AddUniqueEdgeConnection(b, c, edgeConnectionCounts, uniqueEdges);
+                AddUniqueEdgeConnection(c, a, edgeConnectionCounts, uniqueEdges);
+            }
+        }
+
+        private static void AddUniqueEdgeConnection(int v0, int v1, int[] edgeConnectionCounts, ISet<ulong> uniqueEdges)
+        {
+            if (v0 == v1) return;
+            if (!IsValidVertexIndex(v0, edgeConnectionCounts.Length) || !IsValidVertexIndex(v1, edgeConnectionCounts.Length)) return;
+
+            var min = (uint)Mathf.Min(v0, v1);
+            var max = (uint)Mathf.Max(v0, v1);
+            var key = ((ulong)min << 32) | max;
+            if (!uniqueEdges.Add(key)) return;
+
+            edgeConnectionCounts[v0]++;
+            edgeConnectionCounts[v1]++;
+        }
+
+        private static bool IsValidVertexIndex(int index, int vertexCount)
+        {
+            return index >= 0 && index < vertexCount;
         }
 
         private static Vector3Int QuantizePosition(Vector3 position, float scale)
