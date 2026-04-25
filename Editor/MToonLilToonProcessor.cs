@@ -1275,13 +1275,19 @@ namespace NdmfMToon10ToLilToon
                     if (!rectBySubMesh.TryGetValue(i, out var rect))
                     {
                         mergedTriangles.AddRange(triangles);
-                        if (uvRangeBySubMesh.TryGetValue(i, out var uvRange))
+                        if (uvRangeBySubMesh.ContainsKey(i))
                         {
                             for (var t = 0; t < triangles.Length; t++)
                             {
                                 var originalIndex = triangles[t];
                                 if (originalIndex < 0 || originalIndex >= uvList.Count) continue;
-                                var alpha = ComputeOutlineAlphaFromOriginalUv(uvList[originalIndex].y, uvRange, hairTipOutlineWidth, hairTipRange);
+                                var alpha = ResolveOutlineAlphaForOriginalVertex(
+                                    i,
+                                    originalIndex,
+                                    uvList,
+                                    uvRangeBySubMesh,
+                                    hairTipOutlineWidth,
+                                    hairTipRange);
                                 if (originalIndex < outlineAlphaByVertex.Count)
                                 {
                                     outlineAlphaByVertex[originalIndex] = Mathf.Min(outlineAlphaByVertex[originalIndex], alpha);
@@ -1320,11 +1326,13 @@ namespace NdmfMToon10ToLilToon
                         var newIndex = vertices.Count;
                         vertices.Add(vertices[originalIndex]);
                         uvList.Add(remappedUv);
-                        var outlineAlpha = 1f;
-                        if (uvRangeBySubMesh.TryGetValue(i, out var uvRange) && originalIndex >= 0 && originalIndex < uvList.Count)
-                        {
-                            outlineAlpha = ComputeOutlineAlphaFromOriginalUv(uvList[originalIndex].y, uvRange, hairTipOutlineWidth, hairTipRange);
-                        }
+                        var outlineAlpha = ResolveOutlineAlphaForOriginalVertex(
+                            i,
+                            originalIndex,
+                            uvList,
+                            uvRangeBySubMesh,
+                            hairTipOutlineWidth,
+                            hairTipRange);
                         outlineAlphaByVertex.Add(outlineAlpha);
                         if (normalList != null) normalList.Add(normalList[originalIndex]);
                         if (tangentList != null) tangentList.Add(tangentList[originalIndex]);
@@ -1463,6 +1471,19 @@ namespace NdmfMToon10ToLilToon
             var thickness = Mathf.Clamp01(hairTipOutlineWidth);
             var alpha = 1f - 0.8f * tipness * (1f - thickness);
             return Mathf.Clamp(alpha, 0.2f, 1f);
+        }
+
+        private static float ResolveOutlineAlphaForOriginalVertex(
+            int subMeshIndex,
+            int originalIndex,
+            IReadOnlyList<Vector2> originalUv,
+            IReadOnlyDictionary<int, UvRange> uvRangeBySubMesh,
+            float hairTipOutlineWidth,
+            float hairTipRange)
+        {
+            if (originalUv == null || originalIndex < 0 || originalIndex >= originalUv.Count) return 1f;
+            if (uvRangeBySubMesh == null || !uvRangeBySubMesh.TryGetValue(subMeshIndex, out var uvRange)) return 1f;
+            return ComputeOutlineAlphaFromOriginalUv(originalUv[originalIndex].y, uvRange, hairTipOutlineWidth, hairTipRange);
         }
 
         private static void ApplyHairOutlineCorrection(Mesh mesh, IReadOnlyList<float> outlineAlphaByVertex)
