@@ -687,7 +687,7 @@ namespace NdmfMToon10ToLilToon
             if (faceMaterial == null) return;
             if (disableShadowReceiveForFace)
             {
-                SetFloatIfAnyExists(faceMaterial, new[] { "_ShadowReceive", "_ReceiveShadowRate" }, 0f);
+                SetFloatIfAnyExists(faceMaterial, new[] { "_ShadowReceive" }, 0f);
             }
 
             if (disableBacklightStrengthForFace)
