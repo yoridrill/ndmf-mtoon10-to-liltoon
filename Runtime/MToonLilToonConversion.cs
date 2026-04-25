@@ -305,7 +305,7 @@ namespace NdmfMToon10ToLilToon
                 CopyTexture(source, converted, new[] { "_RimTex" }, new[] { "_RimColorTex" }, report, ignoreTinyDummyTexture: true);
                 CopyFloat(source, converted, new[] { "_RimFresnelPower" }, new[] { "_RimFresnelPower" }, report);
                 CopyColor(source, converted, new[] { "_OutlineColorFactor", "_OutlineColor" }, new[] { "_OutlineColor" }, report);
-                CopyTexture(source, converted, new[] { "_OutlineWidthTex", "_OutlineWidthMultiplyTexture" }, new[] { "_OutlineWidthMask" }, report, ignoreTinyDummyTexture: true);
+                CopyTexture(source, converted, new[] { "_OutlineWidthTex", "_OutlineWidthTexture", "_OutlineWidthMultiplyTexture" }, new[] { "_OutlineWidthMask" }, report, ignoreTinyDummyTexture: true);
 
                 ApplyRenderState(source, converted, report);
                 ApplyOutlineState(source, converted);
@@ -618,7 +618,9 @@ namespace NdmfMToon10ToLilToon
                     : null;
             var sourceOutlineWidthTex = source.HasProperty("_OutlineWidthTex")
                 ? source.GetTexture("_OutlineWidthTex")
-                : null;
+                : source.HasProperty("_OutlineWidthTexture")
+                    ? source.GetTexture("_OutlineWidthTexture")
+                    : null;
             if (IsLikelyDummyTexture(sourceOutlineWidthTex))
             {
                 sourceOutlineWidthTex = null;
@@ -714,6 +716,11 @@ namespace NdmfMToon10ToLilToon
         private static bool HasOutline(Material source)
         {
             if (source == null) return false;
+            if (source.HasProperty("_OutlineWidthMode") && Mathf.RoundToInt(source.GetFloat("_OutlineWidthMode")) > 0)
+            {
+                return true;
+            }
+
             return source.HasProperty("_OutlineWidth") && source.GetFloat("_OutlineWidth") > 0f;
         }
 
