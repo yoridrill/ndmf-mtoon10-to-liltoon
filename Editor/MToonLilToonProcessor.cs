@@ -17,7 +17,11 @@ namespace NdmfMToon10ToLilToon
 
         private static readonly Dictionary<string, HairMergeCacheEntry> HairMergeCache = new();
 
-        internal static void ApplyGlobalOverridesToConvertedMaterials(MToonLilToonComponent component, LilToonGlobalOverrides overrides)
+        internal static void ApplyGlobalOverridesToConvertedMaterials(
+            MToonLilToonComponent component,
+            LilToonGlobalOverrides overrides,
+            bool disableShadowReceiveForFace = false,
+            bool disableBacklightStrengthForFace = false)
         {
             if (component == null || overrides == null) return;
 
@@ -32,6 +36,14 @@ namespace NdmfMToon10ToLilToon
             for (var i = 0; i < materials.Count; i++)
             {
                 MToonToLilToonMapper.ApplyGlobalOverridesToMaterial(materials[i], overrides);
+            }
+
+            if (!disableShadowReceiveForFace && !disableBacklightStrengthForFace) return;
+
+            ApplyFaceGlobalExclusionSettings(component.fakeShadowFaceMaterial, disableShadowReceiveForFace, disableBacklightStrengthForFace);
+            if (component.faceShadowFaceMaterial != component.fakeShadowFaceMaterial)
+            {
+                ApplyFaceGlobalExclusionSettings(component.faceShadowFaceMaterial, disableShadowReceiveForFace, disableBacklightStrengthForFace);
             }
         }
 
@@ -104,6 +116,10 @@ namespace NdmfMToon10ToLilToon
                     ? convertedEyebrow
                     : component.eyebrowStencilMaterial)
                 : null;
+
+            component.fakeShadowFaceMaterial = resolvedFaceMaterial;
+            component.faceShadowFaceMaterial = resolvedFaceShadowMaterial;
+            component.eyebrowStencilMaterial = resolvedEyebrowMaterial;
 
             if (component.enableEyebrowStencil
                 && resolvedFaceMaterial != null

@@ -75,7 +75,11 @@ namespace NdmfMToon10ToLilToon
             var previewComponent = previewTransform.GetComponent<MToonLilToonComponent>();
             if (previewComponent == null) return;
 
-            MToonLilToonProcessor.ApplyGlobalOverridesToConvertedMaterials(previewComponent, sourceComponent.globalOverrides);
+            MToonLilToonProcessor.ApplyGlobalOverridesToConvertedMaterials(
+                previewComponent,
+                sourceComponent.globalOverrides,
+                sourceComponent.disableShadowReceiveForFace,
+                sourceComponent.disableBacklightStrengthForFace);
             SceneView.RepaintAll();
         }
 
