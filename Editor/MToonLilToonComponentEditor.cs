@@ -14,6 +14,8 @@ namespace NdmfMToon10ToLilToon
         private const float HairSelectionToggleColumnWidth = 26f;
 
         private List<Material> _cachedRendererMaterials;
+        private float? _pendingHairTipOutlineWidth;
+        private float? _pendingHairTipRange;
 
         private enum Language
         {
@@ -310,6 +312,29 @@ namespace NdmfMToon10ToLilToon
             EditorGUI.PropertyField(valueRect, valueProp, GUIContent.none);
         }
 
+        private static bool DrawDeferredSlider(Rect rect, SerializedProperty valueProp, ref float? pendingValue)
+        {
+            var displayValue = pendingValue ?? valueProp.floatValue;
+            var nextValue = EditorGUI.Slider(rect, displayValue, 0f, 1f);
+            if (!Mathf.Approximately(nextValue, displayValue))
+            {
+                pendingValue = nextValue;
+            }
+
+            if (!pendingValue.HasValue) return false;
+
+            var shouldCommit = Event.current.type == EventType.MouseUp
+                || (GUIUtility.hotControl == 0 && Event.current.type == EventType.Repaint);
+            if (!shouldCommit) return false;
+
+            var committedValue = Mathf.Clamp01(pendingValue.Value);
+            pendingValue = null;
+            if (Mathf.Approximately(valueProp.floatValue, committedValue)) return false;
+
+            valueProp.floatValue = committedValue;
+            return true;
+        }
+
         private static void GetOverrideColumnRects(
             Rect rowRect,
             out Rect categoryRect,
@@ -427,7 +452,7 @@ namespace NdmfMToon10ToLilToon
                             "Adjusts outline thickness near hair tips."));
                     if (hairTipOutlineWidthProp != null)
                     {
-                        hairTipOutlineWidthProp.floatValue = EditorGUI.Slider(outlineCorrectionValueRect, hairTipOutlineWidthProp.floatValue, 0f, 1f);
+                        changed |= DrawDeferredSlider(outlineCorrectionValueRect, hairTipOutlineWidthProp, ref _pendingHairTipOutlineWidth);
                     }
                 }
 
@@ -445,7 +470,7 @@ namespace NdmfMToon10ToLilToon
                             "Sets how much of the tip region uses tip width adjustment."));
                     if (hairTipRangeProp != null)
                     {
-                        hairTipRangeProp.floatValue = EditorGUI.Slider(tipRangeValueRect, hairTipRangeProp.floatValue, 0f, 1f);
+                        changed |= DrawDeferredSlider(tipRangeValueRect, hairTipRangeProp, ref _pendingHairTipRange);
                     }
                 }
                 EditorGUILayout.Space(OverrideGroupSpacing);
