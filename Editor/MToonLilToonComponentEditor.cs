@@ -10,6 +10,7 @@ namespace NdmfMToon10ToLilToon
     {
         private const float OverrideGroupSpacing = 4f;
         private const float SectionHeadingSpacing = 8f;
+        private const float SectionTopSpacing = 10f;
         private const float HairSelectionToggleColumnWidth = 26f;
 
         private List<Material> _cachedRendererMaterials;
@@ -132,7 +133,7 @@ namespace NdmfMToon10ToLilToon
         {
             EditorGUI.BeginChangeCheck();
             var overridesProp = serializedObject.FindProperty(nameof(MToonLilToonComponent.globalOverrides));
-            EditorGUILayout.Space();
+            EditorGUILayout.Space(SectionTopSpacing);
             DrawUnderlinedSectionTitle(T("lilToon固有機能の一括設定", "Bulk Settings for lilToon-specific Features"));
             EditorGUILayout.Space(2f);
             DrawOverrideGroup(
@@ -160,7 +161,11 @@ namespace NdmfMToon10ToLilToon
                 serializedObject.FindProperty(nameof(MToonLilToonComponent.disableBacklightStrengthForFace)));
             DrawOverrideGroup(
                 overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.enableDistanceFade)),
-                T("距離フェード", "Distance Fade"),
+                TT(
+                    "距離フェード",
+                    "すぐ目の前まで接近した部分を暗くすることができます。",
+                    "Distance Fade",
+                    "Darkens portions that are very close to the camera."),
                 T("色", "Color"),
                 overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.distanceFadeColor)),
                 T("強度", "Strength"),
@@ -177,7 +182,7 @@ namespace NdmfMToon10ToLilToon
 
         private void DrawSpecificPartAdjustmentsHeading()
         {
-            EditorGUILayout.Space(SectionHeadingSpacing);
+            EditorGUILayout.Space(SectionHeadingSpacing + 4f);
             DrawUnderlinedSectionTitle(T("特定部位への調整", "Adjustments for Specific Parts"));
             EditorGUILayout.Space(2f);
         }
@@ -197,6 +202,24 @@ namespace NdmfMToon10ToLilToon
             string secondLabel,
             SerializedProperty secondValueProp)
         {
+            DrawOverrideGroup(
+                enabledProp,
+                new GUIContent(groupLabel),
+                firstLabel,
+                firstValueProp,
+                secondLabel,
+                secondValueProp,
+                addBottomSpacing: true);
+        }
+
+        private void DrawOverrideGroup(
+            SerializedProperty enabledProp,
+            GUIContent groupLabel,
+            string firstLabel,
+            SerializedProperty firstValueProp,
+            string secondLabel,
+            SerializedProperty secondValueProp)
+        {
             DrawOverrideGroup(enabledProp, groupLabel, firstLabel, firstValueProp, secondLabel, secondValueProp, addBottomSpacing: true);
         }
 
@@ -210,7 +233,14 @@ namespace NdmfMToon10ToLilToon
             string thirdLabel,
             SerializedProperty thirdValueProp)
         {
-            DrawOverrideGroup(enabledProp, groupLabel, firstLabel, firstValueProp, secondLabel, secondValueProp, addBottomSpacing: false);
+            DrawOverrideGroup(
+                enabledProp,
+                new GUIContent(groupLabel),
+                firstLabel,
+                firstValueProp,
+                secondLabel,
+                secondValueProp,
+                addBottomSpacing: false);
 
             var thirdRowRect = EditorGUILayout.GetControlRect();
             GetOverrideColumnRects(thirdRowRect, out var thirdCategoryRect, out var thirdItemLabelRect, out var thirdValueRect);
@@ -225,7 +255,7 @@ namespace NdmfMToon10ToLilToon
 
         private void DrawOverrideGroup(
             SerializedProperty enabledProp,
-            string groupLabel,
+            GUIContent groupLabel,
             string firstLabel,
             SerializedProperty firstValueProp,
             string secondLabel,
@@ -331,7 +361,7 @@ namespace NdmfMToon10ToLilToon
             using (new EditorGUI.IndentLevelScope())
             {
                 changed |= DrawHairSelections(component);
-                EditorGUILayout.Space(OverrideGroupSpacing);
+                EditorGUILayout.Space(OverrideGroupSpacing + 4f);
                 var enableEyebrowStencilProp = serializedObject.FindProperty(nameof(MToonLilToonComponent.enableEyebrowStencil));
                 var eyebrowRowRect = EditorGUILayout.GetControlRect();
                 GetHairAdjustmentColumnRects(eyebrowRowRect, out var eyebrowCategoryRect, out var eyebrowLabelRect, out var eyebrowValueRect);
