@@ -10,8 +10,6 @@ namespace NdmfMToon10ToLilToon
     {
         private const float OverrideGroupSpacing = 4f;
         private const float SectionHeadingSpacing = 8f;
-        private const float ToggleOnlyWidth = 18f;
-        private const float ToggleWithSpacingWidth = 22f;
         private const float HairSelectionToggleColumnWidth = 26f;
 
         private List<Material> _cachedRendererMaterials;
@@ -247,18 +245,12 @@ namespace NdmfMToon10ToLilToon
 
         private static void DrawCategoryColumn(Rect categoryRect, SerializedProperty enabledProp, string label, bool showToggle)
         {
-            var toggleRect = new Rect(categoryRect.x, categoryRect.y, ToggleOnlyWidth, categoryRect.height);
-            var labelRect = new Rect(
-                categoryRect.x + ToggleWithSpacingWidth,
-                categoryRect.y,
-                Mathf.Max(0f, categoryRect.width - ToggleWithSpacingWidth),
-                categoryRect.height);
-
             if (showToggle)
             {
-                enabledProp.boolValue = EditorGUI.Toggle(toggleRect, enabledProp.boolValue);
+                enabledProp.boolValue = EditorGUI.ToggleLeft(categoryRect, label, enabledProp.boolValue);
+                return;
             }
-            EditorGUI.LabelField(labelRect, label);
+            EditorGUI.LabelField(categoryRect, label);
         }
 
         private static void DrawTwoColumnPropertyRow(Rect itemLabelRect, Rect valueRect, string label, SerializedProperty valueProp)
@@ -277,6 +269,18 @@ namespace NdmfMToon10ToLilToon
             categoryRect = new Rect(rowRect.x, rowRect.y, unit * 2f, rowRect.height);
             itemLabelRect = new Rect(categoryRect.xMax, rowRect.y, unit * 2f, rowRect.height);
             valueRect = new Rect(itemLabelRect.xMax, rowRect.y, unit * 3f, rowRect.height);
+        }
+
+        private static void GetHairAdjustmentColumnRects(
+            Rect rowRect,
+            out Rect categoryRect,
+            out Rect itemLabelRect,
+            out Rect valueRect)
+        {
+            var unit = rowRect.width / 4f;
+            categoryRect = new Rect(rowRect.x, rowRect.y, unit, rowRect.height);
+            itemLabelRect = new Rect(categoryRect.xMax, rowRect.y, unit, rowRect.height);
+            valueRect = new Rect(itemLabelRect.xMax, rowRect.y, unit * 2f, rowRect.height);
         }
 
         private bool DrawHairMergeToggle(MToonLilToonComponent component, out bool requestHairScan)
@@ -307,20 +311,21 @@ namespace NdmfMToon10ToLilToon
             {
                 var enableEyebrowStencilProp = serializedObject.FindProperty(nameof(MToonLilToonComponent.enableEyebrowStencil));
                 var eyebrowRowRect = EditorGUILayout.GetControlRect();
-                GetOverrideColumnRects(eyebrowRowRect, out var eyebrowCategoryRect, out var eyebrowLabelRect, out var eyebrowValueRect);
+                GetHairAdjustmentColumnRects(eyebrowRowRect, out var eyebrowCategoryRect, out var eyebrowLabelRect, out var eyebrowValueRect);
                 DrawCategoryColumn(eyebrowCategoryRect, enableEyebrowStencilProp, T("眉ステンシル", "Eyebrow Stencil"), showToggle: true);
                 using (new EditorGUI.DisabledScope(!enableEyebrowStencilProp.boolValue))
                 {
                     EditorGUI.LabelField(eyebrowLabelRect, T("眉マテリアル", "Eyebrow Material"));
                     changed |= DrawEyebrowStencilMaterialSelector(component, eyebrowValueRect);
                 }
+                EditorGUILayout.Space(OverrideGroupSpacing);
 
                 var enableFakeShadowProp = serializedObject.FindProperty(nameof(MToonLilToonComponent.enableFakeShadow));
                 var fakeShadowDirectionProp = serializedObject.FindProperty(nameof(MToonLilToonComponent.fakeShadowDirection));
                 var fakeShadowOffsetProp = serializedObject.FindProperty(nameof(MToonLilToonComponent.fakeShadowOffset));
 
                 var fakeShadowFirstRowRect = EditorGUILayout.GetControlRect();
-                GetOverrideColumnRects(fakeShadowFirstRowRect, out var fakeShadowCategoryRect, out var fakeShadowDirectionLabelRect, out var fakeShadowDirectionValueRect);
+                GetHairAdjustmentColumnRects(fakeShadowFirstRowRect, out var fakeShadowCategoryRect, out var fakeShadowDirectionLabelRect, out var fakeShadowDirectionValueRect);
                 DrawCategoryColumn(fakeShadowCategoryRect, enableFakeShadowProp, "FakeShadow", showToggle: true);
                 using (new EditorGUI.DisabledScope(!enableFakeShadowProp.boolValue))
                 {
@@ -328,12 +333,13 @@ namespace NdmfMToon10ToLilToon
                 }
 
                 var fakeShadowSecondRowRect = EditorGUILayout.GetControlRect();
-                GetOverrideColumnRects(fakeShadowSecondRowRect, out var fakeShadowSecondCategoryRect, out var fakeShadowOffsetLabelRect, out var fakeShadowOffsetValueRect);
+                GetHairAdjustmentColumnRects(fakeShadowSecondRowRect, out var fakeShadowSecondCategoryRect, out var fakeShadowOffsetLabelRect, out var fakeShadowOffsetValueRect);
                 DrawCategoryColumn(fakeShadowSecondCategoryRect, enableFakeShadowProp, string.Empty, showToggle: false);
                 using (new EditorGUI.DisabledScope(!enableFakeShadowProp.boolValue))
                 {
                     DrawTwoColumnPropertyRow(fakeShadowOffsetLabelRect, fakeShadowOffsetValueRect, T("オフセット", "Offset"), fakeShadowOffsetProp);
                 }
+                EditorGUILayout.Space(OverrideGroupSpacing);
             }
 
             return changed;
