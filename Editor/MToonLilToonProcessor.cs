@@ -94,6 +94,9 @@ namespace NdmfMToon10ToLilToon
                     component.enableFakeShadow,
                     component.fakeShadowDirection,
                     component.fakeShadowOffset,
+                    component.enableHairOutlineCorrection,
+                    component.hairTipOutlineWidth,
+                    component.hairTipRange,
                     convertedBySource,
                     fakeShadowPairs,
                     mergedHairMaterials,
@@ -227,6 +230,9 @@ namespace NdmfMToon10ToLilToon
             bool enableFakeShadow,
             Vector3 fakeShadowDirection,
             float fakeShadowOffset,
+            bool enableHairOutlineCorrection,
+            float hairTipOutlineWidth,
+            float hairTipRange,
             IDictionary<Material, Material> convertedBySource,
             IList<(Material hair, Material fake)> fakeShadowPairs,
             IList<Material> mergedHairMaterials,
@@ -309,7 +315,7 @@ namespace NdmfMToon10ToLilToon
                 mergedMaterialCreated = true;
                 var mergedRepresentativeIndex = ResolveMergedRepresentativeIndex(original, mergedIndices, transparentRanks, mergedOutputRenderType);
                 onProgress?.Invoke("Rebuilding mesh...");
-                ApplyMergedMaterialAndMesh(renderer, result, resultSourceIndices, mergedIndices, mergedRepresentativeIndex, mergedMaterial, fakeShadowMaterial, mergedRects, report);
+                ApplyMergedMaterialAndMesh(renderer, result, resultSourceIndices, mergedIndices, mergedRepresentativeIndex, mergedMaterial, fakeShadowMaterial, mergedRects, enableHairOutlineCorrection, hairTipOutlineWidth, hairTipRange, report);
                 if (mergedHairMaterials != null && mergedMaterial != null)
                 {
                     mergedHairMaterials.Add(mergedMaterial);
@@ -1191,7 +1197,7 @@ namespace NdmfMToon10ToLilToon
             return texture.GetPixel(x, y);
         }
 
-        private static void ApplyMergedMaterialAndMesh(Renderer renderer, List<Material> materials, List<int> materialSourceIndices, IReadOnlyList<int> mergedIndices, int mergedRepresentativeSourceIndex, Material mergedMaterial, Material fakeShadowMaterial, IReadOnlyList<Rect> rects, ConversionReport report)
+        private static void ApplyMergedMaterialAndMesh(Renderer renderer, List<Material> materials, List<int> materialSourceIndices, IReadOnlyList<int> mergedIndices, int mergedRepresentativeSourceIndex, Material mergedMaterial, Material fakeShadowMaterial, IReadOnlyList<Rect> rects, bool enableHairOutlineCorrection, float hairTipOutlineWidth, float hairTipRange, ConversionReport report)
         {
             var mergedIndexSet = mergedIndices.ToHashSet();
             var newMaterials = new List<Material>();
@@ -1236,6 +1242,7 @@ namespace NdmfMToon10ToLilToon
                 uv = expandedUv;
             }
             var uvList = uv.ToList();
+            var outlineAlphaByVertex = Enumerable.Repeat(1f, vertices.Count).ToList();
 
             var normals = meshCopy.normals;
             var tangents = meshCopy.tangents;
@@ -1251,6 +1258,7 @@ namespace NdmfMToon10ToLilToon
             {
                 rectBySubMesh[mergedIndices[i]] = rects[i];
             }
+            var uvRangeBySubMesh = BuildOriginalUvRangeBySubMesh(meshCopy, mergedIndices, uvList);
 
             var atlasTexture = mergedMaterial != null ? mergedMaterial.GetTexture("_MainTex") : null;
             const float paddingPixels = 1f;
@@ -1267,6 +1275,25 @@ namespace NdmfMToon10ToLilToon
                     if (!rectBySubMesh.TryGetValue(i, out var rect))
                     {
                         mergedTriangles.AddRange(triangles);
+                        if (uvRangeBySubMesh.ContainsKey(i))
+                        {
+                            for (var t = 0; t < triangles.Length; t++)
+                            {
+                                var originalIndex = triangles[t];
+                                if (originalIndex < 0 || originalIndex >= uvList.Count) continue;
+                                var alpha = ResolveOutlineAlphaForOriginalVertex(
+                                    i,
+                                    originalIndex,
+                                    uvList,
+                                    uvRangeBySubMesh,
+                                    hairTipOutlineWidth,
+                                    hairTipRange);
+                                if (originalIndex < outlineAlphaByVertex.Count)
+                                {
+                                    outlineAlphaByVertex[originalIndex] = Mathf.Min(outlineAlphaByVertex[originalIndex], alpha);
+                                }
+                            }
+                        }
                         continue;
                     }
 
@@ -1299,6 +1326,14 @@ namespace NdmfMToon10ToLilToon
                         var newIndex = vertices.Count;
                         vertices.Add(vertices[originalIndex]);
                         uvList.Add(remappedUv);
+                        var outlineAlpha = ResolveOutlineAlphaForOriginalVertex(
+                            i,
+                            originalIndex,
+                            uvList,
+                            uvRangeBySubMesh,
+                            hairTipOutlineWidth,
+                            hairTipRange);
+                        outlineAlphaByVertex.Add(outlineAlpha);
                         if (normalList != null) normalList.Add(normalList[originalIndex]);
                         if (tangentList != null) tangentList.Add(tangentList[originalIndex]);
                         if (colorList != null) colorList.Add(colorList[originalIndex]);
@@ -1332,6 +1367,16 @@ namespace NdmfMToon10ToLilToon
             var mergedSubMeshIndex = newSubMeshTriangles.Count;
             meshCopy.SetTriangles(mergedTriangles.ToArray(), mergedSubMeshIndex, false);
 
+            if (enableHairOutlineCorrection)
+            {
+                ApplyHairOutlineCorrection(meshCopy, outlineAlphaByVertex);
+                if (mergedMaterial != null && mergedMaterial.HasProperty("_OutlineVertexR2Width"))
+                {
+                    // lilToon の _OutlineVertexR2Width: 0=None, 1=R, 2=RGBA
+                    mergedMaterial.SetFloat("_OutlineVertexR2Width", 2f);
+                }
+            }
+
             newMaterials.Add(mergedMaterial);
             newSourceIndices.Add(mergedRepresentativeSourceIndex);
             if (fakeShadowMaterial != null)
@@ -1359,6 +1404,149 @@ namespace NdmfMToon10ToLilToon
             materialSourceIndices.Clear();
             materialSourceIndices.AddRange(newSourceIndices);
             report.Warnings.Add(new ConversionWarning("hair materials merged with atlas"));
+        }
+
+        private struct AveragedNormalAccumulator
+        {
+            public Vector3 normalSum;
+            public int count;
+        }
+
+        private struct UvRange
+        {
+            public float minV;
+            public float maxV;
+        }
+
+        private static Dictionary<int, UvRange> BuildOriginalUvRangeBySubMesh(Mesh mesh, IReadOnlyList<int> mergedIndices, IReadOnlyList<Vector2> originalUv)
+        {
+            var result = new Dictionary<int, UvRange>();
+            if (mesh == null || mergedIndices == null || originalUv == null) return result;
+
+            for (var i = 0; i < mergedIndices.Count; i++)
+            {
+                var subMeshIndex = mergedIndices[i];
+                if (subMeshIndex < 0 || subMeshIndex >= mesh.subMeshCount) continue;
+                var triangles = mesh.GetTriangles(subMeshIndex);
+                if (triangles == null || triangles.Length == 0) continue;
+
+                var minV = float.PositiveInfinity;
+                var maxV = float.NegativeInfinity;
+                for (var t = 0; t < triangles.Length; t++)
+                {
+                    var vertexIndex = triangles[t];
+                    if (vertexIndex < 0 || vertexIndex >= originalUv.Count) continue;
+                    var v = WrapUv01(originalUv[vertexIndex].y);
+                    if (v < minV) minV = v;
+                    if (v > maxV) maxV = v;
+                }
+
+                if (!float.IsFinite(minV) || !float.IsFinite(maxV)) continue;
+                result[subMeshIndex] = new UvRange { minV = minV, maxV = maxV };
+            }
+
+            return result;
+        }
+
+        private static float ComputeOutlineAlphaFromOriginalUv(float originalV, UvRange uvRange, float hairTipOutlineWidth, float hairTipRange)
+        {
+            var wrappedV = WrapUv01(originalV);
+            var tipnessRaw = 0f;
+            if (uvRange.maxV > uvRange.minV)
+            {
+                // original UV の V 下端を毛先として扱う
+                tipnessRaw = 1f - Mathf.InverseLerp(uvRange.minV, uvRange.maxV, wrappedV);
+            }
+
+            var range = Mathf.Clamp01(hairTipRange);
+            var tipness = 0f;
+            if (range > 0f)
+            {
+                // 毛先の範囲: 1 なら全域、0 に近いほど先端のみ
+                var begin = 1f - range;
+                tipness = Mathf.Clamp01((tipnessRaw - begin) / Mathf.Max(range, 0.0001f));
+            }
+            // 境界を少し柔らかくする
+            tipness = tipness * tipness;
+            var thickness = Mathf.Clamp01(hairTipOutlineWidth);
+            var alpha = 1f - 0.8f * tipness * (1f - thickness);
+            return Mathf.Clamp(alpha, 0.2f, 1f);
+        }
+
+        private static float ResolveOutlineAlphaForOriginalVertex(
+            int subMeshIndex,
+            int originalIndex,
+            IReadOnlyList<Vector2> originalUv,
+            IReadOnlyDictionary<int, UvRange> uvRangeBySubMesh,
+            float hairTipOutlineWidth,
+            float hairTipRange)
+        {
+            if (originalUv == null || originalIndex < 0 || originalIndex >= originalUv.Count) return 1f;
+            if (uvRangeBySubMesh == null || !uvRangeBySubMesh.TryGetValue(subMeshIndex, out var uvRange)) return 1f;
+            return ComputeOutlineAlphaFromOriginalUv(originalUv[originalIndex].y, uvRange, hairTipOutlineWidth, hairTipRange);
+        }
+
+        private static void ApplyHairOutlineCorrection(Mesh mesh, IReadOnlyList<float> outlineAlphaByVertex)
+        {
+            if (mesh == null) return;
+
+            var vertices = mesh.vertices;
+            var normals = mesh.normals;
+            var tangents = mesh.tangents;
+            if (vertices == null || normals == null || tangents == null) return;
+            var vertexCount = vertices.Length;
+            if (vertexCount == 0 || normals.Length < vertexCount || tangents.Length < vertexCount) return;
+            if (outlineAlphaByVertex == null || outlineAlphaByVertex.Count < vertexCount) return;
+
+            const float quantizationScale = 10000f;
+            var groupedNormals = new Dictionary<Vector3Int, AveragedNormalAccumulator>(vertexCount);
+
+            for (var i = 0; i < vertexCount; i++)
+            {
+                var key = QuantizePosition(vertices[i], quantizationScale);
+                groupedNormals.TryGetValue(key, out var accumulator);
+                accumulator.normalSum += normals[i];
+                accumulator.count++;
+                groupedNormals[key] = accumulator;
+            }
+
+            var colors = new Color[vertexCount];
+            for (var i = 0; i < vertexCount; i++)
+            {
+                var key = QuantizePosition(vertices[i], quantizationScale);
+                if (!groupedNormals.TryGetValue(key, out var accumulator) || accumulator.count <= 0)
+                {
+                    colors[i] = Color.white;
+                    continue;
+                }
+
+                var averagedNormal = (accumulator.normalSum / accumulator.count).normalized;
+                var normalWs = normals[i].sqrMagnitude > 0f ? normals[i].normalized : Vector3.forward;
+                var tangentWs = new Vector3(tangents[i].x, tangents[i].y, tangents[i].z);
+                tangentWs = tangentWs.sqrMagnitude > 0f ? tangentWs.normalized : Vector3.right;
+                var bitangentSign = tangents[i].w >= 0f ? 1f : -1f;
+                var bitangentWs = Vector3.Cross(normalWs, tangentWs) * bitangentSign;
+                bitangentWs = bitangentWs.sqrMagnitude > 0f ? bitangentWs.normalized : Vector3.up;
+
+                var normalTs = new Vector3(
+                    Vector3.Dot(averagedNormal, tangentWs),
+                    Vector3.Dot(averagedNormal, bitangentWs),
+                    Vector3.Dot(averagedNormal, normalWs));
+                if (normalTs.sqrMagnitude > 0f) normalTs.Normalize();
+                var encoded = normalTs * 0.5f + Vector3.one * 0.5f;
+                var alpha = Mathf.Clamp(outlineAlphaByVertex[i], 0.2f, 1f);
+                colors[i] = new Color(encoded.x, encoded.y, encoded.z, alpha);
+            }
+
+            mesh.colors = colors;
+        }
+
+        private static Vector3Int QuantizePosition(Vector3 position, float scale)
+        {
+            return new Vector3Int(
+                Mathf.RoundToInt(position.x * scale),
+                Mathf.RoundToInt(position.y * scale),
+                Mathf.RoundToInt(position.z * scale));
         }
 
         private static Dictionary<int, int> BuildTransparentRanks(IReadOnlyList<Material> original)
