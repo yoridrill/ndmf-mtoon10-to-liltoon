@@ -28,6 +28,16 @@ namespace NdmfMToon10ToLilToon
             _language = (Language)EditorPrefs.GetInt(PrefKeyLanguage, 0);
             var component = (MToonLilToonComponent)target;
             _cachedRendererMaterials = GetRendererMaterials(component);
+            if (component != null
+                && component.enableHairMerge
+                && (component.hairSelections == null
+                    || component.hairSelections.Count == 0
+                    || HasExternalHairSelectionReference(component, _cachedRendererMaterials)))
+            {
+                ScanMaterials(component);
+                _cachedRendererMaterials = GetRendererMaterials(component);
+                EditorUtility.SetDirty(component);
+            }
             if (EnsureFaceMaterialsDetected(component))
             {
                 EditorUtility.SetDirty(component);
@@ -455,6 +465,21 @@ namespace NdmfMToon10ToLilToon
             }
 
             return changed;
+        }
+
+        private static bool HasExternalHairSelectionReference(MToonLilToonComponent component, IReadOnlyCollection<Material> scannedMaterials)
+        {
+            if (component == null || component.hairSelections == null || component.hairSelections.Count == 0) return false;
+            if (scannedMaterials == null || scannedMaterials.Count == 0) return true;
+
+            for (var i = 0; i < component.hairSelections.Count; i++)
+            {
+                var selection = component.hairSelections[i];
+                if (selection == null || selection.material == null) continue;
+                if (!scannedMaterials.Contains(selection.material)) return true;
+            }
+
+            return false;
         }
 
         private static void ScanMaterials(MToonLilToonComponent component)
