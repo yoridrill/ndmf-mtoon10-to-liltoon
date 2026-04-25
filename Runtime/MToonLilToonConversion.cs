@@ -612,30 +612,41 @@ namespace NdmfMToon10ToLilToon
                 : source.HasProperty("_MainTex")
                     ? source.GetTexture("_MainTex")
                     : null;
-            if (sourceMainTex == null) return;
-
-            var sourceOutlineMask = source.HasProperty("_OutlineWidthTex")
+            var sourceOutlineWidthTex = source.HasProperty("_OutlineWidthTex")
                 ? source.GetTexture("_OutlineWidthTex")
-                : source.HasProperty("_OutlineWidthMultiplyTexture")
-                    ? source.GetTexture("_OutlineWidthMultiplyTexture")
-                    : source.HasProperty("_OutlineMask")
-                        ? source.GetTexture("_OutlineMask")
-                        : null;
+                : null;
+            if (IsLikelyDummyTexture(sourceOutlineWidthTex))
+            {
+                sourceOutlineWidthTex = null;
+            }
+
+            var sourceOutlineMask = source.HasProperty("_OutlineWidthMultiplyTexture")
+                ? source.GetTexture("_OutlineWidthMultiplyTexture")
+                : source.HasProperty("_OutlineMask")
+                    ? source.GetTexture("_OutlineMask")
+                    : null;
             if (IsLikelyDummyTexture(sourceOutlineMask))
             {
                 sourceOutlineMask = null;
             }
 
-            // MToon には _OutlineTex がないため、mask がある場合はそれを優先、
-            // 無い場合のみメインテクスチャを輪郭線テクスチャへ入れる。
-            if (destination.HasProperty("_OutlineTex"))
+            // マスク有無に関係なく、輪郭線が有効ならメインテクスチャを _OutlineTex へ入れる。
+            if (destination.HasProperty("_OutlineTex") && sourceMainTex != null)
             {
-                destination.SetTexture("_OutlineTex", sourceOutlineMask != null ? sourceOutlineMask : sourceMainTex);
+                destination.SetTexture("_OutlineTex", sourceMainTex);
             }
 
-            if (sourceOutlineMask == null) return;
-            SetTextureIfExists(destination, "_OutlineWidthMask", sourceOutlineMask);
-            SetTextureIfExists(destination, "_OutlineMask", sourceOutlineMask);
+            var outlineWidthMask = sourceOutlineWidthTex ?? sourceOutlineMask;
+            if (outlineWidthMask != null)
+            {
+                SetTextureIfExists(destination, "_OutlineWidthMask", outlineWidthMask);
+            }
+
+            var outlineMask = sourceOutlineMask ?? sourceOutlineWidthTex;
+            if (outlineMask != null)
+            {
+                SetTextureIfExists(destination, "_OutlineMask", outlineMask);
+            }
         }
 
         private static void ApplyOutlineWidthMode(Material source, Material destination)
