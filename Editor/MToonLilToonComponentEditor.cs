@@ -351,6 +351,7 @@ namespace NdmfMToon10ToLilToon
                     DrawTwoColumnPropertyRow(fakeShadowOffsetLabelRect, fakeShadowOffsetValueRect, T("オフセット", "Offset"), fakeShadowOffsetProp);
                 }
 
+                EditorGUILayout.Space(OverrideGroupSpacing);
                 var outlineCorrectionRowRect = EditorGUILayout.GetControlRect();
                 GetHairAdjustmentColumnRects(outlineCorrectionRowRect, out var outlineCorrectionCategoryRect, out var outlineCorrectionLabelRect, out var outlineCorrectionValueRect);
                 DrawCategoryColumn(outlineCorrectionCategoryRect, enableHairOutlineCorrectionProp, T("輪郭線補正", "Outline Correction"), showToggle: true);
