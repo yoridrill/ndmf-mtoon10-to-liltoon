@@ -21,8 +21,8 @@ namespace NdmfMToon10ToLilToon
         public Material eyebrowStencilMaterial;
         public Material fakeShadowFaceMaterial;
         public bool enableFakeShadow;
-        public Vector3 fakeShadowDirection = new Vector3(0.5f, 1f, 0f);
-        public float fakeShadowOffset = 0.003f;
+        public Vector3 fakeShadowDirection = new Vector3(1f, 4f, 2f);
+        public float fakeShadowOffset = 0.005f;
         public bool enableFaceShadowTuning;
         public Material faceShadowFaceMaterial;
         public Texture2D faceShadowSdfTexture;
