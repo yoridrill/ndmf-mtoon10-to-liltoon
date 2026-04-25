@@ -17,7 +17,11 @@ namespace NdmfMToon10ToLilToon
 
         private static readonly Dictionary<string, HairMergeCacheEntry> HairMergeCache = new();
 
-        internal static void ApplyGlobalOverridesToConvertedMaterials(MToonLilToonComponent component, LilToonGlobalOverrides overrides)
+        internal static void ApplyGlobalOverridesToConvertedMaterials(
+            MToonLilToonComponent component,
+            LilToonGlobalOverrides overrides,
+            bool disableShadowReceiveForFace = false,
+            bool disableBacklightStrengthForFace = false)
         {
             if (component == null || overrides == null) return;
 
@@ -32,6 +36,14 @@ namespace NdmfMToon10ToLilToon
             for (var i = 0; i < materials.Count; i++)
             {
                 MToonToLilToonMapper.ApplyGlobalOverridesToMaterial(materials[i], overrides);
+            }
+
+            if (!disableShadowReceiveForFace && !disableBacklightStrengthForFace) return;
+
+            ApplyFaceGlobalExclusionSettings(component.fakeShadowFaceMaterial, disableShadowReceiveForFace, disableBacklightStrengthForFace);
+            if (component.faceShadowFaceMaterial != component.fakeShadowFaceMaterial)
+            {
+                ApplyFaceGlobalExclusionSettings(component.faceShadowFaceMaterial, disableShadowReceiveForFace, disableBacklightStrengthForFace);
             }
         }
 
@@ -105,6 +117,10 @@ namespace NdmfMToon10ToLilToon
                     : component.eyebrowStencilMaterial)
                 : null;
 
+            component.fakeShadowFaceMaterial = resolvedFaceMaterial;
+            component.faceShadowFaceMaterial = resolvedFaceShadowMaterial;
+            component.eyebrowStencilMaterial = resolvedEyebrowMaterial;
+
             if (component.enableEyebrowStencil
                 && resolvedFaceMaterial != null
                 && resolvedEyebrowMaterial != null)
@@ -136,14 +152,28 @@ namespace NdmfMToon10ToLilToon
                 }
             }
 
-            if (component.enableFaceShadowTuning
-                && resolvedFaceShadowMaterial != null)
+            if (resolvedFaceShadowMaterial != null && component.enableFaceShadowTuning)
             {
-                ApplyFaceShadowSdfSettings(
+                ApplyFaceShadowMaskSettings(
                     resolvedFaceShadowMaterial,
                     component.faceShadowSdfTexture,
+                    component.faceShadowMaskType,
+                    component.shadowStrengthMaskLod);
+            }
+
+            if (component.disableShadowReceiveForFace || component.disableBacklightStrengthForFace)
+            {
+                ApplyFaceGlobalExclusionSettings(
+                    resolvedFaceMaterial,
                     component.disableShadowReceiveForFace,
                     component.disableBacklightStrengthForFace);
+                if (resolvedFaceShadowMaterial != resolvedFaceMaterial)
+                {
+                    ApplyFaceGlobalExclusionSettings(
+                        resolvedFaceShadowMaterial,
+                        component.disableShadowReceiveForFace,
+                        component.disableBacklightStrengthForFace);
+                }
             }
 
             component.scannedMaterialCount = report.ScannedMaterialCount;
@@ -409,6 +439,7 @@ namespace NdmfMToon10ToLilToon
             BakeOptionalAtlas(new[] { "_EmissionMap" }, original, mergedIndices, mergedMaterial, new[] { "_EmissiveMap", "_EmissionMap" }, atlas.width, atlas.height, atlasRects);
             BakeOptionalAtlas(new[] { "_BumpMap" }, original, mergedIndices, mergedMaterial, new[] { "_NormalMap", "_BumpMap" }, atlas.width, atlas.height, atlasRects);
             BakeOptionalAtlas(new[] { "_OutlineTex", "_OutlineMask" }, original, mergedIndices, mergedMaterial, new[] { "_OutlineWidthMultiplyTexture", "_OutlineMask" }, atlas.width, atlas.height, atlasRects);
+            NormalizeMergedEmissionAndMatCapState(original, mergedIndices, mergedMaterial);
             CacheHairMergeResult(cacheKey, mergedMaterial, fakeShadowMaterial, atlasRects);
 
             return true;
@@ -524,9 +555,10 @@ namespace NdmfMToon10ToLilToon
                     destination.DisableKeyword("_ALPHAPREMULTIPLY_ON");
                     destination.SetOverrideTag("RenderType", "Transparent");
                     destination.renderQueue = (int)RenderQueue.Transparent;
+                    SetFloatIfExists(destination, "_Cutoff", 0.001f);
                     SetFloatIfExists(destination, "_UseClipping", 0f);
                     SetFloatIfExists(destination, "_AlphaMode", 2f);
-                    SetFloatIfExists(destination, "_SrcBlend", (float)BlendMode.SrcAlpha);
+                    SetFloatIfExists(destination, "_SrcBlend", (float)BlendMode.One);
                     SetFloatIfExists(destination, "_DstBlend", (float)BlendMode.OneMinusSrcAlpha);
                     SetFloatIfExists(destination, "_ZWrite", 0f);
                     SetFloatIfExists(destination, "_TransparentMode", 2f);
@@ -644,21 +676,36 @@ namespace NdmfMToon10ToLilToon
             }
         }
 
-        private static void ApplyFaceShadowSdfSettings(
+        private static void ApplyFaceShadowMaskSettings(
             Material faceMaterial,
             Texture sdfTexture,
-            bool disableShadowReceiveForFace,
-            bool disableBacklightStrengthForFace)
+            MToonLilToonComponent.FaceShadowMaskType maskType,
+            float shadowStrengthMaskLod)
         {
             if (faceMaterial == null) return;
 
             SetFloatIfAnyExists(faceMaterial, new[] { "_UseShadowMask", "_UseShadowStrengthMask" }, 1f);
-            SetFloatIfAnyExists(faceMaterial, new[] { "_ShadowMaskType" }, 2f);
+            var shadowMaskTypeValue = maskType switch
+            {
+                MToonLilToonComponent.FaceShadowMaskType.Strength => 0f,
+                MToonLilToonComponent.FaceShadowMaskType.Flat => 1f,
+                MToonLilToonComponent.FaceShadowMaskType.Sdf => 2f,
+                _ => 1f
+            };
+            SetFloatIfAnyExists(faceMaterial, new[] { "_ShadowMaskType" }, shadowMaskTypeValue);
             SetTextureIfAnyExists(faceMaterial, new[] { "_ShadowStrengthMask" }, sdfTexture);
+            SetFloatIfAnyExists(faceMaterial, new[] { "_ShadowStrengthMaskLOD" }, Mathf.Clamp01(shadowStrengthMaskLod));
+        }
 
+        private static void ApplyFaceGlobalExclusionSettings(
+            Material faceMaterial,
+            bool disableShadowReceiveForFace,
+            bool disableBacklightStrengthForFace)
+        {
+            if (faceMaterial == null) return;
             if (disableShadowReceiveForFace)
             {
-                SetFloatIfAnyExists(faceMaterial, new[] { "_ShadowReceive", "_ReceiveShadowRate" }, 0f);
+                SetFloatIfAnyExists(faceMaterial, new[] { "_ShadowReceive" }, 0f);
             }
 
             if (disableBacklightStrengthForFace)
@@ -811,6 +858,89 @@ namespace NdmfMToon10ToLilToon
             }
 
             return false;
+        }
+
+        private static void NormalizeMergedEmissionAndMatCapState(IReadOnlyList<Material> original, IReadOnlyList<int> mergedIndices, Material mergedMaterial)
+        {
+            if (original == null || mergedIndices == null || mergedMaterial == null) return;
+
+            var hasEmissionTexture = false;
+            var hasEmissionColor = false;
+            var emissionColor = Color.black;
+
+            var hasMatCapTexture = false;
+            var hasMatCapColor = false;
+            var matCapColor = Color.black;
+
+            for (var i = 0; i < mergedIndices.Count; i++)
+            {
+                var sourceIndex = mergedIndices[i];
+                if (sourceIndex < 0 || sourceIndex >= original.Count) continue;
+                var source = original[sourceIndex];
+                if (source == null) continue;
+
+                var emissionTex = GetTextureFromAny(source, new[] { "_EmissiveMap", "_EmissionMap" });
+                if (emissionTex != null && !IsLikelyDummyTexture(emissionTex))
+                {
+                    hasEmissionTexture = true;
+                }
+
+                if (TryGetColorFromAny(source, new[] { "_EmissiveFactor", "_EmissionColor" }, out var sourceEmissionColor)
+                    && !IsApproximatelyBlack(sourceEmissionColor))
+                {
+                    if (!hasEmissionColor) emissionColor = sourceEmissionColor;
+                    hasEmissionColor = true;
+                }
+
+                var matCapTex = GetTextureFromAny(source, new[] { "_MatcapTex" });
+                if (matCapTex != null && !IsLikelyDummyTexture(matCapTex))
+                {
+                    hasMatCapTexture = true;
+                }
+
+                if (TryGetColorFromAny(source, new[] { "_MatcapColor" }, out var sourceMatCapColor)
+                    && !IsApproximatelyBlack(sourceMatCapColor))
+                {
+                    if (!hasMatCapColor) matCapColor = sourceMatCapColor;
+                    hasMatCapColor = true;
+                }
+            }
+
+            var useEmission = hasEmissionTexture || hasEmissionColor;
+            SetFloatIfAnyExists(mergedMaterial, new[] { "_UseEmission" }, useEmission ? 1f : 0f);
+            SetColorIfAnyExists(mergedMaterial, new[] { "_EmissionColor" }, hasEmissionColor ? emissionColor : Color.black);
+
+            var useMatCap = hasMatCapTexture && hasMatCapColor;
+            SetFloatIfAnyExists(mergedMaterial, new[] { "_UseMatCap" }, useMatCap ? 1f : 0f);
+            SetColorIfAnyExists(mergedMaterial, new[] { "_MatCapColor" }, useMatCap ? matCapColor : Color.black);
+        }
+
+        private static Texture GetTextureFromAny(Material material, IReadOnlyList<string> propertyNames)
+        {
+            if (material == null || propertyNames == null) return null;
+            for (var i = 0; i < propertyNames.Count; i++)
+            {
+                var propertyName = propertyNames[i];
+                if (!material.HasProperty(propertyName)) continue;
+                var texture = material.GetTexture(propertyName);
+                if (texture != null) return texture;
+            }
+
+            return null;
+        }
+
+        private static bool IsLikelyDummyTexture(Texture texture)
+        {
+            if (texture == null) return false;
+            return texture.width <= 8 && texture.height <= 8;
+        }
+
+        private static bool IsApproximatelyBlack(Color color)
+        {
+            const float epsilon = 0.001f;
+            return Mathf.Abs(color.r) <= epsilon
+                && Mathf.Abs(color.g) <= epsilon
+                && Mathf.Abs(color.b) <= epsilon;
         }
 
         private static void SetColorIfAnyExists(Material material, IReadOnlyList<string> propertyNames, Color color)

@@ -998,6 +998,7 @@ namespace NdmfMToon10ToLilToon
                     destination.DisableKeyword("_ALPHATEST_ON");
                     destination.EnableKeyword("_ALPHABLEND_ON");
                     destination.DisableKeyword("_ALPHAPREMULTIPLY_ON");
+                    SetIfExists(destination, "_Cutoff", 0.001f);
                     SetIfExists(destination, "_UseClipping", 0f);
                     SetIfExists(destination, "_AlphaMode", 2f);
                     break;
@@ -1019,8 +1020,8 @@ namespace NdmfMToon10ToLilToon
                     if (!hasExplicitZWrite) SetIfExists(destination, "_ZWrite", 1f);
                     break;
                 case RenderType.Transparent:
-                    if (!hasExplicitSrcBlend) SetIfExists(destination, "_SrcBlend", (float)BlendMode.SrcAlpha);
-                    if (!hasExplicitDstBlend) SetIfExists(destination, "_DstBlend", (float)BlendMode.OneMinusSrcAlpha);
+                    SetIfExists(destination, "_SrcBlend", (float)BlendMode.One);
+                    SetIfExists(destination, "_DstBlend", (float)BlendMode.OneMinusSrcAlpha);
                     break;
             }
         }
