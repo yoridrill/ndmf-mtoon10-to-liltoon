@@ -136,21 +136,28 @@ namespace NdmfMToon10ToLilToon
                 }
             }
 
-            if (resolvedFaceShadowMaterial != null)
+            if (resolvedFaceShadowMaterial != null && component.enableFaceShadowTuning)
             {
-                if (component.enableFaceShadowTuning)
-                {
-                    ApplyFaceShadowMaskSettings(
-                        resolvedFaceShadowMaterial,
-                        component.faceShadowSdfTexture,
-                        component.faceShadowMaskType,
-                        component.shadowStrengthMaskLod);
-                }
-
-                ApplyFaceGlobalExclusionSettings(
+                ApplyFaceShadowMaskSettings(
                     resolvedFaceShadowMaterial,
+                    component.faceShadowSdfTexture,
+                    component.faceShadowMaskType,
+                    component.shadowStrengthMaskLod);
+            }
+
+            if (component.disableShadowReceiveForFace || component.disableBacklightStrengthForFace)
+            {
+                ApplyFaceGlobalExclusionSettings(
+                    resolvedFaceMaterial,
                     component.disableShadowReceiveForFace,
                     component.disableBacklightStrengthForFace);
+                if (resolvedFaceShadowMaterial != resolvedFaceMaterial)
+                {
+                    ApplyFaceGlobalExclusionSettings(
+                        resolvedFaceShadowMaterial,
+                        component.disableShadowReceiveForFace,
+                        component.disableBacklightStrengthForFace);
+                }
             }
 
             component.scannedMaterialCount = report.ScannedMaterialCount;
