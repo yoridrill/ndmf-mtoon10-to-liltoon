@@ -397,11 +397,11 @@ namespace NdmfMToon10ToLilToon
                 SetIfExists(destination, "_ShadowBorder", (1f - shift) * 0.5f);
             }
 
-            if (source.HasProperty("_ShadingToonyFactor"))
+            if (TryGetFloat(source, new[] { "_ShadingToonyFactor", "_ShadeToony" }, out var toonyRaw))
             {
                 // MToon: 値が大きいほどくっきり
                 // lilToon _ShadowBlur: 値が大きいほどぼかし
-                var toony = Mathf.Clamp01(source.GetFloat("_ShadingToonyFactor"));
+                var toony = Mathf.Clamp01(toonyRaw);
                 SetIfExists(destination, "_ShadowBlur", 1f - toony);
             }
 
@@ -716,6 +716,8 @@ namespace NdmfMToon10ToLilToon
         private static bool HasOutline(Material source)
         {
             if (source == null) return false;
+            if (RenderTypeResolver.ResolveFromMaterial(source) == RenderType.Transparent) return false;
+
             if (source.HasProperty("_OutlineWidthMode") && Mathf.RoundToInt(source.GetFloat("_OutlineWidthMode")) > 0)
             {
                 return true;
