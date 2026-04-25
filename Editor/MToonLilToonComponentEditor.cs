@@ -135,7 +135,7 @@ namespace NdmfMToon10ToLilToon
             EditorGUI.BeginChangeCheck();
             var overridesProp = serializedObject.FindProperty(nameof(MToonLilToonComponent.globalOverrides));
             EditorGUILayout.Space();
-            EditorGUILayout.LabelField(T("lilToon固有機能の一括設定", "Bulk Settings for lilToon-specific Features"), EditorStyles.boldLabel);
+            DrawUnderlinedSectionTitle(T("lilToon固有機能の一括設定", "Bulk Settings for lilToon-specific Features"));
             DrawOverrideGroup(
                 overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.enableShadowReceive)),
                 T("影を受け取る", "Receive Shadow"),
@@ -174,8 +174,15 @@ namespace NdmfMToon10ToLilToon
         private void DrawSpecificPartAdjustmentsHeading()
         {
             EditorGUILayout.Space(SectionHeadingSpacing);
-            EditorGUILayout.LabelField(T("特定部位への調整", "Adjustments for Specific Parts"), EditorStyles.boldLabel);
+            DrawUnderlinedSectionTitle(T("特定部位への調整", "Adjustments for Specific Parts"));
             EditorGUILayout.Space(2f);
+        }
+
+        private static void DrawUnderlinedSectionTitle(string title)
+        {
+            EditorGUILayout.LabelField(title, EditorStyles.boldLabel);
+            var lineRect = EditorGUILayout.GetControlRect(false, 2f);
+            EditorGUI.DrawRect(lineRect, new Color(0.35f, 0.35f, 0.35f, 1f));
         }
 
         private void DrawOverrideGroup(
@@ -309,6 +316,7 @@ namespace NdmfMToon10ToLilToon
 
             using (new EditorGUI.IndentLevelScope())
             {
+                EditorGUILayout.Space(OverrideGroupSpacing);
                 var enableEyebrowStencilProp = serializedObject.FindProperty(nameof(MToonLilToonComponent.enableEyebrowStencil));
                 var eyebrowRowRect = EditorGUILayout.GetControlRect();
                 GetHairAdjustmentColumnRects(eyebrowRowRect, out var eyebrowCategoryRect, out var eyebrowLabelRect, out var eyebrowValueRect);
