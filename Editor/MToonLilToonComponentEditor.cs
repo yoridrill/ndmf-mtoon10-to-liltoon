@@ -333,6 +333,7 @@ namespace NdmfMToon10ToLilToon
                 var fakeShadowDirectionProp = serializedObject.FindProperty(nameof(MToonLilToonComponent.fakeShadowDirection));
                 var fakeShadowOffsetProp = serializedObject.FindProperty(nameof(MToonLilToonComponent.fakeShadowOffset));
                 var enableHairOutlineCorrectionProp = serializedObject.FindProperty(nameof(MToonLilToonComponent.enableHairOutlineCorrection));
+                var hairTipRangeProp = serializedObject.FindProperty(nameof(MToonLilToonComponent.hairTipRange));
 
                 var fakeShadowFirstRowRect = EditorGUILayout.GetControlRect();
                 GetHairAdjustmentColumnRects(fakeShadowFirstRowRect, out var fakeShadowCategoryRect, out var fakeShadowDirectionLabelRect, out var fakeShadowDirectionValueRect);
@@ -360,6 +361,18 @@ namespace NdmfMToon10ToLilToon
                     if (hairTipOutlineWidthProp != null)
                     {
                         hairTipOutlineWidthProp.floatValue = EditorGUI.Slider(outlineCorrectionValueRect, hairTipOutlineWidthProp.floatValue, 0f, 1f);
+                    }
+                }
+
+                var tipRangeRowRect = EditorGUILayout.GetControlRect();
+                GetHairAdjustmentColumnRects(tipRangeRowRect, out var tipRangeCategoryRect, out var tipRangeLabelRect, out var tipRangeValueRect);
+                DrawCategoryColumn(tipRangeCategoryRect, enableHairOutlineCorrectionProp, string.Empty, showToggle: false);
+                using (new EditorGUI.DisabledScope(!enableHairOutlineCorrectionProp.boolValue))
+                {
+                    EditorGUI.LabelField(tipRangeLabelRect, T("毛先の範囲", "Tip Range"));
+                    if (hairTipRangeProp != null)
+                    {
+                        hairTipRangeProp.floatValue = EditorGUI.Slider(tipRangeValueRect, hairTipRangeProp.floatValue, 0f, 1f);
                     }
                 }
                 EditorGUILayout.Space(OverrideGroupSpacing);

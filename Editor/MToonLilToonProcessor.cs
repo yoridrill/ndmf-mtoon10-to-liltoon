@@ -96,6 +96,7 @@ namespace NdmfMToon10ToLilToon
                     component.fakeShadowOffset,
                     component.enableHairOutlineCorrection,
                     component.hairTipOutlineWidth,
+                    component.hairTipRange,
                     convertedBySource,
                     fakeShadowPairs,
                     mergedHairMaterials,
@@ -231,6 +232,7 @@ namespace NdmfMToon10ToLilToon
             float fakeShadowOffset,
             bool enableHairOutlineCorrection,
             float hairTipOutlineWidth,
+            float hairTipRange,
             IDictionary<Material, Material> convertedBySource,
             IList<(Material hair, Material fake)> fakeShadowPairs,
             IList<Material> mergedHairMaterials,
@@ -313,7 +315,7 @@ namespace NdmfMToon10ToLilToon
                 mergedMaterialCreated = true;
                 var mergedRepresentativeIndex = ResolveMergedRepresentativeIndex(original, mergedIndices, transparentRanks, mergedOutputRenderType);
                 onProgress?.Invoke("Rebuilding mesh...");
-                ApplyMergedMaterialAndMesh(renderer, result, resultSourceIndices, mergedIndices, mergedRepresentativeIndex, mergedMaterial, fakeShadowMaterial, mergedRects, enableHairOutlineCorrection, hairTipOutlineWidth, report);
+                ApplyMergedMaterialAndMesh(renderer, result, resultSourceIndices, mergedIndices, mergedRepresentativeIndex, mergedMaterial, fakeShadowMaterial, mergedRects, enableHairOutlineCorrection, hairTipOutlineWidth, hairTipRange, report);
                 if (mergedHairMaterials != null && mergedMaterial != null)
                 {
                     mergedHairMaterials.Add(mergedMaterial);
@@ -1195,7 +1197,7 @@ namespace NdmfMToon10ToLilToon
             return texture.GetPixel(x, y);
         }
 
-        private static void ApplyMergedMaterialAndMesh(Renderer renderer, List<Material> materials, List<int> materialSourceIndices, IReadOnlyList<int> mergedIndices, int mergedRepresentativeSourceIndex, Material mergedMaterial, Material fakeShadowMaterial, IReadOnlyList<Rect> rects, bool enableHairOutlineCorrection, float hairTipOutlineWidth, ConversionReport report)
+        private static void ApplyMergedMaterialAndMesh(Renderer renderer, List<Material> materials, List<int> materialSourceIndices, IReadOnlyList<int> mergedIndices, int mergedRepresentativeSourceIndex, Material mergedMaterial, Material fakeShadowMaterial, IReadOnlyList<Rect> rects, bool enableHairOutlineCorrection, float hairTipOutlineWidth, float hairTipRange, ConversionReport report)
         {
             var mergedIndexSet = mergedIndices.ToHashSet();
             var newMaterials = new List<Material>();
@@ -1279,7 +1281,7 @@ namespace NdmfMToon10ToLilToon
                             {
                                 var originalIndex = triangles[t];
                                 if (originalIndex < 0 || originalIndex >= uvList.Count) continue;
-                                var alpha = ComputeOutlineAlphaFromOriginalUv(uvList[originalIndex].y, uvRange, hairTipOutlineWidth);
+                                var alpha = ComputeOutlineAlphaFromOriginalUv(uvList[originalIndex].y, uvRange, hairTipOutlineWidth, hairTipRange);
                                 if (originalIndex < outlineAlphaByVertex.Count)
                                 {
                                     outlineAlphaByVertex[originalIndex] = Mathf.Min(outlineAlphaByVertex[originalIndex], alpha);
@@ -1321,7 +1323,7 @@ namespace NdmfMToon10ToLilToon
                         var outlineAlpha = 1f;
                         if (uvRangeBySubMesh.TryGetValue(i, out var uvRange) && originalIndex >= 0 && originalIndex < uvList.Count)
                         {
-                            outlineAlpha = ComputeOutlineAlphaFromOriginalUv(uvList[originalIndex].y, uvRange, hairTipOutlineWidth);
+                            outlineAlpha = ComputeOutlineAlphaFromOriginalUv(uvList[originalIndex].y, uvRange, hairTipOutlineWidth, hairTipRange);
                         }
                         outlineAlphaByVertex.Add(outlineAlpha);
                         if (normalList != null) normalList.Add(normalList[originalIndex]);
@@ -1438,17 +1440,26 @@ namespace NdmfMToon10ToLilToon
             return result;
         }
 
-        private static float ComputeOutlineAlphaFromOriginalUv(float originalV, UvRange uvRange, float hairTipOutlineWidth)
+        private static float ComputeOutlineAlphaFromOriginalUv(float originalV, UvRange uvRange, float hairTipOutlineWidth, float hairTipRange)
         {
             var wrappedV = WrapUv01(originalV);
-            var tipness = 0f;
+            var tipnessRaw = 0f;
             if (uvRange.maxV > uvRange.minV)
             {
                 // original UV の V 下端を毛先として扱う
-                tipness = 1f - Mathf.InverseLerp(uvRange.minV, uvRange.maxV, wrappedV);
+                tipnessRaw = 1f - Mathf.InverseLerp(uvRange.minV, uvRange.maxV, wrappedV);
             }
-            // 減衰範囲を毛先近傍に寄せる
-            tipness = tipness * tipness * tipness * tipness;
+
+            var range = Mathf.Clamp01(hairTipRange);
+            var tipness = 0f;
+            if (range > 0f)
+            {
+                // 毛先の範囲: 1 なら全域、0 に近いほど先端のみ
+                var begin = 1f - range;
+                tipness = Mathf.Clamp01((tipnessRaw - begin) / Mathf.Max(range, 0.0001f));
+            }
+            // 境界を少し柔らかくする
+            tipness = tipness * tipness;
             var thickness = Mathf.Clamp01(hairTipOutlineWidth);
             var alpha = 1f - 0.8f * tipness * (1f - thickness);
             return Mathf.Clamp(alpha, 0.2f, 1f);
