@@ -372,7 +372,7 @@ namespace NdmfMToon10ToLilToon
             var options = new[]
             {
                 T("強度", "Strength"),
-                T("平坦化", "Flat"),
+                T("平面化", "Flat"),
                 "SDF"
             };
 

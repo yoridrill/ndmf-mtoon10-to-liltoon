@@ -136,14 +136,19 @@ namespace NdmfMToon10ToLilToon
                 }
             }
 
-            if (component.enableFaceShadowTuning
-                && resolvedFaceShadowMaterial != null)
+            if (resolvedFaceShadowMaterial != null)
             {
-                ApplyFaceShadowSdfSettings(
+                if (component.enableFaceShadowTuning)
+                {
+                    ApplyFaceShadowMaskSettings(
+                        resolvedFaceShadowMaterial,
+                        component.faceShadowSdfTexture,
+                        component.faceShadowMaskType,
+                        component.shadowStrengthMaskLod);
+                }
+
+                ApplyFaceGlobalExclusionSettings(
                     resolvedFaceShadowMaterial,
-                    component.faceShadowSdfTexture,
-                    component.faceShadowMaskType,
-                    component.shadowStrengthMaskLod,
                     component.disableShadowReceiveForFace,
                     component.disableBacklightStrengthForFace);
             }
@@ -646,13 +651,11 @@ namespace NdmfMToon10ToLilToon
             }
         }
 
-        private static void ApplyFaceShadowSdfSettings(
+        private static void ApplyFaceShadowMaskSettings(
             Material faceMaterial,
             Texture sdfTexture,
             MToonLilToonComponent.FaceShadowMaskType maskType,
-            float shadowStrengthMaskLod,
-            bool disableShadowReceiveForFace,
-            bool disableBacklightStrengthForFace)
+            float shadowStrengthMaskLod)
         {
             if (faceMaterial == null) return;
 
@@ -667,7 +670,14 @@ namespace NdmfMToon10ToLilToon
             SetFloatIfAnyExists(faceMaterial, new[] { "_ShadowMaskType" }, shadowMaskTypeValue);
             SetTextureIfAnyExists(faceMaterial, new[] { "_ShadowStrengthMask" }, sdfTexture);
             SetFloatIfAnyExists(faceMaterial, new[] { "_ShadowStrengthMaskLOD" }, Mathf.Clamp01(shadowStrengthMaskLod));
+        }
 
+        private static void ApplyFaceGlobalExclusionSettings(
+            Material faceMaterial,
+            bool disableShadowReceiveForFace,
+            bool disableBacklightStrengthForFace)
+        {
+            if (faceMaterial == null) return;
             if (disableShadowReceiveForFace)
             {
                 SetFloatIfAnyExists(faceMaterial, new[] { "_ShadowReceive", "_ReceiveShadowRate" }, 0f);
