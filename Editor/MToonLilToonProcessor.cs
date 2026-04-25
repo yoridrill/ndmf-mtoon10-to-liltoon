@@ -1444,7 +1444,10 @@ namespace NdmfMToon10ToLilToon
                 var tipness = 0f;
                 if (maxConnectivity > minConnectivity)
                 {
-                    tipness = 1f - Mathf.InverseLerp(minConnectivity, maxConnectivity, connectivity);
+                    var tipnessRaw = 1f - Mathf.InverseLerp(minConnectivity, maxConnectivity, connectivity);
+                    // 低接続頂点すべてに効かせると輪郭線全体が細く見えるため、
+                    // 減衰範囲を狭めて「毛先に近い頂点」へ寄せる。
+                    tipness = tipnessRaw * tipnessRaw * tipnessRaw * tipnessRaw;
                 }
 
                 var thickness = Mathf.Clamp01(hairTipOutlineWidth);
