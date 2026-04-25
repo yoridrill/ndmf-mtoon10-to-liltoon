@@ -558,7 +558,7 @@ namespace NdmfMToon10ToLilToon
                     SetFloatIfExists(destination, "_Cutoff", 0.001f);
                     SetFloatIfExists(destination, "_UseClipping", 0f);
                     SetFloatIfExists(destination, "_AlphaMode", 2f);
-                    SetFloatIfExists(destination, "_SrcBlend", (float)BlendMode.SrcAlpha);
+                    SetFloatIfExists(destination, "_SrcBlend", (float)BlendMode.One);
                     SetFloatIfExists(destination, "_DstBlend", (float)BlendMode.OneMinusSrcAlpha);
                     SetFloatIfExists(destination, "_ZWrite", 0f);
                     SetFloatIfExists(destination, "_TransparentMode", 2f);

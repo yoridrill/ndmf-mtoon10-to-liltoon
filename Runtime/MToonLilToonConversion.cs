@@ -1020,10 +1020,7 @@ namespace NdmfMToon10ToLilToon
                     if (!hasExplicitZWrite) SetIfExists(destination, "_ZWrite", 1f);
                     break;
                 case RenderType.Transparent:
-                    // ここでの「明示値」は source マテリアルが保持している _SrcBlend/_DstBlend 等の実値。
-                    // （MToon のシェーダープロパティとして存在しうる値）
-                    // Transparent ではこの値が不適切なことがあるため、lilToon 標準へ強制する。
-                    SetIfExists(destination, "_SrcBlend", (float)BlendMode.SrcAlpha);
+                    SetIfExists(destination, "_SrcBlend", (float)BlendMode.One);
                     SetIfExists(destination, "_DstBlend", (float)BlendMode.OneMinusSrcAlpha);
                     break;
             }
