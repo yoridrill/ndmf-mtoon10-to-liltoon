@@ -404,8 +404,9 @@ namespace NdmfMToon10ToLilToon
                     if (selectedProp == null || materialProp == null) continue;
 
                     var rowRect = EditorGUILayout.GetControlRect();
-                    var toggleRect = new Rect(rowRect.x, rowRect.y, 18f, rowRect.height);
-                    var materialRect = new Rect(rowRect.x + 22f, rowRect.y, Mathf.Max(0f, rowRect.width - 22f), rowRect.height);
+                    const float toggleColumnWidth = 26f;
+                    var toggleRect = new Rect(rowRect.x, rowRect.y, toggleColumnWidth, rowRect.height);
+                    var materialRect = new Rect(rowRect.x + toggleColumnWidth, rowRect.y, Mathf.Max(0f, rowRect.width - toggleColumnWidth), rowRect.height);
 
                     var nextSelected = EditorGUI.Toggle(toggleRect, selectedProp.boolValue);
                     if (nextSelected != selectedProp.boolValue)
