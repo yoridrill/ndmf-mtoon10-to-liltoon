@@ -1020,8 +1020,10 @@ namespace NdmfMToon10ToLilToon
                     if (!hasExplicitZWrite) SetIfExists(destination, "_ZWrite", 1f);
                     break;
                 case RenderType.Transparent:
-                    if (!hasExplicitSrcBlend) SetIfExists(destination, "_SrcBlend", (float)BlendMode.SrcAlpha);
-                    if (!hasExplicitDstBlend) SetIfExists(destination, "_DstBlend", (float)BlendMode.OneMinusSrcAlpha);
+                    // MToon 側の明示ブレンド値は Transparent で不適切な値を持つことがあるため、
+                    // 透明時は lilToon 標準のブレンドに強制する。
+                    SetIfExists(destination, "_SrcBlend", (float)BlendMode.SrcAlpha);
+                    SetIfExists(destination, "_DstBlend", (float)BlendMode.OneMinusSrcAlpha);
                     break;
             }
         }
