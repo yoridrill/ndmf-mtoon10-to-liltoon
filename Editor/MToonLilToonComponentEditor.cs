@@ -169,9 +169,9 @@ namespace NdmfMToon10ToLilToon
                 overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.outlineZBias)),
                 TT(
                     "輪郭線のZ Bias",
-                    "アウトラインの描画位置を前後にずらし、ちらつきや埋もれを抑えます。",
+                    "輪郭線を前後にずらします。折れジワの抑制や、シルエットだけに輪郭線を出すことが可能です。",
                     "Outline Z Bias",
-                    "Moves outline depth forward/backward to reduce flicker or clipping."));
+                    "Moves outline forward/backward. Helps suppress fold artifacts and show outlines on silhouette only."));
             return EditorGUI.EndChangeCheck();
         }
 
@@ -256,6 +256,11 @@ namespace NdmfMToon10ToLilToon
 
         private static void DrawCategoryColumn(Rect categoryRect, SerializedProperty enabledProp, string label, bool showToggle)
         {
+            DrawCategoryColumn(categoryRect, enabledProp, new GUIContent(label), showToggle);
+        }
+
+        private static void DrawCategoryColumn(Rect categoryRect, SerializedProperty enabledProp, GUIContent label, bool showToggle)
+        {
             if (showToggle)
             {
                 enabledProp.boolValue = EditorGUI.ToggleLeft(categoryRect, label, enabledProp.boolValue);
@@ -330,16 +335,18 @@ namespace NdmfMToon10ToLilToon
                 var enableEyebrowStencilProp = serializedObject.FindProperty(nameof(MToonLilToonComponent.enableEyebrowStencil));
                 var eyebrowRowRect = EditorGUILayout.GetControlRect();
                 GetHairAdjustmentColumnRects(eyebrowRowRect, out var eyebrowCategoryRect, out var eyebrowLabelRect, out var eyebrowValueRect);
-                DrawCategoryColumn(eyebrowCategoryRect, enableEyebrowStencilProp, T("眉ステンシル", "Eyebrow Stencil"), showToggle: true);
+                DrawCategoryColumn(
+                    eyebrowCategoryRect,
+                    enableEyebrowStencilProp,
+                    TT(
+                        "眉ステンシル",
+                        "髪の手前に眉を表示します。このツールでは簡略化のためCutoutに変更します。",
+                        "Eyebrow Stencil",
+                        "Shows eyebrows in front of hair. This tool switches it to Cutout for simplicity."),
+                    showToggle: true);
                 using (new EditorGUI.DisabledScope(!enableEyebrowStencilProp.boolValue))
                 {
-                    EditorGUI.LabelField(
-                        eyebrowLabelRect,
-                        TT(
-                            "眉マテリアル",
-                            "ステンシル設定を適用する眉のマテリアルを選びます。",
-                            "Eyebrow Material",
-                            "Selects which eyebrow material receives stencil settings."));
+                    EditorGUI.LabelField(eyebrowLabelRect, T("眉マテリアル", "Eyebrow Material"));
                     changed |= DrawEyebrowStencilMaterialSelector(component, eyebrowValueRect);
                 }
                 EditorGUILayout.Space(OverrideGroupSpacing);
@@ -352,18 +359,18 @@ namespace NdmfMToon10ToLilToon
 
                 var fakeShadowFirstRowRect = EditorGUILayout.GetControlRect();
                 GetHairAdjustmentColumnRects(fakeShadowFirstRowRect, out var fakeShadowCategoryRect, out var fakeShadowDirectionLabelRect, out var fakeShadowDirectionValueRect);
-                DrawCategoryColumn(fakeShadowCategoryRect, enableFakeShadowProp, "FakeShadow", showToggle: true);
+                DrawCategoryColumn(
+                    fakeShadowCategoryRect,
+                    enableFakeShadowProp,
+                    TT(
+                        "FakeShadow",
+                        "前髪の擬似落ち影を生成します。",
+                        "FakeShadow",
+                        "Generates pseudo drop shadow for bangs."),
+                    showToggle: true);
                 using (new EditorGUI.DisabledScope(!enableFakeShadowProp.boolValue))
                 {
-                    DrawTwoColumnPropertyRow(
-                        fakeShadowDirectionLabelRect,
-                        fakeShadowDirectionValueRect,
-                        TT(
-                            "向き",
-                            "疑似影の流れる方向を変えます。",
-                            "Direction",
-                            "Changes the direction fake shadow flows."),
-                        fakeShadowDirectionProp);
+                    DrawTwoColumnPropertyRow(fakeShadowDirectionLabelRect, fakeShadowDirectionValueRect, T("向き", "Direction"), fakeShadowDirectionProp);
                 }
 
                 var fakeShadowSecondRowRect = EditorGUILayout.GetControlRect();
@@ -371,15 +378,7 @@ namespace NdmfMToon10ToLilToon
                 DrawCategoryColumn(fakeShadowSecondCategoryRect, enableFakeShadowProp, string.Empty, showToggle: false);
                 using (new EditorGUI.DisabledScope(!enableFakeShadowProp.boolValue))
                 {
-                    DrawTwoColumnPropertyRow(
-                        fakeShadowOffsetLabelRect,
-                        fakeShadowOffsetValueRect,
-                        TT(
-                            "オフセット",
-                            "疑似影の位置を前後にずらします。",
-                            "Offset",
-                            "Shifts fake shadow position."),
-                        fakeShadowOffsetProp);
+                    DrawTwoColumnPropertyRow(fakeShadowOffsetLabelRect, fakeShadowOffsetValueRect, T("オフセット", "Offset"), fakeShadowOffsetProp);
                 }
 
                 EditorGUILayout.Space(OverrideGroupSpacing);
@@ -455,16 +454,16 @@ namespace NdmfMToon10ToLilToon
                 textureProperty,
                 TT(
                     "マスク",
-                    "顔影を制御するテクスチャを指定します。",
+                    "デフォルトではVRoid用の平面化マスクが指定されています。",
                     "Mask",
-                    "Specifies the texture controlling face shadow."));
+                    "By default, a flattened mask for VRoid is assigned."));
             var lodProperty = serializedObject.FindProperty(nameof(MToonLilToonComponent.shadowStrengthMaskLod));
             lodProperty.floatValue = EditorGUILayout.Slider(
                 TT(
                     "LOD",
-                    "マスクの粗さを調整し、影の変化をなだらかにします。",
+                    "マスク画像のぼかし量です。",
                     "LOD",
-                    "Adjusts mask coarseness for smoother shadow transitions."),
+                    "Controls blur amount of the mask texture."),
                 lodProperty.floatValue,
                 0f,
                 1f);
@@ -543,50 +542,47 @@ namespace NdmfMToon10ToLilToon
 
             var hairSelectionsProp = serializedObject.FindProperty(nameof(MToonLilToonComponent.hairSelections));
             var changed = false;
-            using (new EditorGUI.IndentLevelScope())
+            EditorGUILayout.HelpBox(
+                T(
+                    "この機能が有効な場合は髪マテリアルを結合します。\n結合されたくないマテリアルは対象から外してください。",
+                    "When this feature is enabled, hair materials are merged.\nExclude any materials you do not want to merge."),
+                MessageType.Info);
+            component.showHairMaterials = EditorGUILayout.Foldout(
+                component.showHairMaterials,
+                T("対象マテリアル", "Target Materials"),
+                true);
+            if (!component.showHairMaterials) return false;
+
+            if (hairSelectionsProp == null || hairSelectionsProp.arraySize == 0)
             {
-                EditorGUILayout.HelpBox(
-                    T(
-                        "この機能が有効な場合は髪マテリアルを結合します。\n結合されたくないマテリアルは対象から外してください。",
-                        "When this feature is enabled, hair materials are merged.\nExclude any materials you do not want to merge."),
-                    MessageType.Info);
-                component.showHairMaterials = EditorGUILayout.Foldout(
-                    component.showHairMaterials,
-                    T("対象マテリアル", "Target Materials"),
-                    true);
-                if (!component.showHairMaterials) return false;
+                EditorGUILayout.HelpBox(T("まだスキャンされていません。", "No materials scanned yet."), MessageType.Info);
+                return false;
+            }
 
-                if (hairSelectionsProp == null || hairSelectionsProp.arraySize == 0)
+            for (var i = 0; i < hairSelectionsProp.arraySize; i++)
+            {
+                var entryProp = hairSelectionsProp.GetArrayElementAtIndex(i);
+                if (entryProp == null) continue;
+                var materialProp = entryProp.FindPropertyRelative(nameof(HairMaterialSelection.material));
+                var selectedProp = entryProp.FindPropertyRelative(nameof(HairMaterialSelection.selected));
+                if (selectedProp == null || materialProp == null) continue;
+
+                var rowRect = EditorGUILayout.GetControlRect();
+                var toggleRect = new Rect(rowRect.x, rowRect.y, HairSelectionToggleColumnWidth, rowRect.height);
+                var materialRect = new Rect(
+                    rowRect.x + HairSelectionToggleColumnWidth,
+                    rowRect.y,
+                    Mathf.Max(0f, rowRect.width - HairSelectionToggleColumnWidth),
+                    rowRect.height);
+
+                var nextSelected = EditorGUI.Toggle(toggleRect, selectedProp.boolValue);
+                if (nextSelected != selectedProp.boolValue)
                 {
-                    EditorGUILayout.HelpBox(T("まだスキャンされていません。", "No materials scanned yet."), MessageType.Info);
-                    return false;
+                    selectedProp.boolValue = nextSelected;
+                    changed = true;
                 }
 
-                for (var i = 0; i < hairSelectionsProp.arraySize; i++)
-                {
-                    var entryProp = hairSelectionsProp.GetArrayElementAtIndex(i);
-                    if (entryProp == null) continue;
-                    var materialProp = entryProp.FindPropertyRelative(nameof(HairMaterialSelection.material));
-                    var selectedProp = entryProp.FindPropertyRelative(nameof(HairMaterialSelection.selected));
-                    if (selectedProp == null || materialProp == null) continue;
-
-                    var rowRect = EditorGUILayout.GetControlRect();
-                    var toggleRect = new Rect(rowRect.x, rowRect.y, HairSelectionToggleColumnWidth, rowRect.height);
-                    var materialRect = new Rect(
-                        rowRect.x + HairSelectionToggleColumnWidth,
-                        rowRect.y,
-                        Mathf.Max(0f, rowRect.width - HairSelectionToggleColumnWidth),
-                        rowRect.height);
-
-                    var nextSelected = EditorGUI.Toggle(toggleRect, selectedProp.boolValue);
-                    if (nextSelected != selectedProp.boolValue)
-                    {
-                        selectedProp.boolValue = nextSelected;
-                        changed = true;
-                    }
-
-                    EditorGUI.ObjectField(materialRect, materialProp, typeof(Material), GUIContent.none);
-                }
+                EditorGUI.ObjectField(materialRect, materialProp, typeof(Material), GUIContent.none);
             }
 
             return changed;
