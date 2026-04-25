@@ -24,6 +24,7 @@ namespace NdmfMToon10ToLilToon
         public LilToonGlobalOverrides globalOverrides = new();
         public bool verboseLog;
         [HideInInspector] public bool showAdvanced;
+        [HideInInspector] public bool showHairMaterials;
         public bool isPreviewing;
 
         [HideInInspector] public int scannedMaterialCount;

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
+using UnityEngine.Serialization;
 using UnityEngine.Rendering;
 
 namespace NdmfMToon10ToLilToon
@@ -16,13 +17,18 @@ namespace NdmfMToon10ToLilToon
     [Serializable]
     public sealed class LilToonGlobalOverrides
     {
+        public bool enableShadowReceive = true;
         [Range(0f, 1f)] public float shadowReceive = 0.5f;
-        public Color shadowBorderColor = Color.black;
-        [Range(0f, 1f)] public float shadowBorderStrength = 0f;
-        public Color distanceFadeColor = Color.black;
-        [Range(0f, 1f)] public float distanceFadeStrength = 0f;
-        public Color backlightColor = Color.black;
-        [Range(0f, 1f)] public float backlightStrength = 0f;
+        public bool enableShadowBorder = true;
+        public Color shadowBorderColor = new(1f, 25f / 255f, 0f, 1f);
+        [Range(0f, 1f)] public float shadowBorderStrength = 0.08f;
+        public bool enableBacklight = true;
+        [ColorUsage(false, true)] public Color backlightColor = Color.white;
+        [FormerlySerializedAs("backlightStrength")]
+        [Range(0f, 1f)] public float backlightMainStrength = 0.5f;
+        public bool enableDistanceFade = true;
+        public Color distanceFadeColor = new(10f / 255f, 7f / 255f, 7f / 255f, 1f);
+        [Range(0f, 1f)] public float distanceFadeStrength = 1f;
         public float outlineZBias = 0.003f;
     }
 
@@ -465,20 +471,43 @@ namespace NdmfMToon10ToLilToon
         public static void ApplyGlobalOverridesToMaterial(Material material, LilToonGlobalOverrides overrides)
         {
             if (overrides == null) return;
-            SetIfExists(material, "_ShadowReceive", overrides.shadowReceive);
-            SetIfExists(material, "_ShadowBorderColor", overrides.shadowBorderColor);
-            SetIfExists(material, "_ShadowBorderRange", overrides.shadowBorderStrength);
-            SetIfExists(material, "_DistanceFadeColor", overrides.distanceFadeColor);
-            SetVectorComponentIfExists(material, "_DistanceFade", 2, overrides.distanceFadeStrength);
+            if (overrides.enableShadowReceive)
+            {
+                SetIfExists(material, "_ShadowReceive", overrides.shadowReceive);
+            }
+            else
+            {
+                SetIfExists(material, "_ShadowReceive", 0f);
+            }
 
-            var useBacklight = overrides.backlightStrength > 0f;
+            if (overrides.enableShadowBorder)
+            {
+                SetIfExists(material, "_ShadowBorderColor", overrides.shadowBorderColor);
+                SetIfExists(material, "_ShadowBorderRange", overrides.shadowBorderStrength);
+            }
+            else
+            {
+                SetIfExists(material, "_ShadowBorderColor", Color.black);
+                SetIfExists(material, "_ShadowBorderRange", 0f);
+            }
+
+            if (overrides.enableDistanceFade)
+            {
+                SetIfExists(material, "_DistanceFadeColor", overrides.distanceFadeColor);
+                SetVectorComponentIfExists(material, "_DistanceFade", 2, overrides.distanceFadeStrength);
+            }
+            else
+            {
+                SetIfExists(material, "_DistanceFadeColor", Color.black);
+                SetVectorComponentIfExists(material, "_DistanceFade", 2, 0f);
+            }
+
+            var useBacklight = overrides.enableBacklight;
             SetIfExists(material, "_UseBacklight", useBacklight ? 1f : 0f);
             if (useBacklight)
             {
-                var backlightColor = overrides.backlightColor;
-                backlightColor.a = overrides.backlightStrength;
-                SetIfExists(material, "_BacklightColor", backlightColor);
-                SetIfExists(material, "_BacklightMainStrength", 0.5f);
+                SetIfExists(material, "_BacklightColor", overrides.backlightColor);
+                SetIfExists(material, "_BacklightMainStrength", overrides.backlightMainStrength);
             }
 
             var hasOutline = (material.HasProperty("_UseOutline") && material.GetFloat("_UseOutline") > 0.5f)
