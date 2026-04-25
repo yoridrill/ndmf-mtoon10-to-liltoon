@@ -332,6 +332,7 @@ namespace NdmfMToon10ToLilToon
                 var enableFakeShadowProp = serializedObject.FindProperty(nameof(MToonLilToonComponent.enableFakeShadow));
                 var fakeShadowDirectionProp = serializedObject.FindProperty(nameof(MToonLilToonComponent.fakeShadowDirection));
                 var fakeShadowOffsetProp = serializedObject.FindProperty(nameof(MToonLilToonComponent.fakeShadowOffset));
+                var enableHairOutlineCorrectionProp = serializedObject.FindProperty(nameof(MToonLilToonComponent.enableHairOutlineCorrection));
 
                 var fakeShadowFirstRowRect = EditorGUILayout.GetControlRect();
                 GetHairAdjustmentColumnRects(fakeShadowFirstRowRect, out var fakeShadowCategoryRect, out var fakeShadowDirectionLabelRect, out var fakeShadowDirectionValueRect);
@@ -347,6 +348,15 @@ namespace NdmfMToon10ToLilToon
                 using (new EditorGUI.DisabledScope(!enableFakeShadowProp.boolValue))
                 {
                     DrawTwoColumnPropertyRow(fakeShadowOffsetLabelRect, fakeShadowOffsetValueRect, T("オフセット", "Offset"), fakeShadowOffsetProp);
+                }
+
+                var outlineCorrectionRowRect = EditorGUILayout.GetControlRect();
+                GetHairAdjustmentColumnRects(outlineCorrectionRowRect, out var outlineCorrectionCategoryRect, out var outlineCorrectionLabelRect, out var outlineCorrectionValueRect);
+                DrawCategoryColumn(outlineCorrectionCategoryRect, enableHairOutlineCorrectionProp, T("輪郭線補正", "Outline Correction"), showToggle: true);
+                using (new EditorGUI.DisabledScope(!enableHairOutlineCorrectionProp.boolValue))
+                {
+                    EditorGUI.LabelField(outlineCorrectionLabelRect, T("頂点カラー", "Vertex Color"));
+                    EditorGUI.LabelField(outlineCorrectionValueRect, "RGBA");
                 }
                 EditorGUILayout.Space(OverrideGroupSpacing);
             }

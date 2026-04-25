@@ -94,6 +94,7 @@ namespace NdmfMToon10ToLilToon
                     component.enableFakeShadow,
                     component.fakeShadowDirection,
                     component.fakeShadowOffset,
+                    component.enableHairOutlineCorrection,
                     convertedBySource,
                     fakeShadowPairs,
                     mergedHairMaterials,
@@ -227,6 +228,7 @@ namespace NdmfMToon10ToLilToon
             bool enableFakeShadow,
             Vector3 fakeShadowDirection,
             float fakeShadowOffset,
+            bool enableHairOutlineCorrection,
             IDictionary<Material, Material> convertedBySource,
             IList<(Material hair, Material fake)> fakeShadowPairs,
             IList<Material> mergedHairMaterials,
@@ -309,7 +311,7 @@ namespace NdmfMToon10ToLilToon
                 mergedMaterialCreated = true;
                 var mergedRepresentativeIndex = ResolveMergedRepresentativeIndex(original, mergedIndices, transparentRanks, mergedOutputRenderType);
                 onProgress?.Invoke("Rebuilding mesh...");
-                ApplyMergedMaterialAndMesh(renderer, result, resultSourceIndices, mergedIndices, mergedRepresentativeIndex, mergedMaterial, fakeShadowMaterial, mergedRects, report);
+                ApplyMergedMaterialAndMesh(renderer, result, resultSourceIndices, mergedIndices, mergedRepresentativeIndex, mergedMaterial, fakeShadowMaterial, mergedRects, enableHairOutlineCorrection, report);
                 if (mergedHairMaterials != null && mergedMaterial != null)
                 {
                     mergedHairMaterials.Add(mergedMaterial);
@@ -1191,7 +1193,7 @@ namespace NdmfMToon10ToLilToon
             return texture.GetPixel(x, y);
         }
 
-        private static void ApplyMergedMaterialAndMesh(Renderer renderer, List<Material> materials, List<int> materialSourceIndices, IReadOnlyList<int> mergedIndices, int mergedRepresentativeSourceIndex, Material mergedMaterial, Material fakeShadowMaterial, IReadOnlyList<Rect> rects, ConversionReport report)
+        private static void ApplyMergedMaterialAndMesh(Renderer renderer, List<Material> materials, List<int> materialSourceIndices, IReadOnlyList<int> mergedIndices, int mergedRepresentativeSourceIndex, Material mergedMaterial, Material fakeShadowMaterial, IReadOnlyList<Rect> rects, bool enableHairOutlineCorrection, ConversionReport report)
         {
             var mergedIndexSet = mergedIndices.ToHashSet();
             var newMaterials = new List<Material>();
@@ -1332,6 +1334,16 @@ namespace NdmfMToon10ToLilToon
             var mergedSubMeshIndex = newSubMeshTriangles.Count;
             meshCopy.SetTriangles(mergedTriangles.ToArray(), mergedSubMeshIndex, false);
 
+            if (enableHairOutlineCorrection)
+            {
+                ApplyHairOutlineCorrection(meshCopy);
+                if (mergedMaterial != null && mergedMaterial.HasProperty("_OutlineVertexR2Width"))
+                {
+                    // lilToon の _OutlineVertexR2Width: 0=None, 1=R, 2=RGBA
+                    mergedMaterial.SetFloat("_OutlineVertexR2Width", 2f);
+                }
+            }
+
             newMaterials.Add(mergedMaterial);
             newSourceIndices.Add(mergedRepresentativeSourceIndex);
             if (fakeShadowMaterial != null)
@@ -1359,6 +1371,73 @@ namespace NdmfMToon10ToLilToon
             materialSourceIndices.Clear();
             materialSourceIndices.AddRange(newSourceIndices);
             report.Warnings.Add(new ConversionWarning("hair materials merged with atlas"));
+        }
+
+        private struct AveragedNormalAccumulator
+        {
+            public Vector3 normalSum;
+            public int count;
+        }
+
+        private static void ApplyHairOutlineCorrection(Mesh mesh)
+        {
+            if (mesh == null) return;
+
+            var vertices = mesh.vertices;
+            var normals = mesh.normals;
+            var tangents = mesh.tangents;
+            if (vertices == null || normals == null || tangents == null) return;
+            var vertexCount = vertices.Length;
+            if (vertexCount == 0 || normals.Length < vertexCount || tangents.Length < vertexCount) return;
+
+            const float quantizationScale = 10000f;
+            var groupedNormals = new Dictionary<Vector3Int, AveragedNormalAccumulator>(vertexCount);
+
+            for (var i = 0; i < vertexCount; i++)
+            {
+                var key = QuantizePosition(vertices[i], quantizationScale);
+                groupedNormals.TryGetValue(key, out var accumulator);
+                accumulator.normalSum += normals[i];
+                accumulator.count++;
+                groupedNormals[key] = accumulator;
+            }
+
+            var colors = new Color[vertexCount];
+            for (var i = 0; i < vertexCount; i++)
+            {
+                var key = QuantizePosition(vertices[i], quantizationScale);
+                if (!groupedNormals.TryGetValue(key, out var accumulator) || accumulator.count <= 0)
+                {
+                    colors[i] = Color.white;
+                    continue;
+                }
+
+                var averagedNormal = (accumulator.normalSum / accumulator.count).normalized;
+                var normalWs = normals[i].sqrMagnitude > 0f ? normals[i].normalized : Vector3.forward;
+                var tangentWs = new Vector3(tangents[i].x, tangents[i].y, tangents[i].z);
+                tangentWs = tangentWs.sqrMagnitude > 0f ? tangentWs.normalized : Vector3.right;
+                var bitangentSign = tangents[i].w >= 0f ? 1f : -1f;
+                var bitangentWs = Vector3.Cross(normalWs, tangentWs) * bitangentSign;
+                bitangentWs = bitangentWs.sqrMagnitude > 0f ? bitangentWs.normalized : Vector3.up;
+
+                var normalTs = new Vector3(
+                    Vector3.Dot(averagedNormal, tangentWs),
+                    Vector3.Dot(averagedNormal, bitangentWs),
+                    Vector3.Dot(averagedNormal, normalWs));
+                if (normalTs.sqrMagnitude > 0f) normalTs.Normalize();
+                var encoded = normalTs * 0.5f + Vector3.one * 0.5f;
+                colors[i] = new Color(encoded.x, encoded.y, encoded.z, 1f);
+            }
+
+            mesh.colors = colors;
+        }
+
+        private static Vector3Int QuantizePosition(Vector3 position, float scale)
+        {
+            return new Vector3Int(
+                Mathf.RoundToInt(position.x * scale),
+                Mathf.RoundToInt(position.y * scale),
+                Mathf.RoundToInt(position.z * scale));
         }
 
         private static Dictionary<int, int> BuildTransparentRanks(IReadOnlyList<Material> original)
