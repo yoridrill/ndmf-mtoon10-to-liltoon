@@ -136,6 +136,7 @@ namespace NdmfMToon10ToLilToon
             var overridesProp = serializedObject.FindProperty(nameof(MToonLilToonComponent.globalOverrides));
             EditorGUILayout.Space();
             DrawUnderlinedSectionTitle(T("lilToon固有機能の一括設定", "Bulk Settings for lilToon-specific Features"));
+            EditorGUILayout.Space(2f);
             DrawOverrideGroup(
                 overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.enableShadowReceive)),
                 T("影を受け取る", "Receive Shadow"),
@@ -181,8 +182,8 @@ namespace NdmfMToon10ToLilToon
         private static void DrawUnderlinedSectionTitle(string title)
         {
             EditorGUILayout.LabelField(title, EditorStyles.boldLabel);
-            var lineRect = EditorGUILayout.GetControlRect(false, 2f);
-            EditorGUI.DrawRect(lineRect, new Color(0.35f, 0.35f, 0.35f, 1f));
+            var lineRect = EditorGUILayout.GetControlRect(false, 1f);
+            EditorGUI.DrawRect(lineRect, new Color(0.3f, 0.3f, 0.3f, 0.9f));
         }
 
         private void DrawOverrideGroup(
