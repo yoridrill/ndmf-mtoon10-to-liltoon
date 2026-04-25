@@ -356,14 +356,45 @@ namespace NdmfMToon10ToLilToon
                 component.faceShadowSdfTexture = LoadDefaultFaceShadowMaskTexture();
             }
 
-            var maskTypeProperty = serializedObject.FindProperty(nameof(MToonLilToonComponent.faceShadowMaskType));
-            EditorGUILayout.PropertyField(maskTypeProperty, new GUIContent(T("マスクタイプ", "Mask Type")));
+            DrawFaceShadowMaskTypePopup();
 
             var textureProperty = serializedObject.FindProperty(nameof(MToonLilToonComponent.faceShadowSdfTexture));
             EditorGUILayout.PropertyField(textureProperty, new GUIContent(T("マスク", "Mask")));
-            EditorGUILayout.PropertyField(
-                serializedObject.FindProperty(nameof(MToonLilToonComponent.shadowStrengthMaskLod)),
-                new GUIContent(T("LOD", "LOD")));
+            var lodProperty = serializedObject.FindProperty(nameof(MToonLilToonComponent.shadowStrengthMaskLod));
+            lodProperty.floatValue = EditorGUILayout.Slider(new GUIContent(T("LOD", "LOD")), lodProperty.floatValue, 0f, 1f);
+        }
+
+        private void DrawFaceShadowMaskTypePopup()
+        {
+            var maskTypeProperty = serializedObject.FindProperty(nameof(MToonLilToonComponent.faceShadowMaskType));
+            if (maskTypeProperty == null) return;
+
+            var options = new[]
+            {
+                T("強度", "Strength"),
+                T("平坦化", "Flat"),
+                "SDF"
+            };
+
+            var currentType = (MToonLilToonComponent.FaceShadowMaskType)maskTypeProperty.intValue;
+            var currentIndex = currentType switch
+            {
+                MToonLilToonComponent.FaceShadowMaskType.Strength => 0,
+                MToonLilToonComponent.FaceShadowMaskType.Flat => 1,
+                MToonLilToonComponent.FaceShadowMaskType.Sdf => 2,
+                _ => 1
+            };
+
+            var nextIndex = EditorGUILayout.Popup(T("マスクタイプ", "Mask Type"), currentIndex, options);
+            var nextType = nextIndex switch
+            {
+                0 => MToonLilToonComponent.FaceShadowMaskType.Strength,
+                1 => MToonLilToonComponent.FaceShadowMaskType.Flat,
+                2 => MToonLilToonComponent.FaceShadowMaskType.Sdf,
+                _ => MToonLilToonComponent.FaceShadowMaskType.Flat
+            };
+
+            maskTypeProperty.intValue = (int)nextType;
         }
 
         private bool DrawEyebrowStencilMaterialSelector(MToonLilToonComponent component)
