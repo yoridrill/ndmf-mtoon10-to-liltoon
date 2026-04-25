@@ -389,11 +389,11 @@ namespace NdmfMToon10ToLilToon
         {
             if (source == null || destination == null) return;
 
-            if (source.HasProperty("_ShadingShiftFactor"))
+            if (TryGetFloat(source, new[] { "_ShadingShiftFactor", "_ShadeShift" }, out var shiftRaw))
             {
                 // MToon: -1 で影が覆い尽くす / +1 で影が消える（レンジ -1..1）
                 // lilToon: 1 で影が覆い尽くす / 0 で影が消える（レンジ 0..1）
-                var shift = Mathf.Clamp(source.GetFloat("_ShadingShiftFactor"), -1f, 1f);
+                var shift = Mathf.Clamp(shiftRaw, -1f, 1f);
                 SetIfExists(destination, "_ShadowBorder", (1f - shift) * 0.5f);
             }
 
@@ -716,14 +716,11 @@ namespace NdmfMToon10ToLilToon
         private static bool HasOutline(Material source)
         {
             if (source == null) return false;
-            if (RenderTypeResolver.ResolveFromMaterial(source) == RenderType.Transparent) return false;
-
-            if (source.HasProperty("_OutlineWidthMode") && Mathf.RoundToInt(source.GetFloat("_OutlineWidthMode")) > 0)
-            {
-                return true;
-            }
-
-            return source.HasProperty("_OutlineWidth") && source.GetFloat("_OutlineWidth") > 0f;
+            var hasOutlineMode = source.HasProperty("_OutlineWidthMode")
+                && Mathf.RoundToInt(source.GetFloat("_OutlineWidthMode")) > 0;
+            var hasOutlineWidth = source.HasProperty("_OutlineWidth")
+                && source.GetFloat("_OutlineWidth") > 0f;
+            return hasOutlineMode && hasOutlineWidth;
         }
 
         private static bool IsLegacyMToon(Material material)
