@@ -305,13 +305,7 @@ namespace NdmfMToon10ToLilToon
                 CopyTexture(source, converted, new[] { "_RimTex" }, new[] { "_RimColorTex" }, report, ignoreTinyDummyTexture: true);
                 CopyFloat(source, converted, new[] { "_RimFresnelPower" }, new[] { "_RimFresnelPower" }, report);
                 CopyColor(source, converted, new[] { "_OutlineColorFactor", "_OutlineColor" }, new[] { "_OutlineColor" }, report);
-                CopyTexture(
-                    source,
-                    converted,
-                    new[] { "_OutlineWidthTex", "_OutlineWidthMultiplyTexture" },
-                    new[] { "_OutlineWidthMask" },
-                    report,
-                    ignoreTinyDummyTexture: true);
+                CopyTexture(source, converted, new[] { "_OutlineWidthTex", "_OutlineWidthMultiplyTexture" }, new[] { "_OutlineWidthMask" }, report, ignoreTinyDummyTexture: true);
 
                 ApplyRenderState(source, converted, report);
                 ApplyOutlineState(source, converted);
