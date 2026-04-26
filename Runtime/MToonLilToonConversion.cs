@@ -297,7 +297,7 @@ namespace NdmfMToon10ToLilToon
                 ApplyShadingFactorMapping(source, converted);
                 CopyTexture(source, converted, new[] { "_NormalMap", "_BumpMap" }, new[] { "_BumpMap", "_NormalMap" }, report, ignoreTinyDummyTexture: true);
                 CopyFloat(source, converted, new[] { "_BumpScale" }, new[] { "_BumpScale" }, report);
-                CopyColor(source, converted, new[] { "_EmissiveFactor", "_EmissionColor" }, new[] { "_EmissionColor" }, report);
+                CopyColor(source, converted, new[] { "_EmissionColor" }, new[] { "_EmissionColor" }, report);
                 CopyTexture(source, converted, new[] { "_EmissiveMap", "_EmissionMap" }, new[] { "_EmissionMap" }, report, ignoreTinyDummyTexture: true);
                 CopyColor(source, converted, new[] { "_MatcapColor" }, new[] { "_MatCapColor" }, report);
                 CopyTexture(source, converted, new[] { "_MatcapTex", "_SphereAdd" }, new[] { "_MatCapTex" }, report, ignoreTinyDummyTexture: true);
@@ -547,8 +547,7 @@ namespace NdmfMToon10ToLilToon
         {
             if (source == null || destination == null) return;
 
-            var hasEmissionTexture = HasTexture(source, true, "_EmissiveMap", "_EmissionMap");
-            var useEmission = hasEmissionTexture;
+            var useEmission = HasNonDefaultColor(source, new[] { "_EmissionColor" }, Color.black);
             SetIfExists(destination, "_UseEmission", useEmission ? 1f : 0f);
 
             var hasMatCapTexture = HasTexture(source, true, "_MatcapTex", "_SphereAdd");
@@ -898,22 +897,62 @@ namespace NdmfMToon10ToLilToon
             var hasScrollY = TryGetFloat(source, new[] { "_UvAnimScrollYSpeed", "_UvAnimScrollY", "_UvAnimationScrollYSpeedFactor" }, out var scrollY);
             var hasRotation = TryGetFloat(source, new[] { "_UvAnimRotationSpeed", "_UvAnimRotation", "_UvAnimationRotationSpeedFactor" }, out var rotation);
 
-            if (destination.HasProperty("_EmissionBlendMask_ScrollRotate") && (hasScrollX || hasScrollY || hasRotation))
-            {
-                var current = destination.GetVector("_EmissionBlendMask_ScrollRotate");
-                current.x = hasScrollX ? scrollX : current.x;
-                current.y = hasScrollY ? scrollY : current.y;
-                current.w = hasRotation ? rotation : current.w;
-                destination.SetVector("_EmissionBlendMask_ScrollRotate", current);
-            }
+            if (!hasScrollX && !hasScrollY && !hasRotation) return;
 
+            var hasEmission = HasNonDefaultColor(source, new[] { "_EmissionColor" }, Color.black);
+
+            var hasUvAnimMask = false;
+            Texture uvAnimMask = null;
             if (source.HasProperty("_UvAnimMaskTex") || source.HasProperty("_UvAnimMaskTexture"))
             {
-                var maskTex = source.HasProperty("_UvAnimMaskTex")
+                uvAnimMask = source.HasProperty("_UvAnimMaskTex")
                     ? source.GetTexture("_UvAnimMaskTex")
                     : source.GetTexture("_UvAnimMaskTexture");
-                SetTextureIfExists(destination, "_EmissionBlendMask", maskTex);
+                hasUvAnimMask = uvAnimMask != null;
             }
+
+            if (hasUvAnimMask)
+            {
+                SetTextureIfExists(destination, "_Main2ndBlendMask", uvAnimMask);
+                SetTextureIfExists(destination, "_Main2ndTex", destination.GetTexture("_MainTex"));
+                SetIfExists(destination, "_Color2nd", destination.GetColor("_Color"));
+                SetIfExists(destination, "_UseMain2ndTex", 1f);
+                SetScrollRotate(destination, "_Main2ndTex_ScrollRotate_ST", hasScrollX, scrollX, hasScrollY, scrollY, hasRotation, rotation);
+
+                if (hasEmission)
+                {
+                    SetTextureIfExists(destination, "_EmissionBlendMask", uvAnimMask);
+                    SetScrollRotate(destination, "_EmissionBlendMask_ScrollRotate", hasScrollX, scrollX, hasScrollY, scrollY, hasRotation, rotation);
+                }
+
+                return;
+            }
+
+            SetScrollRotate(destination, "_MainTex_ScrollRotate", hasScrollX, scrollX, hasScrollY, scrollY, hasRotation, rotation);
+
+            if (hasEmission)
+            {
+                SetScrollRotate(destination, "_EmissionBlendMask_ScrollRotate", hasScrollX, scrollX, hasScrollY, scrollY, hasRotation, rotation);
+            }
+        }
+
+        private static void SetScrollRotate(
+            Material material,
+            string propertyName,
+            bool hasScrollX,
+            float scrollX,
+            bool hasScrollY,
+            float scrollY,
+            bool hasRotation,
+            float rotation)
+        {
+            if (material == null || !material.HasProperty(propertyName)) return;
+
+            var current = material.GetVector(propertyName);
+            current.x = hasScrollX ? scrollX : current.x;
+            current.y = hasScrollY ? scrollY : current.y;
+            current.w = hasRotation ? rotation : current.w;
+            material.SetVector(propertyName, current);
         }
 
         private static bool TryGetFloat(Material material, IReadOnlyList<string> candidates, out float value)
