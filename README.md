@@ -22,8 +22,8 @@ MToon 1.0 / 互換 MToon マテリアルを lilToon へ変換するための Uni
 
 1. 対象アバターの Renderer を持つオブジェクトに `MToonLilToonComponent` を追加
 2. `lilToon Shader` を設定
-3. `Scan Materials` で候補収集
-4. 必要に応じて 髪周りのルック調整 の対象を調整
+3. `髪周りのルック調整` を ON にすると候補が自動スキャンされる
+4. 必要に応じて `対象マテリアル` のチェックを調整
 5. `Preview` で変換後を確認（元オブジェクトは非破壊）
 6. Build 時は NDMF plugin が自動適用
 
@@ -41,6 +41,7 @@ MToon 1.0 / 互換 MToon マテリアルを lilToon へ変換するための Uni
 - チェックが1つだけの場合は atlas 化せず、元のUV/テクスチャ設定を維持
 - atlas 対象: main / shade / emission / normal / outline
 - UV は atlas rect に再配置し、サブメッシュ統合を実施
+- 輪郭線補正の毛先スライダーはドラッグ中に即時反映せず、操作確定時に反映（Preview 中の再構成負荷を抑制）
 
 atlas サイズ方針:
 
@@ -64,14 +65,28 @@ atlas サイズ方針:
 
 ## Inspector UI
 
-- Preview ボタン（有効中は緑）
-- Scan ボタン
-- Hair 選択 UI
-- 髪周りのルック調整オプション（眉ステンシル / FakeShadow）
-- FakeShadow パラメータ（向き / オフセット）
-- Advanced 折りたたみ（Verbose Log / Reset Preview(保存済みPreview復旧) / 注意文）
-- 日本語 / 英語切り替え
-- lilToon ユーザー設定ラベル（影を受け取る、境界の色、境界の幅、逆光ライト、距離フェード）
+- 上部: `Preview` ボタン（有効中は緑） / Preview 進捗表示 / 言語切り替え（日本語・英語）
+- `顔マテリアル` の選択（顔影・FakeShadow の基準マテリアル）
+- `lilToon固有機能の一括設定`
+  - 影を受け取る
+  - 影の境界
+  - 逆光ライト
+  - 距離フェード
+  - 輪郭線の Z Bias
+- `特定部位への調整`
+  - 髪周りのルック調整
+    - 対象マテリアル（Foldout）
+    - 眉ステンシル
+    - FakeShadow（向き / オフセット）
+    - 輪郭線補正（毛先の太さ / 毛先の範囲）
+  - 顔の影を整える
+    - マスクタイプ
+    - マスク
+    - LOD
+- `Advanced` 折りたたみ
+  - Verbose Log
+  - Reset Preview（保存済み Preview 復旧）
+  - 注意メッセージ
 
 ## 注意
 
