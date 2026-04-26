@@ -563,11 +563,13 @@ namespace NdmfMToon10ToLilToon
 
         private static float MapMToonRimFresnelPowerToLilRimFresnelPower(float mtoonRimFresnelPower)
         {
-            // MToon は 40 以降の変化が小さいため、40 でほぼ飽和する指数カーブで lilToon に寄せる。
+            // lilToon 側は値 5 前後でもかなり細くなるため、上限を抑えたピーキーなカーブで寄せる。
+            // MToon は 40 以降の変化が小さいため、40 を実質上限として扱う。
             var clamped = Mathf.Max(0f, mtoonRimFresnelPower);
-            const float maxLil = 5f;
-            var normalized = 1f - Mathf.Exp(-clamped / 12f);
-            return 0.01f + (maxLil - 0.01f) * normalized;
+            var normalized = Mathf.Clamp01(clamped / 40f);
+            var peaked = Mathf.Pow(normalized, 1.8f);
+            const float maxLil = 2.2f;
+            return 0.01f + (maxLil - 0.01f) * peaked;
         }
 
         private static void ApplyFeatureEnables(Material source, Material destination)
