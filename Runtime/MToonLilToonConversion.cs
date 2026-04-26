@@ -557,18 +557,18 @@ namespace NdmfMToon10ToLilToon
         private static float MapMToonRimLiftToLilRimBorder(float mtoonRimLift)
         {
             var t = Mathf.Clamp01(mtoonRimLift);
-            // MToon と lilToon で境界側の増減方向が逆寄りなので反転して合わせる。
-            return 1f - Mathf.SmoothStep(0f, 1f, t);
+            // 増減方向はそのまま扱い、低域の変化を緩めるカーブで近似する。
+            return Mathf.SmoothStep(0f, 1f, t);
         }
 
         private static float MapMToonRimFresnelPowerToLilRimFresnelPower(float mtoonRimFresnelPower)
         {
-            // lilToon 側は値 5 前後でもかなり細くなるため、上限を抑えたピーキーなカーブで寄せる。
             // MToon は 40 以降の変化が小さいため、40 を実質上限として扱う。
+            // lilToon 側で細くなりすぎ/太くなりすぎの中間を狙って再調整。
             var clamped = Mathf.Max(0f, mtoonRimFresnelPower);
             var normalized = Mathf.Clamp01(clamped / 40f);
-            var peaked = Mathf.Pow(normalized, 1.8f);
-            const float maxLil = 2.2f;
+            var peaked = Mathf.Pow(normalized, 1.35f);
+            const float maxLil = 3.8f;
             return 0.01f + (maxLil - 0.01f) * peaked;
         }
 
