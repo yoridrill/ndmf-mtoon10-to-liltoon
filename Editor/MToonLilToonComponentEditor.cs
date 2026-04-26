@@ -154,7 +154,11 @@ namespace NdmfMToon10ToLilToon
                 overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.shadowBorderStrength)));
             DrawOverrideGroupWithThirdRow(
                 overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.enableBacklight)),
-                T("逆光ライト", "Backlight"),
+                TT(
+                    "逆光ライト",
+                    "撮影用にBloomで強く光らせたい場合は、HDRカラーのIntensityを3前後まで上げてください。",
+                    "Backlight",
+                    "For strong bloom in renders, raise HDR color intensity to around 3."),
                 T("色", "Color"),
                 overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.backlightColor)),
                 T("メインカラーの強度", "Main Color Strength"),
@@ -235,9 +239,30 @@ namespace NdmfMToon10ToLilToon
             string thirdLabel,
             SerializedProperty thirdValueProp)
         {
-            DrawOverrideGroup(
+            DrawOverrideGroupWithThirdRow(
                 enabledProp,
                 new GUIContent(groupLabel),
+                firstLabel,
+                firstValueProp,
+                secondLabel,
+                secondValueProp,
+                thirdLabel,
+                thirdValueProp);
+        }
+
+        private void DrawOverrideGroupWithThirdRow(
+            SerializedProperty enabledProp,
+            GUIContent groupLabel,
+            string firstLabel,
+            SerializedProperty firstValueProp,
+            string secondLabel,
+            SerializedProperty secondValueProp,
+            string thirdLabel,
+            SerializedProperty thirdValueProp)
+        {
+            DrawOverrideGroup(
+                enabledProp,
+                groupLabel,
                 firstLabel,
                 firstValueProp,
                 secondLabel,
@@ -439,7 +464,15 @@ namespace NdmfMToon10ToLilToon
                 EditorGUILayout.Space(OverrideGroupSpacing);
                 var outlineCorrectionRowRect = EditorGUILayout.GetControlRect();
                 GetHairAdjustmentColumnRects(outlineCorrectionRowRect, out var outlineCorrectionCategoryRect, out var outlineCorrectionLabelRect, out var outlineCorrectionValueRect);
-                DrawCategoryColumn(outlineCorrectionCategoryRect, enableHairOutlineCorrectionProp, T("輪郭線補正", "Outline Correction"), showToggle: true);
+                DrawCategoryColumn(
+                    outlineCorrectionCategoryRect,
+                    enableHairOutlineCorrectionProp,
+                    TT(
+                        "輪郭線補正",
+                        "ハードエッジ向けのオプションです。頂点カラーに同一座標の法線の平均を焼き込み、輪郭線を整えます。",
+                        "Outline Correction",
+                        "Option for hard-edged meshes. Bakes averaged same-position normals into vertex colors to refine outlines."),
+                    showToggle: true);
                 using (new EditorGUI.DisabledScope(!enableHairOutlineCorrectionProp.boolValue))
                 {
                     var hairTipOutlineWidthProp = serializedObject.FindProperty(nameof(MToonLilToonComponent.hairTipOutlineWidth));
@@ -447,9 +480,9 @@ namespace NdmfMToon10ToLilToon
                         outlineCorrectionLabelRect,
                         TT(
                             "毛先の太さ",
-                            "毛先側のアウトライン太さを調整します。",
+                            "UV下端を毛先とし、毛先の輪郭線の太さを調整します。",
                             "Tip Width",
-                            "Adjusts outline thickness near hair tips."));
+                            "Treats the lower UV edge as tip and adjusts tip outline thickness."));
                     if (hairTipOutlineWidthProp != null)
                     {
                         changed |= DrawDeferredSlider(outlineCorrectionValueRect, hairTipOutlineWidthProp, ref _pendingHairTipOutlineWidth);
@@ -465,9 +498,9 @@ namespace NdmfMToon10ToLilToon
                         tipRangeLabelRect,
                         TT(
                             "毛先の範囲",
-                            "毛先太さ調整を適用する範囲を決めます。",
+                            "大きくすると根本近くまで細くする範囲が広がります。",
                             "Tip Range",
-                            "Sets how much of the tip region uses tip width adjustment."));
+                            "Larger values extend the thinning area closer to hair roots."));
                     if (hairTipRangeProp != null)
                     {
                         changed |= DrawDeferredSlider(tipRangeValueRect, hairTipRangeProp, ref _pendingHairTipRange);
