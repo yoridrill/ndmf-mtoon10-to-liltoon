@@ -896,6 +896,8 @@ namespace NdmfMToon10ToLilToon
             var hasScrollX = TryGetFloat(source, new[] { "_UvAnimScrollXSpeed", "_UvAnimScrollX", "_UvAnimationScrollXSpeedFactor" }, out var scrollX);
             var hasScrollY = TryGetFloat(source, new[] { "_UvAnimScrollYSpeed", "_UvAnimScrollY", "_UvAnimationScrollYSpeedFactor" }, out var scrollY);
             var hasRotation = TryGetFloat(source, new[] { "_UvAnimRotationSpeed", "_UvAnimRotation", "_UvAnimationRotationSpeedFactor" }, out var rotation);
+            // MToon 側の回転速度は 2π スケール差があるため lilToon 向けに補正する。
+            var lilRotation = hasRotation ? rotation * (Mathf.PI * 2f) : rotation;
 
             if (!hasScrollX && !hasScrollY && !hasRotation) return;
 
@@ -918,22 +920,22 @@ namespace NdmfMToon10ToLilToon
                 SetTextureIfExists(destination, "_Main2ndTex", destination.GetTexture("_MainTex"));
                 SetIfExists(destination, "_Color2nd", destination.GetColor("_Color"));
                 SetIfExists(destination, "_UseMain2ndTex", 1f);
-                SetScrollRotate(destination, "_Main2ndTex_ScrollRotate_ST", hasScrollX, scrollX, hasScrollY, scrollY, hasRotation, rotation);
+                SetScrollRotate(destination, "_Main2ndTex_ScrollRotate", hasScrollX, scrollX, hasScrollY, scrollY, hasRotation, lilRotation);
 
                 if (hasEmission)
                 {
                     SetTextureIfExists(destination, "_EmissionBlendMask", uvAnimMask);
-                    SetScrollRotate(destination, "_EmissionBlendMask_ScrollRotate", hasScrollX, scrollX, hasScrollY, scrollY, hasRotation, rotation);
+                    SetScrollRotate(destination, "_EmissionBlendMask_ScrollRotate", hasScrollX, scrollX, hasScrollY, scrollY, hasRotation, lilRotation);
                 }
 
                 return;
             }
 
-            SetScrollRotate(destination, "_MainTex_ScrollRotate", hasScrollX, scrollX, hasScrollY, scrollY, hasRotation, rotation);
+            SetScrollRotate(destination, "_MainTex_ScrollRotate", hasScrollX, scrollX, hasScrollY, scrollY, hasRotation, lilRotation);
 
             if (hasEmission)
             {
-                SetScrollRotate(destination, "_EmissionBlendMask_ScrollRotate", hasScrollX, scrollX, hasScrollY, scrollY, hasRotation, rotation);
+                SetScrollRotate(destination, "_EmissionBlendMask_ScrollRotate", hasScrollX, scrollX, hasScrollY, scrollY, hasRotation, lilRotation);
             }
         }
 
