@@ -1389,6 +1389,8 @@ namespace NdmfMToon10ToLilToon
             newSourceIndices.Add(mergedRepresentativeSourceIndex);
             if (fakeShadowMaterial != null)
             {
+                // FakeShadow は専用サブメッシュを増やさず、同一サブメッシュへ重ねる。
+                // (VRCQuestTools 等との互換性維持)
                 newMaterials.Add(fakeShadowMaterial);
                 newSourceIndices.Add(-1);
             }
@@ -1639,7 +1641,8 @@ namespace NdmfMToon10ToLilToon
 
                 var allowsFakeShadowOverlay = mesh != null
                     && materials.Length == mesh.subMeshCount + 1
-                    && materials.Any(IsFakeShadowMaterial);
+                    && materials[materials.Length - 1] != null
+                    && IsFakeShadowMaterial(materials[materials.Length - 1]);
                 if (mesh != null && mesh.subMeshCount != materials.Length && !allowsFakeShadowOverlay)
                 {
                     var message = $"{renderer.name}: subMeshCount({mesh.subMeshCount}) != sharedMaterials.Length({materials.Length})";
