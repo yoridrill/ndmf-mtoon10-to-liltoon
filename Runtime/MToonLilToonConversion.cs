@@ -300,12 +300,12 @@ namespace NdmfMToon10ToLilToon
                 CopyColor(source, converted, new[] { "_EmissiveFactor", "_EmissionColor" }, new[] { "_EmissionColor" }, report);
                 CopyTexture(source, converted, new[] { "_EmissiveMap", "_EmissionMap" }, new[] { "_EmissionMap" }, report, ignoreTinyDummyTexture: true);
                 CopyColor(source, converted, new[] { "_MatcapColor" }, new[] { "_MatCapColor" }, report);
-                CopyTexture(source, converted, new[] { "_MatcapTex" }, new[] { "_MatCapTex" }, report, ignoreTinyDummyTexture: true);
+                CopyTexture(source, converted, new[] { "_MatcapTex", "_SphereAdd" }, new[] { "_MatCapTex" }, report, ignoreTinyDummyTexture: true);
                 CopyColor(source, converted, new[] { "_RimColor" }, new[] { "_RimColor" }, report);
                 CopyTexture(source, converted, new[] { "_RimTex" }, new[] { "_RimColorTex" }, report, ignoreTinyDummyTexture: true);
                 CopyFloat(source, converted, new[] { "_RimFresnelPower" }, new[] { "_RimFresnelPower" }, report);
                 CopyColor(source, converted, new[] { "_OutlineColorFactor", "_OutlineColor" }, new[] { "_OutlineColor" }, report);
-                CopyTexture(source, converted, new[] { "_OutlineWidthTex", "_OutlineWidthMultiplyTexture", "_OutlineMask" }, new[] { "_OutlineWidthMask", "_OutlineTex", "_OutlineMask" }, report, ignoreTinyDummyTexture: true);
+                CopyTexture(source, converted, new[] { "_OutlineWidthTex", "_OutlineWidthTexture", "_OutlineWidthMultiplyTexture" }, new[] { "_OutlineWidthMask" }, report, ignoreTinyDummyTexture: true);
 
                 ApplyRenderState(source, converted, report);
                 ApplyOutlineState(source, converted);
@@ -389,19 +389,19 @@ namespace NdmfMToon10ToLilToon
         {
             if (source == null || destination == null) return;
 
-            if (source.HasProperty("_ShadingShiftFactor"))
+            if (TryGetFloat(source, new[] { "_ShadingShiftFactor", "_ShadeShift" }, out var shiftRaw))
             {
                 // MToon: -1 で影が覆い尽くす / +1 で影が消える（レンジ -1..1）
                 // lilToon: 1 で影が覆い尽くす / 0 で影が消える（レンジ 0..1）
-                var shift = Mathf.Clamp(source.GetFloat("_ShadingShiftFactor"), -1f, 1f);
+                var shift = Mathf.Clamp(shiftRaw, -1f, 1f);
                 SetIfExists(destination, "_ShadowBorder", (1f - shift) * 0.5f);
             }
 
-            if (source.HasProperty("_ShadingToonyFactor"))
+            if (TryGetFloat(source, new[] { "_ShadingToonyFactor", "_ShadeToony" }, out var toonyRaw))
             {
                 // MToon: 値が大きいほどくっきり
                 // lilToon _ShadowBlur: 値が大きいほどぼかし
-                var toony = Mathf.Clamp01(source.GetFloat("_ShadingToonyFactor"));
+                var toony = Mathf.Clamp01(toonyRaw);
                 SetIfExists(destination, "_ShadowBlur", 1f - toony);
             }
 
@@ -424,7 +424,7 @@ namespace NdmfMToon10ToLilToon
         {
             if (source == null || destination == null) return;
 
-            if (!TryFindExistingProperty(source, new[] { "_ShadeTex", "_ShadeMap", "_ShadeMultiplyTexture", "_ShadeColorTexture" }, out var shadeProp))
+            if (!TryFindExistingProperty(source, new[] { "_ShadeTex", "_ShadeTexture", "_ShadeMap", "_ShadeMultiplyTexture", "_ShadeColorTexture" }, out var shadeProp))
             {
                 ApplyShadowTextureUsage(destination, false);
                 return;
@@ -551,7 +551,7 @@ namespace NdmfMToon10ToLilToon
             var useEmission = hasEmissionTexture;
             SetIfExists(destination, "_UseEmission", useEmission ? 1f : 0f);
 
-            var hasMatCapTexture = HasTexture(source, true, "_MatcapTex");
+            var hasMatCapTexture = HasTexture(source, true, "_MatcapTex", "_SphereAdd");
             var useMatCap = hasMatCapTexture;
             SetIfExists(destination, "_UseMatCap", useMatCap ? 1f : 0f);
 
@@ -599,11 +599,15 @@ namespace NdmfMToon10ToLilToon
             }
 
             var sourceWidth = 0f;
-            if (source.HasProperty("_OutlineWidthFactor")) sourceWidth = source.GetFloat("_OutlineWidthFactor");
-            else if (source.HasProperty("_OutlineWidth")) sourceWidth = source.GetFloat("_OutlineWidth");
+            if (source.HasProperty("_OutlineWidth")) sourceWidth = source.GetFloat("_OutlineWidth");
+            else if (source.HasProperty("_OutlineWidthFactor")) sourceWidth = source.GetFloat("_OutlineWidthFactor");
 
-            // MToon と lilToon で輪郭線の幅スケールが大きく異なるため補正する。
-            SetIfExists(destination, "_OutlineWidth", sourceWidth * 100f);
+            var outlineWidthScale = IsLegacyMToon(source)
+                ? 1f
+                : IsMToon10(source)
+                    ? 100f
+                    : 100f;
+            SetIfExists(destination, "_OutlineWidth", sourceWidth * outlineWidthScale);
             SetIfExists(destination, "_OutlineCull", (float)CullMode.Front);
             ApplyOutlineWidthMode(source, destination);
 
@@ -612,30 +616,36 @@ namespace NdmfMToon10ToLilToon
                 : source.HasProperty("_MainTex")
                     ? source.GetTexture("_MainTex")
                     : null;
-            if (sourceMainTex == null) return;
-
-            var sourceOutlineMask = source.HasProperty("_OutlineWidthTex")
+            var sourceOutlineWidthTex = source.HasProperty("_OutlineWidthTex")
                 ? source.GetTexture("_OutlineWidthTex")
-                : source.HasProperty("_OutlineWidthMultiplyTexture")
-                    ? source.GetTexture("_OutlineWidthMultiplyTexture")
-                    : source.HasProperty("_OutlineMask")
-                        ? source.GetTexture("_OutlineMask")
-                        : null;
+                : source.HasProperty("_OutlineWidthTexture")
+                    ? source.GetTexture("_OutlineWidthTexture")
+                    : null;
+            if (IsLikelyDummyTexture(sourceOutlineWidthTex))
+            {
+                sourceOutlineWidthTex = null;
+            }
+
+            var sourceOutlineMask = source.HasProperty("_OutlineWidthMultiplyTexture")
+                ? source.GetTexture("_OutlineWidthMultiplyTexture")
+                : null;
             if (IsLikelyDummyTexture(sourceOutlineMask))
             {
                 sourceOutlineMask = null;
             }
 
-            // MToon には _OutlineTex がないため、mask がある場合はそれを優先、
-            // 無い場合のみメインテクスチャを輪郭線テクスチャへ入れる。
-            if (destination.HasProperty("_OutlineTex"))
+            // マスク有無に関係なく、輪郭線が有効ならメインテクスチャを _OutlineTex へ入れる。
+            if (destination.HasProperty("_OutlineTex") && sourceMainTex != null)
             {
-                destination.SetTexture("_OutlineTex", sourceOutlineMask != null ? sourceOutlineMask : sourceMainTex);
+                destination.SetTexture("_OutlineTex", sourceMainTex);
             }
 
-            if (sourceOutlineMask == null) return;
-            SetTextureIfExists(destination, "_OutlineWidthMask", sourceOutlineMask);
-            SetTextureIfExists(destination, "_OutlineMask", sourceOutlineMask);
+            var outlineWidthMask = sourceOutlineWidthTex ?? sourceOutlineMask;
+            if (outlineWidthMask != null)
+            {
+                SetTextureIfExists(destination, "_OutlineWidthMask", outlineWidthMask);
+            }
+
         }
 
         private static void ApplyOutlineWidthMode(Material source, Material destination)
@@ -706,24 +716,26 @@ namespace NdmfMToon10ToLilToon
         private static bool HasOutline(Material source)
         {
             if (source == null) return false;
-            if (source.IsKeywordEnabled("_OUTLINE_ON")) return true;
+            var hasOutlineMode = source.HasProperty("_OutlineWidthMode")
+                && Mathf.RoundToInt(source.GetFloat("_OutlineWidthMode")) > 0;
+            var hasOutlineWidth = source.HasProperty("_OutlineWidth")
+                && source.GetFloat("_OutlineWidth") > 0f;
+            return hasOutlineMode && hasOutlineWidth;
+        }
 
-            if (source.HasProperty("_OutlineWidthMode") && Mathf.RoundToInt(source.GetFloat("_OutlineWidthMode")) > 0)
-            {
-                return true;
-            }
+        private static bool IsLegacyMToon(Material material)
+        {
+            return material != null
+                && material.shader != null
+                && material.shader.name == "VRM/MToon";
+        }
 
-            if (source.HasProperty("_OutlineWidth") && source.GetFloat("_OutlineWidth") > 0f)
-            {
-                return true;
-            }
-
-            if (source.HasProperty("_OutlineWidthFactor") && source.GetFloat("_OutlineWidthFactor") > 0f)
-            {
-                return true;
-            }
-
-            return false;
+        private static bool IsMToon10(Material material)
+        {
+            if (material == null || material.shader == null) return false;
+            var shaderName = material.shader.name;
+            return shaderName == "VRM10/MToon10"
+                || shaderName == "VRM10/Universal Render Pipeline/MToon10";
         }
 
         private static void ApplyRenderState(Material source, Material destination, ConversionReport report)
@@ -895,9 +907,11 @@ namespace NdmfMToon10ToLilToon
                 destination.SetVector("_EmissionBlendMask_ScrollRotate", current);
             }
 
-            if (source.HasProperty("_UvAnimMaskTex"))
+            if (source.HasProperty("_UvAnimMaskTex") || source.HasProperty("_UvAnimMaskTexture"))
             {
-                var maskTex = source.GetTexture("_UvAnimMaskTex");
+                var maskTex = source.HasProperty("_UvAnimMaskTex")
+                    ? source.GetTexture("_UvAnimMaskTex")
+                    : source.GetTexture("_UvAnimMaskTexture");
                 SetTextureIfExists(destination, "_EmissionBlendMask", maskTex);
             }
         }

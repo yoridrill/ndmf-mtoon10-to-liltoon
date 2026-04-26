@@ -10,9 +10,12 @@ namespace NdmfMToon10ToLilToon
     {
         private const float OverrideGroupSpacing = 4f;
         private const float SectionHeadingSpacing = 8f;
+        private const float SectionTopSpacing = 10f;
         private const float HairSelectionToggleColumnWidth = 26f;
 
         private List<Material> _cachedRendererMaterials;
+        private float? _pendingHairTipOutlineWidth;
+        private float? _pendingHairTipRange;
 
         private enum Language
         {
@@ -57,8 +60,6 @@ namespace NdmfMToon10ToLilToon
             EditorGUI.BeginChangeCheck();
             var directValueChanged = sharedFaceMaterialChanged | DrawHairMergeToggle(component, out var requestHairScan);
             var hairSettingsChanged = EditorGUI.EndChangeCheck();
-
-            directValueChanged |= DrawHairSelections(component);
 
             EditorGUI.BeginChangeCheck();
             directValueChanged |= DrawFaceShadowTuningSection(component);
@@ -134,7 +135,7 @@ namespace NdmfMToon10ToLilToon
         {
             EditorGUI.BeginChangeCheck();
             var overridesProp = serializedObject.FindProperty(nameof(MToonLilToonComponent.globalOverrides));
-            EditorGUILayout.Space();
+            EditorGUILayout.Space(SectionTopSpacing);
             DrawUnderlinedSectionTitle(T("lilToon固有機能の一括設定", "Bulk Settings for lilToon-specific Features"));
             EditorGUILayout.Space(2f);
             DrawOverrideGroup(
@@ -153,7 +154,11 @@ namespace NdmfMToon10ToLilToon
                 overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.shadowBorderStrength)));
             DrawOverrideGroupWithThirdRow(
                 overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.enableBacklight)),
-                T("逆光ライト", "Backlight"),
+                TT(
+                    "逆光ライト",
+                    "撮影用にBloomで強く光らせたい場合は、HDRカラーのIntensityを3前後まで上げてください。",
+                    "Backlight",
+                    "For strong bloom in renders, raise HDR color intensity to around 3."),
                 T("色", "Color"),
                 overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.backlightColor)),
                 T("メインカラーの強度", "Main Color Strength"),
@@ -162,19 +167,28 @@ namespace NdmfMToon10ToLilToon
                 serializedObject.FindProperty(nameof(MToonLilToonComponent.disableBacklightStrengthForFace)));
             DrawOverrideGroup(
                 overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.enableDistanceFade)),
-                T("距離フェード", "Distance Fade"),
+                TT(
+                    "距離フェード",
+                    "すぐ目の前まで接近した部分を暗くすることができます。",
+                    "Distance Fade",
+                    "Darkens portions that are very close to the camera."),
                 T("色", "Color"),
                 overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.distanceFadeColor)),
                 T("強度", "Strength"),
                 overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.distanceFadeStrength)));
-            EditorGUILayout.PropertyField(overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.outlineZBias)),
-                new GUIContent(T("輪郭線のZ Bias", "Outline Z Bias")));
+            EditorGUILayout.PropertyField(
+                overridesProp.FindPropertyRelative(nameof(LilToonGlobalOverrides.outlineZBias)),
+                TT(
+                    "輪郭線のZ Bias",
+                    "輪郭線を前後にずらします。折れジワの抑制や、シルエットだけに輪郭線を出すことが可能です。",
+                    "Outline Z Bias",
+                    "Moves outline forward/backward. Helps suppress fold artifacts and show outlines on silhouette only."));
             return EditorGUI.EndChangeCheck();
         }
 
         private void DrawSpecificPartAdjustmentsHeading()
         {
-            EditorGUILayout.Space(SectionHeadingSpacing);
+            EditorGUILayout.Space(SectionHeadingSpacing + 4f);
             DrawUnderlinedSectionTitle(T("特定部位への調整", "Adjustments for Specific Parts"));
             EditorGUILayout.Space(2f);
         }
@@ -194,6 +208,24 @@ namespace NdmfMToon10ToLilToon
             string secondLabel,
             SerializedProperty secondValueProp)
         {
+            DrawOverrideGroup(
+                enabledProp,
+                new GUIContent(groupLabel),
+                firstLabel,
+                firstValueProp,
+                secondLabel,
+                secondValueProp,
+                addBottomSpacing: true);
+        }
+
+        private void DrawOverrideGroup(
+            SerializedProperty enabledProp,
+            GUIContent groupLabel,
+            string firstLabel,
+            SerializedProperty firstValueProp,
+            string secondLabel,
+            SerializedProperty secondValueProp)
+        {
             DrawOverrideGroup(enabledProp, groupLabel, firstLabel, firstValueProp, secondLabel, secondValueProp, addBottomSpacing: true);
         }
 
@@ -207,7 +239,35 @@ namespace NdmfMToon10ToLilToon
             string thirdLabel,
             SerializedProperty thirdValueProp)
         {
-            DrawOverrideGroup(enabledProp, groupLabel, firstLabel, firstValueProp, secondLabel, secondValueProp, addBottomSpacing: false);
+            DrawOverrideGroupWithThirdRow(
+                enabledProp,
+                new GUIContent(groupLabel),
+                firstLabel,
+                firstValueProp,
+                secondLabel,
+                secondValueProp,
+                thirdLabel,
+                thirdValueProp);
+        }
+
+        private void DrawOverrideGroupWithThirdRow(
+            SerializedProperty enabledProp,
+            GUIContent groupLabel,
+            string firstLabel,
+            SerializedProperty firstValueProp,
+            string secondLabel,
+            SerializedProperty secondValueProp,
+            string thirdLabel,
+            SerializedProperty thirdValueProp)
+        {
+            DrawOverrideGroup(
+                enabledProp,
+                groupLabel,
+                firstLabel,
+                firstValueProp,
+                secondLabel,
+                secondValueProp,
+                addBottomSpacing: false);
 
             var thirdRowRect = EditorGUILayout.GetControlRect();
             GetOverrideColumnRects(thirdRowRect, out var thirdCategoryRect, out var thirdItemLabelRect, out var thirdValueRect);
@@ -222,7 +282,7 @@ namespace NdmfMToon10ToLilToon
 
         private void DrawOverrideGroup(
             SerializedProperty enabledProp,
-            string groupLabel,
+            GUIContent groupLabel,
             string firstLabel,
             SerializedProperty firstValueProp,
             string secondLabel,
@@ -253,6 +313,11 @@ namespace NdmfMToon10ToLilToon
 
         private static void DrawCategoryColumn(Rect categoryRect, SerializedProperty enabledProp, string label, bool showToggle)
         {
+            DrawCategoryColumn(categoryRect, enabledProp, new GUIContent(label), showToggle);
+        }
+
+        private static void DrawCategoryColumn(Rect categoryRect, SerializedProperty enabledProp, GUIContent label, bool showToggle)
+        {
             if (showToggle)
             {
                 enabledProp.boolValue = EditorGUI.ToggleLeft(categoryRect, label, enabledProp.boolValue);
@@ -263,8 +328,48 @@ namespace NdmfMToon10ToLilToon
 
         private static void DrawTwoColumnPropertyRow(Rect itemLabelRect, Rect valueRect, string label, SerializedProperty valueProp)
         {
+            DrawTwoColumnPropertyRow(itemLabelRect, valueRect, new GUIContent(label), valueProp);
+        }
+
+        private static void DrawTwoColumnPropertyRow(Rect itemLabelRect, Rect valueRect, GUIContent label, SerializedProperty valueProp)
+        {
             EditorGUI.LabelField(itemLabelRect, label);
             EditorGUI.PropertyField(valueRect, valueProp, GUIContent.none);
+        }
+
+        private static bool DrawDeferredSlider(Rect rect, SerializedProperty valueProp, ref float? pendingValue)
+        {
+            var displayValue = pendingValue ?? valueProp.floatValue;
+            var nextValue = EditorGUI.Slider(rect, displayValue, 0f, 1f);
+            if (!Mathf.Approximately(nextValue, displayValue))
+            {
+                pendingValue = nextValue;
+            }
+
+            if (!pendingValue.HasValue) return false;
+
+            var shouldCommit = Event.current.type == EventType.MouseUp
+                || (GUIUtility.hotControl == 0 && Event.current.type == EventType.Repaint);
+            if (!shouldCommit) return false;
+
+            var committedValue = Mathf.Clamp01(pendingValue.Value);
+            pendingValue = null;
+            if (Mathf.Approximately(valueProp.floatValue, committedValue)) return false;
+
+            valueProp.floatValue = committedValue;
+            return true;
+        }
+
+        private static bool DrawDeferredLabeledSlider(
+            Rect labelRect,
+            Rect valueRect,
+            GUIContent label,
+            SerializedProperty valueProp,
+            ref float? pendingValue)
+        {
+            EditorGUI.LabelField(labelRect, label);
+            if (valueProp == null) return false;
+            return DrawDeferredSlider(valueRect, valueProp, ref pendingValue);
         }
 
         private static void GetOverrideColumnRects(
@@ -317,11 +422,20 @@ namespace NdmfMToon10ToLilToon
 
             using (new EditorGUI.IndentLevelScope())
             {
-                EditorGUILayout.Space(OverrideGroupSpacing);
+                changed |= DrawHairSelections(component);
+                EditorGUILayout.Space(OverrideGroupSpacing + 4f);
                 var enableEyebrowStencilProp = serializedObject.FindProperty(nameof(MToonLilToonComponent.enableEyebrowStencil));
                 var eyebrowRowRect = EditorGUILayout.GetControlRect();
                 GetHairAdjustmentColumnRects(eyebrowRowRect, out var eyebrowCategoryRect, out var eyebrowLabelRect, out var eyebrowValueRect);
-                DrawCategoryColumn(eyebrowCategoryRect, enableEyebrowStencilProp, T("眉ステンシル", "Eyebrow Stencil"), showToggle: true);
+                DrawCategoryColumn(
+                    eyebrowCategoryRect,
+                    enableEyebrowStencilProp,
+                    TT(
+                        "眉ステンシル",
+                        "髪の手前に眉を表示します。このツールでは簡略化のためCutoutに変更します。",
+                        "Eyebrow Stencil",
+                        "Shows eyebrows in front of hair. This tool switches it to Cutout for simplicity."),
+                    showToggle: true);
                 using (new EditorGUI.DisabledScope(!enableEyebrowStencilProp.boolValue))
                 {
                     EditorGUI.LabelField(eyebrowLabelRect, T("眉マテリアル", "Eyebrow Material"));
@@ -337,7 +451,15 @@ namespace NdmfMToon10ToLilToon
 
                 var fakeShadowFirstRowRect = EditorGUILayout.GetControlRect();
                 GetHairAdjustmentColumnRects(fakeShadowFirstRowRect, out var fakeShadowCategoryRect, out var fakeShadowDirectionLabelRect, out var fakeShadowDirectionValueRect);
-                DrawCategoryColumn(fakeShadowCategoryRect, enableFakeShadowProp, "FakeShadow", showToggle: true);
+                DrawCategoryColumn(
+                    fakeShadowCategoryRect,
+                    enableFakeShadowProp,
+                    TT(
+                        "FakeShadow",
+                        "前髪の擬似落ち影を生成します。",
+                        "FakeShadow",
+                        "Generates pseudo drop shadow for bangs."),
+                    showToggle: true);
                 using (new EditorGUI.DisabledScope(!enableFakeShadowProp.boolValue))
                 {
                     DrawTwoColumnPropertyRow(fakeShadowDirectionLabelRect, fakeShadowDirectionValueRect, T("向き", "Direction"), fakeShadowDirectionProp);
@@ -354,15 +476,28 @@ namespace NdmfMToon10ToLilToon
                 EditorGUILayout.Space(OverrideGroupSpacing);
                 var outlineCorrectionRowRect = EditorGUILayout.GetControlRect();
                 GetHairAdjustmentColumnRects(outlineCorrectionRowRect, out var outlineCorrectionCategoryRect, out var outlineCorrectionLabelRect, out var outlineCorrectionValueRect);
-                DrawCategoryColumn(outlineCorrectionCategoryRect, enableHairOutlineCorrectionProp, T("輪郭線補正", "Outline Correction"), showToggle: true);
+                DrawCategoryColumn(
+                    outlineCorrectionCategoryRect,
+                    enableHairOutlineCorrectionProp,
+                    TT(
+                        "輪郭線補正",
+                        "ハードエッジ向けのオプションです。頂点カラーに同一座標の法線の平均を焼き込み、輪郭線を整えます。",
+                        "Outline Correction",
+                        "Option for hard-edged meshes. Bakes averaged same-position normals into vertex colors to refine outlines."),
+                    showToggle: true);
                 using (new EditorGUI.DisabledScope(!enableHairOutlineCorrectionProp.boolValue))
                 {
                     var hairTipOutlineWidthProp = serializedObject.FindProperty(nameof(MToonLilToonComponent.hairTipOutlineWidth));
-                    EditorGUI.LabelField(outlineCorrectionLabelRect, T("毛先の太さ", "Tip Width"));
-                    if (hairTipOutlineWidthProp != null)
-                    {
-                        hairTipOutlineWidthProp.floatValue = EditorGUI.Slider(outlineCorrectionValueRect, hairTipOutlineWidthProp.floatValue, 0f, 1f);
-                    }
+                    changed |= DrawDeferredLabeledSlider(
+                        outlineCorrectionLabelRect,
+                        outlineCorrectionValueRect,
+                        TT(
+                            "毛先の太さ",
+                            "UV下端を毛先とし、毛先の輪郭線の太さを調整します。",
+                            "Tip Width",
+                            "Treats the lower UV edge as tip and adjusts tip outline thickness."),
+                        hairTipOutlineWidthProp,
+                        ref _pendingHairTipOutlineWidth);
                 }
 
                 var tipRangeRowRect = EditorGUILayout.GetControlRect();
@@ -370,13 +505,17 @@ namespace NdmfMToon10ToLilToon
                 DrawCategoryColumn(tipRangeCategoryRect, enableHairOutlineCorrectionProp, string.Empty, showToggle: false);
                 using (new EditorGUI.DisabledScope(!enableHairOutlineCorrectionProp.boolValue))
                 {
-                    EditorGUI.LabelField(tipRangeLabelRect, T("毛先の範囲", "Tip Range"));
-                    if (hairTipRangeProp != null)
-                    {
-                        hairTipRangeProp.floatValue = EditorGUI.Slider(tipRangeValueRect, hairTipRangeProp.floatValue, 0f, 1f);
-                    }
+                    changed |= DrawDeferredLabeledSlider(
+                        tipRangeLabelRect,
+                        tipRangeValueRect,
+                        TT(
+                            "毛先の範囲",
+                            "大きくすると根本近くまで細くする範囲が広がります。",
+                            "Tip Range",
+                            "Larger values extend the thinning area closer to hair roots."),
+                        hairTipRangeProp,
+                        ref _pendingHairTipRange);
                 }
-                EditorGUILayout.Space(OverrideGroupSpacing);
             }
 
             return changed;
@@ -408,9 +547,23 @@ namespace NdmfMToon10ToLilToon
             DrawFaceShadowMaskTypePopup();
 
             var textureProperty = serializedObject.FindProperty(nameof(MToonLilToonComponent.faceShadowSdfTexture));
-            EditorGUILayout.PropertyField(textureProperty, new GUIContent(T("マスク", "Mask")));
+            EditorGUILayout.PropertyField(
+                textureProperty,
+                TT(
+                    "マスク",
+                    "デフォルトではVRoid用の平面化マスクが指定されています。",
+                    "Mask",
+                    "By default, a flattened mask for VRoid is assigned."));
             var lodProperty = serializedObject.FindProperty(nameof(MToonLilToonComponent.shadowStrengthMaskLod));
-            lodProperty.floatValue = EditorGUILayout.Slider(new GUIContent(T("LOD", "LOD")), lodProperty.floatValue, 0f, 1f);
+            lodProperty.floatValue = EditorGUILayout.Slider(
+                TT(
+                    "LOD",
+                    "マスク画像のぼかし量です。",
+                    "LOD",
+                    "Controls blur amount of the mask texture."),
+                lodProperty.floatValue,
+                0f,
+                1f);
         }
 
         private void DrawFaceShadowMaskTypePopup()
@@ -434,7 +587,14 @@ namespace NdmfMToon10ToLilToon
                 _ => 1
             };
 
-            var nextIndex = EditorGUILayout.Popup(T("マスクタイプ", "Mask Type"), currentIndex, options);
+            var nextIndex = EditorGUILayout.Popup(
+                TT(
+                    "マスクタイプ",
+                    "顔影マスクの計算方式を選択します。",
+                    "Mask Type",
+                    "Chooses how face shadow mask is interpreted."),
+                currentIndex,
+                options);
             var nextType = nextIndex switch
             {
                 0 => MToonLilToonComponent.FaceShadowMaskType.Strength,
@@ -479,50 +639,47 @@ namespace NdmfMToon10ToLilToon
 
             var hairSelectionsProp = serializedObject.FindProperty(nameof(MToonLilToonComponent.hairSelections));
             var changed = false;
-            using (new EditorGUI.IndentLevelScope())
+            EditorGUILayout.HelpBox(
+                T(
+                    "この機能が有効な場合は髪マテリアルを結合します。\n結合されたくないマテリアルは対象から外してください。",
+                    "When this feature is enabled, hair materials are merged.\nExclude any materials you do not want to merge."),
+                MessageType.Info);
+            component.showHairMaterials = EditorGUILayout.Foldout(
+                component.showHairMaterials,
+                T("対象マテリアル", "Target Materials"),
+                true);
+            if (!component.showHairMaterials) return false;
+
+            if (hairSelectionsProp == null || hairSelectionsProp.arraySize == 0)
             {
-                EditorGUILayout.HelpBox(
-                    T(
-                        "この機能が有効な場合は髪マテリアルを結合します。\n結合されたくないマテリアルは対象から外してください。",
-                        "When this feature is enabled, hair materials are merged.\nExclude any materials you do not want to merge."),
-                    MessageType.Info);
-                component.showHairMaterials = EditorGUILayout.Foldout(
-                    component.showHairMaterials,
-                    T("対象マテリアル", "Target Materials"),
-                    true);
-                if (!component.showHairMaterials) return false;
+                EditorGUILayout.HelpBox(T("まだスキャンされていません。", "No materials scanned yet."), MessageType.Info);
+                return false;
+            }
 
-                if (hairSelectionsProp == null || hairSelectionsProp.arraySize == 0)
+            for (var i = 0; i < hairSelectionsProp.arraySize; i++)
+            {
+                var entryProp = hairSelectionsProp.GetArrayElementAtIndex(i);
+                if (entryProp == null) continue;
+                var materialProp = entryProp.FindPropertyRelative(nameof(HairMaterialSelection.material));
+                var selectedProp = entryProp.FindPropertyRelative(nameof(HairMaterialSelection.selected));
+                if (selectedProp == null || materialProp == null) continue;
+
+                var rowRect = EditorGUILayout.GetControlRect();
+                var toggleRect = new Rect(rowRect.x, rowRect.y, HairSelectionToggleColumnWidth, rowRect.height);
+                var materialRect = new Rect(
+                    rowRect.x + HairSelectionToggleColumnWidth,
+                    rowRect.y,
+                    Mathf.Max(0f, rowRect.width - HairSelectionToggleColumnWidth),
+                    rowRect.height);
+
+                var nextSelected = EditorGUI.Toggle(toggleRect, selectedProp.boolValue);
+                if (nextSelected != selectedProp.boolValue)
                 {
-                    EditorGUILayout.HelpBox(T("まだスキャンされていません。", "No materials scanned yet."), MessageType.Info);
-                    return false;
+                    selectedProp.boolValue = nextSelected;
+                    changed = true;
                 }
 
-                for (var i = 0; i < hairSelectionsProp.arraySize; i++)
-                {
-                    var entryProp = hairSelectionsProp.GetArrayElementAtIndex(i);
-                    if (entryProp == null) continue;
-                    var materialProp = entryProp.FindPropertyRelative(nameof(HairMaterialSelection.material));
-                    var selectedProp = entryProp.FindPropertyRelative(nameof(HairMaterialSelection.selected));
-                    if (selectedProp == null || materialProp == null) continue;
-
-                    var rowRect = EditorGUILayout.GetControlRect();
-                    var toggleRect = new Rect(rowRect.x, rowRect.y, HairSelectionToggleColumnWidth, rowRect.height);
-                    var materialRect = new Rect(
-                        rowRect.x + HairSelectionToggleColumnWidth,
-                        rowRect.y,
-                        Mathf.Max(0f, rowRect.width - HairSelectionToggleColumnWidth),
-                        rowRect.height);
-
-                    var nextSelected = EditorGUI.Toggle(toggleRect, selectedProp.boolValue);
-                    if (nextSelected != selectedProp.boolValue)
-                    {
-                        selectedProp.boolValue = nextSelected;
-                        changed = true;
-                    }
-
-                    EditorGUI.ObjectField(materialRect, materialProp, typeof(Material), GUIContent.none);
-                }
+                EditorGUI.ObjectField(materialRect, materialProp, typeof(Material), GUIContent.none);
             }
 
             return changed;
@@ -671,6 +828,13 @@ namespace NdmfMToon10ToLilToon
         private string T(string ja, string en)
         {
             return _language == Language.Japanese ? ja : en;
+        }
+
+        private GUIContent TT(string ja, string jaTooltip, string en, string enTooltip)
+        {
+            return _language == Language.Japanese
+                ? new GUIContent(ja, jaTooltip)
+                : new GUIContent(en, enTooltip);
         }
 
         private bool DrawSharedFaceMaterialSelector(MToonLilToonComponent component)

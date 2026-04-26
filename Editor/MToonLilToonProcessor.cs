@@ -1486,6 +1486,9 @@ namespace NdmfMToon10ToLilToon
             return ComputeOutlineAlphaFromOriginalUv(originalUv[originalIndex].y, uvRange, hairTipOutlineWidth, hairTipRange);
         }
 
+        // Based on lilOutlineUtil by lilxyzw
+        // https://github.com/lilxyzw/lilOutlineUtil
+        // Licensed under the MIT License
         private static void ApplyHairOutlineCorrection(Mesh mesh, IReadOnlyList<float> outlineAlphaByVertex)
         {
             if (mesh == null) return;
