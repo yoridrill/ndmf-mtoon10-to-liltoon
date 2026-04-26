@@ -536,6 +536,7 @@ namespace NdmfMToon10ToLilToon
         private static void ApplyRimState(Material source, Material destination)
         {
             if (source == null || destination == null) return;
+            SetIfExists(destination, "_RimBlur", 0.3f);
 
             if (TryGetFloat(source, new[] { "_RimLift" }, out var rimLift))
             {
@@ -556,8 +557,8 @@ namespace NdmfMToon10ToLilToon
         private static float MapMToonRimLiftToLilRimBorder(float mtoonRimLift)
         {
             var t = Mathf.Clamp01(mtoonRimLift);
-            // 低域で効きを抑えつつ、1 に近づくほど広がるカーブ。
-            return Mathf.SmoothStep(0f, 1f, t);
+            // MToon と lilToon で境界側の増減方向が逆寄りなので反転して合わせる。
+            return 1f - Mathf.SmoothStep(0f, 1f, t);
         }
 
         private static float MapMToonRimFresnelPowerToLilRimFresnelPower(float mtoonRimFresnelPower)
