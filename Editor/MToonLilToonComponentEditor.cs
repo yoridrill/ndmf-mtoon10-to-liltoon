@@ -360,6 +360,18 @@ namespace NdmfMToon10ToLilToon
             return true;
         }
 
+        private static bool DrawDeferredLabeledSlider(
+            Rect labelRect,
+            Rect valueRect,
+            GUIContent label,
+            SerializedProperty valueProp,
+            ref float? pendingValue)
+        {
+            EditorGUI.LabelField(labelRect, label);
+            if (valueProp == null) return false;
+            return DrawDeferredSlider(valueRect, valueProp, ref pendingValue);
+        }
+
         private static void GetOverrideColumnRects(
             Rect rowRect,
             out Rect categoryRect,
@@ -476,17 +488,16 @@ namespace NdmfMToon10ToLilToon
                 using (new EditorGUI.DisabledScope(!enableHairOutlineCorrectionProp.boolValue))
                 {
                     var hairTipOutlineWidthProp = serializedObject.FindProperty(nameof(MToonLilToonComponent.hairTipOutlineWidth));
-                    EditorGUI.LabelField(
+                    changed |= DrawDeferredLabeledSlider(
                         outlineCorrectionLabelRect,
+                        outlineCorrectionValueRect,
                         TT(
                             "毛先の太さ",
                             "UV下端を毛先とし、毛先の輪郭線の太さを調整します。",
                             "Tip Width",
-                            "Treats the lower UV edge as tip and adjusts tip outline thickness."));
-                    if (hairTipOutlineWidthProp != null)
-                    {
-                        changed |= DrawDeferredSlider(outlineCorrectionValueRect, hairTipOutlineWidthProp, ref _pendingHairTipOutlineWidth);
-                    }
+                            "Treats the lower UV edge as tip and adjusts tip outline thickness."),
+                        hairTipOutlineWidthProp,
+                        ref _pendingHairTipOutlineWidth);
                 }
 
                 var tipRangeRowRect = EditorGUILayout.GetControlRect();
@@ -494,19 +505,17 @@ namespace NdmfMToon10ToLilToon
                 DrawCategoryColumn(tipRangeCategoryRect, enableHairOutlineCorrectionProp, string.Empty, showToggle: false);
                 using (new EditorGUI.DisabledScope(!enableHairOutlineCorrectionProp.boolValue))
                 {
-                    EditorGUI.LabelField(
+                    changed |= DrawDeferredLabeledSlider(
                         tipRangeLabelRect,
+                        tipRangeValueRect,
                         TT(
                             "毛先の範囲",
                             "大きくすると根本近くまで細くする範囲が広がります。",
                             "Tip Range",
-                            "Larger values extend the thinning area closer to hair roots."));
-                    if (hairTipRangeProp != null)
-                    {
-                        changed |= DrawDeferredSlider(tipRangeValueRect, hairTipRangeProp, ref _pendingHairTipRange);
-                    }
+                            "Larger values extend the thinning area closer to hair roots."),
+                        hairTipRangeProp,
+                        ref _pendingHairTipRange);
                 }
-                EditorGUILayout.Space(OverrideGroupSpacing);
             }
 
             return changed;
