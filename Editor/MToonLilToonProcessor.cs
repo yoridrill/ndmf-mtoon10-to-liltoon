@@ -184,6 +184,7 @@ namespace NdmfMToon10ToLilToon
             component.skippedMaterialCount = report.SkippedMaterialCount;
             component.warnings = report.Warnings.Select(w => w.Message).ToList();
             component.unsupportedProperties = report.UnsupportedPropertySummary.Select(kv => $"{kv.Key}:{kv.Value}").ToList();
+            ValidateRendererMaterialTextureReferencesBeforeAao(component, report);
             LogVerboseReportIfNeeded(component, report);
         }
 
@@ -386,6 +387,7 @@ namespace NdmfMToon10ToLilToon
             {
                 return false;
             }
+            EnsureReferenceTrackableObjectFlags(mergedMaterial);
             ForceMergedRenderType(mergedMaterial, original[mergedIndices[0]], mergedOutputRenderType);
             fakeShadowMaterial = CreateFakeShadowMaterial(mergedMaterial, enableFakeShadow, fakeShadowDirection, fakeShadowOffset, report);
 
@@ -434,6 +436,7 @@ namespace NdmfMToon10ToLilToon
             var atlas = new Texture2D(2, 2, TextureFormat.RGBA32, false);
             atlasRects = atlas.PackTextures(packTextures, 2, atlasMaxSize, false).ToList();
             BleedTransparentPixels(atlas, 2);
+            EnsureReferenceTrackableObjectFlags(atlas);
             mergedMaterial.SetTexture("_MainTex", atlas);
             if (mergedMaterial.HasProperty("_MainTex"))
             {
@@ -502,6 +505,7 @@ namespace NdmfMToon10ToLilToon
             {
                 name = $"{cached.mergedTemplate.name}_Cached",
             };
+            EnsureReferenceTrackableObjectFlags(mergedMaterial);
             MToonToLilToonMapper.ApplyGlobalOverridesToMaterial(mergedMaterial, overrides);
             atlasRects = cached.atlasRects?.Select(rect => rect).ToList() ?? new List<Rect>();
 
@@ -511,6 +515,7 @@ namespace NdmfMToon10ToLilToon
                 {
                     name = $"{cached.fakeShadowTemplate.name}_Cached",
                 };
+                EnsureReferenceTrackableObjectFlags(fakeShadowMaterial);
                 ApplyFakeShadowOverrides(fakeShadowMaterial, true, fakeShadowDirection, fakeShadowOffset);
             }
 
@@ -525,9 +530,11 @@ namespace NdmfMToon10ToLilToon
             {
                 name = $"{mergedMaterial.name}_Template",
             };
+            EnsureReferenceTrackableObjectFlags(mergedTemplate);
             var fakeTemplate = fakeShadowMaterial != null
                 ? new Material(fakeShadowMaterial) { name = $"{fakeShadowMaterial.name}_Template" }
                 : null;
+            EnsureReferenceTrackableObjectFlags(fakeTemplate);
             HairMergeCache[cacheKey] = new HairMergeCacheEntry
             {
                 mergedTemplate = mergedTemplate,
@@ -1018,6 +1025,7 @@ namespace NdmfMToon10ToLilToon
             }
             atlas.Apply();
             BleedTransparentPixels(atlas, 2);
+            EnsureReferenceTrackableObjectFlags(atlas);
             mergedMaterial.SetTexture(destinationProperty, atlas);
         }
 
@@ -1359,13 +1367,19 @@ namespace NdmfMToon10ToLilToon
             if (boneWeightList != null) meshCopy.boneWeights = boneWeightList.ToArray();
             if (vertices.Count > 65535) meshCopy.indexFormat = IndexFormat.UInt32;
 
-            meshCopy.subMeshCount = newSubMeshTriangles.Count + 1;
+            var mergedSubMeshCount = fakeShadowMaterial != null ? 2 : 1;
+            meshCopy.subMeshCount = newSubMeshTriangles.Count + mergedSubMeshCount;
             for (var i = 0; i < newSubMeshTriangles.Count; i++)
             {
                 meshCopy.SetTriangles(newSubMeshTriangles[i], i, false);
             }
             var mergedSubMeshIndex = newSubMeshTriangles.Count;
             meshCopy.SetTriangles(mergedTriangles.ToArray(), mergedSubMeshIndex, false);
+            if (fakeShadowMaterial != null)
+            {
+                var fakeShadowSubMeshIndex = mergedSubMeshIndex + 1;
+                meshCopy.SetTriangles(mergedTriangles.ToArray(), fakeShadowSubMeshIndex, false);
+            }
 
             if (enableHairOutlineCorrection)
             {
@@ -1381,9 +1395,6 @@ namespace NdmfMToon10ToLilToon
             newSourceIndices.Add(mergedRepresentativeSourceIndex);
             if (fakeShadowMaterial != null)
             {
-                // Unity はサブメッシュ数より多いマテリアルを設定すると、
-                // 余剰マテリアルを最後のサブメッシュに重ねて描画する。
-                // merged を最後のサブメッシュに置くことで FakeShadow を同じ髪面に重ねる。
                 newMaterials.Add(fakeShadowMaterial);
                 newSourceIndices.Add(-1);
             }
@@ -1602,10 +1613,77 @@ namespace NdmfMToon10ToLilToon
                 name = $"{mergedMaterial.name}_FakeShadow",
             };
 
-            if (fakeShadowMaterial.HasProperty("_MainTex")) fakeShadowMaterial.SetTexture("_MainTex", null);
+            var mergedTexture = mergedMaterial != null && mergedMaterial.HasProperty("_MainTex")
+                ? mergedMaterial.GetTexture("_MainTex")
+                : null;
+            if (fakeShadowMaterial.HasProperty("_MainTex")) fakeShadowMaterial.SetTexture("_MainTex", mergedTexture);
+            EnsureReferenceTrackableObjectFlags(fakeShadowMaterial);
 
             ApplyFakeShadowOverrides(fakeShadowMaterial, true, fakeShadowDirection, fakeShadowOffset);
             return fakeShadowMaterial;
+        }
+
+        private static void EnsureReferenceTrackableObjectFlags(Object generatedObject)
+        {
+            if (generatedObject == null) return;
+            var dontSaveFlags = HideFlags.DontSave | HideFlags.DontSaveInBuild | HideFlags.DontSaveInEditor | HideFlags.HideAndDontSave;
+            generatedObject.hideFlags &= ~dontSaveFlags;
+        }
+
+        private static void ValidateRendererMaterialTextureReferencesBeforeAao(MToonLilToonComponent component, ConversionReport report)
+        {
+            if (component == null) return;
+
+            foreach (var renderer in component.GetComponentsInChildren<Renderer>(true))
+            {
+                if (renderer == null) continue;
+                var materials = renderer.sharedMaterials ?? System.Array.Empty<Material>();
+                var mesh = renderer switch
+                {
+                    SkinnedMeshRenderer skinned => skinned.sharedMesh,
+                    MeshRenderer meshRenderer => meshRenderer.GetComponent<MeshFilter>()?.sharedMesh,
+                    _ => null
+                };
+
+                if (mesh != null && mesh.subMeshCount != materials.Length)
+                {
+                    var message = $"{renderer.name}: subMeshCount({mesh.subMeshCount}) != sharedMaterials.Length({materials.Length})";
+                    report?.Warnings.Add(new ConversionWarning(message));
+                    Debug.LogWarning($"[MToon10ToLilToon][AAO-precheck] {message}", renderer);
+                }
+                else
+                {
+                    Debug.Log($"[MToon10ToLilToon][AAO-precheck] {renderer.name}: subMeshCount/materialCount OK ({materials.Length})", renderer);
+                }
+
+                for (var i = 0; i < materials.Length; i++)
+                {
+                    var material = materials[i];
+                    if (material == null)
+                    {
+                        var message = $"{renderer.name}: material slot[{i}] is null";
+                        report?.Warnings.Add(new ConversionWarning(message));
+                        Debug.LogWarning($"[MToon10ToLilToon][AAO-precheck] {message}", renderer);
+                        continue;
+                    }
+
+                    EnsureReferenceTrackableObjectFlags(material);
+                    var mainTexture = material.mainTexture;
+                    var mainTex = material.HasProperty("_MainTex") ? material.GetTexture("_MainTex") : null;
+                    var resolvedMainTexture = mainTexture != null ? mainTexture : mainTex;
+
+                    if (resolvedMainTexture == null)
+                    {
+                        var message = $"{renderer.name}: material[{i}] {material.name} has null mainTexture/_MainTex";
+                        report?.Warnings.Add(new ConversionWarning(message));
+                        Debug.LogWarning($"[MToon10ToLilToon][AAO-precheck] {message}", renderer);
+                        continue;
+                    }
+
+                    EnsureReferenceTrackableObjectFlags(resolvedMainTexture);
+                    Debug.Log($"[MToon10ToLilToon][AAO-precheck] {renderer.name}: material[{i}] {material.name} -> texture {resolvedMainTexture.name}", renderer);
+                }
+            }
         }
 
         private static Shader ResolveFakeShadowShader()
