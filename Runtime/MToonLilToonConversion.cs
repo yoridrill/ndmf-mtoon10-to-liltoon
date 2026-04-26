@@ -539,10 +539,9 @@ namespace NdmfMToon10ToLilToon
 
             if (TryGetFloat(source, new[] { "_RimLift" }, out var rimLift))
             {
-                // MToon の RimLift は 0 でほぼ無効、1 で全面に近い強さになるため、
-                // lilToon では範囲(_RimBorder)と強度(_RimMainStrength)に分配して近似する。
+                // _RimMainStrength はメインカラー強度に関わるため使用せず、
+                // lilToon では範囲側(_RimBorder)のみで近似する。
                 SetIfExists(destination, "_RimBorder", MapMToonRimLiftToLilRimBorder(rimLift));
-                SetIfExists(destination, "_RimMainStrength", MapMToonRimLiftToLilRimMainStrength(rimLift));
             }
 
             if (TryGetFloat(source, new[] { "_RimFresnelPower" }, out var rimFresnelPower))
@@ -559,13 +558,6 @@ namespace NdmfMToon10ToLilToon
             var t = Mathf.Clamp01(mtoonRimLift);
             // 低域で効きを抑えつつ、1 に近づくほど広がるカーブ。
             return Mathf.SmoothStep(0f, 1f, t);
-        }
-
-        private static float MapMToonRimLiftToLilRimMainStrength(float mtoonRimLift)
-        {
-            var t = Mathf.Clamp01(mtoonRimLift);
-            // 0 付近を落として「ほぼ見えない」状態を作りやすくする。
-            return Mathf.Pow(t, 1.6f);
         }
 
         private static float MapMToonRimFresnelPowerToLilRimFresnelPower(float mtoonRimFresnelPower)
