@@ -9,6 +9,7 @@ MToon 1.0 / 互換 MToon マテリアルを lilToon へ変換するための Uni
 - Build 時に NDMF フェーズで自動変換
 - Editor 上での非破壊 Preview
 - 髪周りのルック調整（マテリアル結合 / atlas）
+- 毛先調整スライダーの確定反映（ドラッグ中の頻繁な再構築を抑制）
 - Advanced での詳細ログと Preview 復旧機能
 
 ## 前提
@@ -33,6 +34,7 @@ MToon 1.0 / 互換 MToon マテリアルを lilToon へ変換するための Uni
 - 手動でチェックした項目は render type 混在でもそのまま merge 対象
 - merge 後マテリアルの render type は、`Transparent` が `Opaque+Cutout` より多い場合のみ `Transparent`、それ以外は `Cutout`
 - オプション: 眉ステンシル / FakeShadow（Inspector で ON/OFF、向き・オフセットを調整可能）
+- オプション: 輪郭線補正（ハードエッジ向け、頂点カラーへ法線平均情報を焼き込み）
 - 眉ステンシル対象マテリアルは名前ベースで自動選択され、Inspector で手動変更可能
 - FakeShadow は「Enable FakeShadow」が ON かつ「チェックされた結合対象」がある場合に、結合後の髪マテリアルへ適用
 - FakeShadow 用の顔マテリアルは名前ベースで自動選択され、Inspector で手動変更可能
@@ -75,3 +77,12 @@ atlas サイズ方針:
 
 - 実行環境外では実機見た目確認はできません
 - 特殊なメッシュ構成では atlas/UV 結合結果の追加調整が必要な場合があります
+
+## ライセンス
+
+このプロジェクトは MIT License で提供されています。詳細は [LICENSE](./LICENSE) を参照してください。
+
+## サードパーティ告知
+
+輪郭線補正の実装は、MIT ライセンスの `lilOutlineUtil` を参考にしています。
+詳細は [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md) を参照してください。

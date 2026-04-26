@@ -1369,6 +1369,9 @@ namespace NdmfMToon10ToLilToon
 
             if (enableHairOutlineCorrection)
             {
+                // Based on lilOutlineUtil by lilxyzw
+                // https://github.com/lilxyzw/lilOutlineUtil
+                // Licensed under the MIT License
                 ApplyHairOutlineCorrection(meshCopy, outlineAlphaByVertex);
                 if (mergedMaterial != null && mergedMaterial.HasProperty("_OutlineVertexR2Width"))
                 {
