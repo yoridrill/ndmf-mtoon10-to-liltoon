@@ -538,8 +538,11 @@ namespace NdmfMToon10ToLilToon
             if (source == null || destination == null) return;
             SetIfExists(destination, "_RimBlur", 0.3f);
 
-            // 要望に合わせて _RimLift は変換せずそのまま _RimBorder へ入れる。
-            CopyFloat(source, destination, new[] { "_RimLift" }, new[] { "_RimBorder" }, null);
+            // 一旦、見た目合わせのため反転して適用する。
+            if (TryGetFloat(source, new[] { "_RimLift" }, out var rimLift))
+            {
+                SetIfExists(destination, "_RimBorder", 1f - Mathf.Clamp01(rimLift));
+            }
 
             if (TryGetFloat(source, new[] { "_RimFresnelPower" }, out var rimFresnelPower))
             {
