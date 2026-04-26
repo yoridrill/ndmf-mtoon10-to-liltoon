@@ -1,0 +1,76 @@
+name: Build Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read package info
+        id: package
+        shell: bash
+        run: |
+          NAME=$(jq -r '.name' package.json)
+          VERSION=$(jq -r '.version' package.json)
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "zip=$NAME-$VERSION.zip" >> "$GITHUB_OUTPUT"
+
+      - name: Validate tag matches package version
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: |
+          VERSION=$(jq -r '.version' package.json)
+          TAG="${GITHUB_REF_NAME#v}"
+          if [ "$VERSION" != "$TAG" ]; then
+            echo "package.json version ($VERSION) does not match tag ($GITHUB_REF_NAME)"
+            exit 1
+          fi
+
+      - name: Build VPM zip
+        shell: bash
+        run: |
+          mkdir -p dist/package
+
+          cp package.json dist/package/
+          cp README.md dist/package/ || true
+          cp LICENSE dist/package/ || true
+          cp LICENSE.meta dist/package/ || true
+          cp THIRD_PARTY_NOTICES.md dist/package/ || true
+          cp THIRD_PARTY_NOTICES.md.meta dist/package/ || true
+
+          [ -d Editor ] && cp -a Editor dist/package/
+          [ -d Runtime ] && cp -a Runtime dist/package/
+
+          cd dist/package
+          zip -r "../${{ steps.package.outputs.zip }}" . \
+            -x "*.git*" \
+            -x "**/Library/**" \
+            -x "**/Temp/**" \
+            -x "**/Obj/**" \
+            -x "**/Logs/**" \
+            -x "**/UserSettings/**"
+
+      - name: Check zip root
+        shell: bash
+        run: |
+          unzip -l "dist/${{ steps.package.outputs.zip }}"
+          unzip -l "dist/${{ steps.package.outputs.zip }}" | grep -q " package.json"
+          unzip -l "dist/${{ steps.package.outputs.zip }}" | grep -q " Editor/"
+          unzip -l "dist/${{ steps.package.outputs.zip }}" | grep -q " Runtime/"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/${{ steps.package.outputs.zip }}
+          generate_release_notes: true
