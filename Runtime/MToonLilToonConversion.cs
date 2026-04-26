@@ -921,23 +921,13 @@ namespace NdmfMToon10ToLilToon
                 SetIfExists(destination, "_Color2nd", destination.GetColor("_Color"));
                 SetIfExists(destination, "_UseMain2ndTex", 1f);
                 SetScrollRotate(destination, "_Main2ndTex_ScrollRotate", hasScrollX, scrollX, hasScrollY, scrollY, hasRotation, lilRotation);
-
-                if (hasEmission)
-                {
-                    MoveEmissionMapToBlendMaskForUvAnimation(destination);
-                    SetScrollRotate(destination, "_EmissionBlendMask_ScrollRotate", hasScrollX, scrollX, hasScrollY, scrollY, hasRotation, lilRotation);
-                }
+                ApplyEmissionUvAnimationIfNeeded(destination, hasEmission, hasScrollX, scrollX, hasScrollY, scrollY, hasRotation, lilRotation);
 
                 return;
             }
 
             SetScrollRotate(destination, "_MainTex_ScrollRotate", hasScrollX, scrollX, hasScrollY, scrollY, hasRotation, lilRotation);
-
-            if (hasEmission)
-            {
-                MoveEmissionMapToBlendMaskForUvAnimation(destination);
-                SetScrollRotate(destination, "_EmissionBlendMask_ScrollRotate", hasScrollX, scrollX, hasScrollY, scrollY, hasRotation, lilRotation);
-            }
+            ApplyEmissionUvAnimationIfNeeded(destination, hasEmission, hasScrollX, scrollX, hasScrollY, scrollY, hasRotation, lilRotation);
         }
 
         private static void MoveEmissionMapToBlendMaskForUvAnimation(Material destination)
@@ -949,6 +939,21 @@ namespace NdmfMToon10ToLilToon
 
             SetTextureIfExists(destination, "_EmissionBlendMask", emissionMap);
             SetTextureIfExists(destination, "_EmissionMap", null);
+        }
+
+        private static void ApplyEmissionUvAnimationIfNeeded(
+            Material destination,
+            bool hasEmission,
+            bool hasScrollX,
+            float scrollX,
+            bool hasScrollY,
+            float scrollY,
+            bool hasRotation,
+            float rotation)
+        {
+            if (!hasEmission) return;
+            MoveEmissionMapToBlendMaskForUvAnimation(destination);
+            SetScrollRotate(destination, "_EmissionBlendMask_ScrollRotate", hasScrollX, scrollX, hasScrollY, scrollY, hasRotation, rotation);
         }
 
         private static void SetScrollRotate(
