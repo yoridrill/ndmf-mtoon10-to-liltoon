@@ -1367,19 +1367,13 @@ namespace NdmfMToon10ToLilToon
             if (boneWeightList != null) meshCopy.boneWeights = boneWeightList.ToArray();
             if (vertices.Count > 65535) meshCopy.indexFormat = IndexFormat.UInt32;
 
-            var mergedSubMeshCount = fakeShadowMaterial != null ? 2 : 1;
-            meshCopy.subMeshCount = newSubMeshTriangles.Count + mergedSubMeshCount;
+            meshCopy.subMeshCount = newSubMeshTriangles.Count + 1;
             for (var i = 0; i < newSubMeshTriangles.Count; i++)
             {
                 meshCopy.SetTriangles(newSubMeshTriangles[i], i, false);
             }
             var mergedSubMeshIndex = newSubMeshTriangles.Count;
             meshCopy.SetTriangles(mergedTriangles.ToArray(), mergedSubMeshIndex, false);
-            if (fakeShadowMaterial != null)
-            {
-                var fakeShadowSubMeshIndex = mergedSubMeshIndex + 1;
-                meshCopy.SetTriangles(mergedTriangles.ToArray(), fakeShadowSubMeshIndex, false);
-            }
 
             if (enableHairOutlineCorrection)
             {
@@ -1613,10 +1607,7 @@ namespace NdmfMToon10ToLilToon
                 name = $"{mergedMaterial.name}_FakeShadow",
             };
 
-            var mergedTexture = mergedMaterial != null && mergedMaterial.HasProperty("_MainTex")
-                ? mergedMaterial.GetTexture("_MainTex")
-                : null;
-            if (fakeShadowMaterial.HasProperty("_MainTex")) fakeShadowMaterial.SetTexture("_MainTex", mergedTexture);
+            if (fakeShadowMaterial.HasProperty("_MainTex")) fakeShadowMaterial.SetTexture("_MainTex", null);
             EnsureReferenceTrackableObjectFlags(fakeShadowMaterial);
 
             ApplyFakeShadowOverrides(fakeShadowMaterial, true, fakeShadowDirection, fakeShadowOffset);
@@ -1633,6 +1624,7 @@ namespace NdmfMToon10ToLilToon
         private static void ValidateRendererMaterialTextureReferencesBeforeAao(MToonLilToonComponent component, ConversionReport report)
         {
             if (component == null) return;
+            var verbose = component.verboseLog;
 
             foreach (var renderer in component.GetComponentsInChildren<Renderer>(true))
             {
@@ -1645,13 +1637,19 @@ namespace NdmfMToon10ToLilToon
                     _ => null
                 };
 
-                if (mesh != null && mesh.subMeshCount != materials.Length)
+                var allowsFakeShadowOverlay = mesh != null
+                    && materials.Length == mesh.subMeshCount + 1
+                    && materials.Any(IsFakeShadowMaterial);
+                if (mesh != null && mesh.subMeshCount != materials.Length && !allowsFakeShadowOverlay)
                 {
                     var message = $"{renderer.name}: subMeshCount({mesh.subMeshCount}) != sharedMaterials.Length({materials.Length})";
                     report?.Warnings.Add(new ConversionWarning(message));
-                    Debug.LogWarning($"[MToon10ToLilToon][AAO-precheck] {message}", renderer);
+                    if (verbose)
+                    {
+                        Debug.LogWarning($"[MToon10ToLilToon][AAO-precheck] {message}", renderer);
+                    }
                 }
-                else
+                else if (verbose)
                 {
                     Debug.Log($"[MToon10ToLilToon][AAO-precheck] {renderer.name}: subMeshCount/materialCount OK ({materials.Length})", renderer);
                 }
@@ -1663,27 +1661,41 @@ namespace NdmfMToon10ToLilToon
                     {
                         var message = $"{renderer.name}: material slot[{i}] is null";
                         report?.Warnings.Add(new ConversionWarning(message));
-                        Debug.LogWarning($"[MToon10ToLilToon][AAO-precheck] {message}", renderer);
+                        if (verbose)
+                        {
+                            Debug.LogWarning($"[MToon10ToLilToon][AAO-precheck] {message}", renderer);
+                        }
                         continue;
                     }
 
-                    EnsureReferenceTrackableObjectFlags(material);
                     var mainTexture = material.mainTexture;
                     var mainTex = material.HasProperty("_MainTex") ? material.GetTexture("_MainTex") : null;
                     var resolvedMainTexture = mainTexture != null ? mainTexture : mainTex;
 
-                    if (resolvedMainTexture == null)
+                    if (resolvedMainTexture == null && !IsFakeShadowMaterial(material))
                     {
                         var message = $"{renderer.name}: material[{i}] {material.name} has null mainTexture/_MainTex";
                         report?.Warnings.Add(new ConversionWarning(message));
-                        Debug.LogWarning($"[MToon10ToLilToon][AAO-precheck] {message}", renderer);
+                        if (verbose)
+                        {
+                            Debug.LogWarning($"[MToon10ToLilToon][AAO-precheck] {message}", renderer);
+                        }
                         continue;
                     }
 
-                    EnsureReferenceTrackableObjectFlags(resolvedMainTexture);
-                    Debug.Log($"[MToon10ToLilToon][AAO-precheck] {renderer.name}: material[{i}] {material.name} -> texture {resolvedMainTexture.name}", renderer);
+                    if (verbose)
+                    {
+                        var textureName = resolvedMainTexture != null ? resolvedMainTexture.name : "(null:fake-shadow)";
+                        Debug.Log($"[MToon10ToLilToon][AAO-precheck] {renderer.name}: material[{i}] {material.name} -> texture {textureName}", renderer);
+                    }
                 }
             }
+        }
+
+        private static bool IsFakeShadowMaterial(Material material)
+        {
+            if (material == null || material.shader == null) return false;
+            return material.shader.name.IndexOf("fakeshadow", System.StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         private static Shader ResolveFakeShadowShader()
