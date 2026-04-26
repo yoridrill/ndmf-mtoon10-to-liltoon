@@ -924,7 +924,7 @@ namespace NdmfMToon10ToLilToon
 
                 if (hasEmission)
                 {
-                    SetTextureIfExists(destination, "_EmissionBlendMask", uvAnimMask);
+                    MoveEmissionMapToBlendMaskForUvAnimation(destination);
                     SetScrollRotate(destination, "_EmissionBlendMask_ScrollRotate", hasScrollX, scrollX, hasScrollY, scrollY, hasRotation, lilRotation);
                 }
 
@@ -935,8 +935,20 @@ namespace NdmfMToon10ToLilToon
 
             if (hasEmission)
             {
+                MoveEmissionMapToBlendMaskForUvAnimation(destination);
                 SetScrollRotate(destination, "_EmissionBlendMask_ScrollRotate", hasScrollX, scrollX, hasScrollY, scrollY, hasRotation, lilRotation);
             }
+        }
+
+        private static void MoveEmissionMapToBlendMaskForUvAnimation(Material destination)
+        {
+            if (destination == null || !destination.HasProperty("_EmissionMap")) return;
+
+            var emissionMap = destination.GetTexture("_EmissionMap");
+            if (emissionMap == null) return;
+
+            SetTextureIfExists(destination, "_EmissionBlendMask", emissionMap);
+            SetTextureIfExists(destination, "_EmissionMap", null);
         }
 
         private static void SetScrollRotate(
