@@ -538,12 +538,8 @@ namespace NdmfMToon10ToLilToon
             if (source == null || destination == null) return;
             SetIfExists(destination, "_RimBlur", 0.3f);
 
-            if (TryGetFloat(source, new[] { "_RimLift" }, out var rimLift))
-            {
-                // _RimMainStrength はメインカラー強度に関わるため使用せず、
-                // lilToon では範囲側(_RimBorder)のみで近似する。
-                SetIfExists(destination, "_RimBorder", MapMToonRimLiftToLilRimBorder(rimLift));
-            }
+            // 要望に合わせて _RimLift は変換せずそのまま _RimBorder へ入れる。
+            CopyFloat(source, destination, new[] { "_RimLift" }, new[] { "_RimBorder" }, null);
 
             if (TryGetFloat(source, new[] { "_RimFresnelPower" }, out var rimFresnelPower))
             {
@@ -552,12 +548,6 @@ namespace NdmfMToon10ToLilToon
 
             CopyFloat(source, destination, new[] { "_RimLightingMix" }, new[] { "_RimEnableLighting" }, null);
             CopyFloat(source, destination, new[] { "_OutlineLightingMix" }, new[] { "_OutlineEnableLighting" }, null);
-        }
-
-        private static float MapMToonRimLiftToLilRimBorder(float mtoonRimLift)
-        {
-            // 反転が起きないよう、まずは同方向の一次マップにする。
-            return Mathf.Clamp01(mtoonRimLift);
         }
 
         private static float MapMToonRimFresnelPowerToLilRimFresnelPower(float mtoonRimFresnelPower)
