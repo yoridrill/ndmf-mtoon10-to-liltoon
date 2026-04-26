@@ -5,7 +5,7 @@ using VRC.SDKBase;
 namespace NdmfMToon10ToLilToon
 {
     [DisallowMultipleComponent]
-    [AddComponentMenu("NDMF/NDMF MToon10 to lilToon")]
+    [AddComponentMenu("yoridrill/NDMF MToon10 to lilToon")]
     public sealed class MToonLilToonComponent : MonoBehaviour, IEditorOnly
     {
         public enum FaceShadowMaskType
