@@ -303,7 +303,6 @@ namespace NdmfMToon10ToLilToon
                 CopyTexture(source, converted, new[] { "_MatcapTex", "_SphereAdd" }, new[] { "_MatCapTex" }, report, ignoreTinyDummyTexture: true);
                 CopyColor(source, converted, new[] { "_RimColor" }, new[] { "_RimColor" }, report);
                 CopyTexture(source, converted, new[] { "_RimTex" }, new[] { "_RimColorTex" }, report, ignoreTinyDummyTexture: true);
-                CopyFloat(source, converted, new[] { "_RimFresnelPower" }, new[] { "_RimFresnelPower" }, report);
                 CopyColor(source, converted, new[] { "_OutlineColorFactor", "_OutlineColor" }, new[] { "_OutlineColor" }, report);
                 CopyTexture(source, converted, new[] { "_OutlineWidthTex", "_OutlineWidthTexture", "_OutlineWidthMultiplyTexture" }, new[] { "_OutlineWidthMask" }, report, ignoreTinyDummyTexture: true);
 
@@ -538,9 +537,44 @@ namespace NdmfMToon10ToLilToon
         {
             if (source == null || destination == null) return;
 
-            CopyFloat(source, destination, new[] { "_RimLift" }, new[] { "_RimBorder" }, null);
+            if (TryGetFloat(source, new[] { "_RimLift" }, out var rimLift))
+            {
+                // MToon の RimLift は 0 でほぼ無効、1 で全面に近い強さになるため、
+                // lilToon では範囲(_RimBorder)と強度(_RimMainStrength)に分配して近似する。
+                SetIfExists(destination, "_RimBorder", MapMToonRimLiftToLilRimBorder(rimLift));
+                SetIfExists(destination, "_RimMainStrength", MapMToonRimLiftToLilRimMainStrength(rimLift));
+            }
+
+            if (TryGetFloat(source, new[] { "_RimFresnelPower" }, out var rimFresnelPower))
+            {
+                SetIfExists(destination, "_RimFresnelPower", MapMToonRimFresnelPowerToLilRimFresnelPower(rimFresnelPower));
+            }
+
             CopyFloat(source, destination, new[] { "_RimLightingMix" }, new[] { "_RimEnableLighting" }, null);
             CopyFloat(source, destination, new[] { "_OutlineLightingMix" }, new[] { "_OutlineEnableLighting" }, null);
+        }
+
+        private static float MapMToonRimLiftToLilRimBorder(float mtoonRimLift)
+        {
+            var t = Mathf.Clamp01(mtoonRimLift);
+            // 低域で効きを抑えつつ、1 に近づくほど広がるカーブ。
+            return Mathf.SmoothStep(0f, 1f, t);
+        }
+
+        private static float MapMToonRimLiftToLilRimMainStrength(float mtoonRimLift)
+        {
+            var t = Mathf.Clamp01(mtoonRimLift);
+            // 0 付近を落として「ほぼ見えない」状態を作りやすくする。
+            return Mathf.Pow(t, 1.6f);
+        }
+
+        private static float MapMToonRimFresnelPowerToLilRimFresnelPower(float mtoonRimFresnelPower)
+        {
+            // MToon は 40 以降の変化が小さいため、40 でほぼ飽和する指数カーブで lilToon に寄せる。
+            var clamped = Mathf.Max(0f, mtoonRimFresnelPower);
+            const float maxLil = 5f;
+            var normalized = 1f - Mathf.Exp(-clamped / 12f);
+            return 0.01f + (maxLil - 0.01f) * normalized;
         }
 
         private static void ApplyFeatureEnables(Material source, Material destination)
