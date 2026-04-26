@@ -556,9 +556,8 @@ namespace NdmfMToon10ToLilToon
 
         private static float MapMToonRimLiftToLilRimBorder(float mtoonRimLift)
         {
-            var t = Mathf.Clamp01(mtoonRimLift);
-            // 増減方向はそのまま扱い、低域の変化を緩めるカーブで近似する。
-            return Mathf.SmoothStep(0f, 1f, t);
+            // 反転が起きないよう、まずは同方向の一次マップにする。
+            return Mathf.Clamp01(mtoonRimLift);
         }
 
         private static float MapMToonRimFresnelPowerToLilRimFresnelPower(float mtoonRimFresnelPower)
