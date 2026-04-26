@@ -1,11 +1,12 @@
 using System.Collections.Generic;
 using UnityEngine;
+using VRC.SDKBase;
 
 namespace NdmfMToon10ToLilToon
 {
     [DisallowMultipleComponent]
     [AddComponentMenu("NDMF/NDMF MToon10 to lilToon")]
-    public sealed class MToonLilToonComponent : MonoBehaviour
+    public sealed class MToonLilToonComponent : MonoBehaviour, IEditorOnly
     {
         public enum FaceShadowMaskType
         {
