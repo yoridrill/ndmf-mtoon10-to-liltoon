@@ -547,16 +547,16 @@ namespace NdmfMToon10ToLilToon
         {
             if (source == null || destination == null) return;
 
-            var useEmission = HasNonDefaultColor(source, new[] { "_EmissionColor" }, Color.black);
+            var useEmission = HasNonDefaultColor(source, new[] { "_EmissionColor" }, Color.black)
+                && IsNonDummyTextureOrUnset(source, "_EmissiveMap", "_EmissionMap");
             SetIfExists(destination, "_UseEmission", useEmission ? 1f : 0f);
 
             var hasMatCapTexture = HasTexture(source, true, "_MatcapTex", "_SphereAdd");
             var useMatCap = hasMatCapTexture;
             SetIfExists(destination, "_UseMatCap", useMatCap ? 1f : 0f);
 
-            var hasRimTexture = HasTexture(source, true, "_RimTex");
             var useRim = HasNonDefaultColor(source, new[] { "_RimColor" }, Color.black)
-                || hasRimTexture;
+                && IsNonDummyTextureOrUnset(source, "_RimTex");
             SetIfExists(destination, "_UseRim", useRim ? 1f : 0f);
 
             var useNormalMap = HasTexture(source, true, "_NormalMap", "_BumpMap")
@@ -899,7 +899,8 @@ namespace NdmfMToon10ToLilToon
 
             if (!hasScrollX && !hasScrollY && !hasRotation) return;
 
-            var hasEmission = HasNonDefaultColor(source, new[] { "_EmissionColor" }, Color.black);
+            var hasEmission = HasNonDefaultColor(source, new[] { "_EmissionColor" }, Color.black)
+                && IsNonDummyTextureOrUnset(source, "_EmissiveMap", "_EmissionMap");
 
             var hasUvAnimMask = false;
             Texture uvAnimMask = null;
@@ -976,6 +977,27 @@ namespace NdmfMToon10ToLilToon
                 return true;
             }
 
+            return false;
+        }
+
+        private static bool IsNonDummyTextureOrUnset(Material material, params string[] properties)
+        {
+            if (material == null) return false;
+            var hasTextureProperty = false;
+            for (var i = 0; i < properties.Length; i++)
+            {
+                var propertyName = properties[i];
+                if (!material.HasProperty(propertyName)) continue;
+                hasTextureProperty = true;
+
+                var texture = material.GetTexture(propertyName);
+                if (texture == null) return true;
+                if (!IsLikelyDummyTexture(texture)) return true;
+            }
+
+            // テクスチャプロパティ自体が無い場合は「未設定」扱いにする。
+            if (!hasTextureProperty) return true;
+            // テクスチャが存在し、かつ全候補がダミーだった。
             return false;
         }
 
