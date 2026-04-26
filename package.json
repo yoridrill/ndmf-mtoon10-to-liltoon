@@ -1,0 +1,13 @@
+{
+    "name": "jp.yoridrill.ndmf-mtoon10-to-liltoon",
+    "displayName": "NDMF MToon10 to lilToon",
+    "version": "0.0.1",
+    "author": {
+        "name": "Yoridori Midori"
+    },
+    "unity": "2022.3",
+    "vpmDependencies": {
+        "jp.lilxyzw.liltoon": ">=2.3.2",
+        "nadena.dev.ndmf": ">=1.11.0"
+    }
+}
