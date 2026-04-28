@@ -541,7 +541,7 @@ namespace NdmfMToon10ToLilToon
             // 一旦、見た目合わせのため反転して適用する。
             if (TryGetFloat(source, new[] { "_RimLift" }, out var rimLift))
             {
-                SetIfExists(destination, "_RimBorder", 1f - Mathf.Clamp01(rimLift));
+                SetIfExists(destination, "_RimBorder", MapMToonRimLiftToLilRimBorder(rimLift));
             }
 
             if (TryGetFloat(source, new[] { "_RimFresnelPower" }, out var rimFresnelPower))
@@ -555,13 +555,22 @@ namespace NdmfMToon10ToLilToon
 
         private static float MapMToonRimFresnelPowerToLilRimFresnelPower(float mtoonRimFresnelPower)
         {
+            const float mtoonSaturationPoint = 40f;
+            const float rimCurvePower = 1.2f;
+            const float minLil = 0.01f;
+            const float maxLil = 4.6f;
+
             // MToon は 40 以降の変化が小さいため、40 を実質上限として扱う。
             // lilToon 側で太めに出るケースを抑えるため、少し細め寄りに再調整。
             var clamped = Mathf.Max(0f, mtoonRimFresnelPower);
-            var normalized = Mathf.Clamp01(clamped / 40f);
-            var peaked = Mathf.Pow(normalized, 1.2f);
-            const float maxLil = 4.6f;
-            return 0.01f + (maxLil - 0.01f) * peaked;
+            var normalized = Mathf.Clamp01(clamped / mtoonSaturationPoint);
+            var curved = Mathf.Pow(normalized, rimCurvePower);
+            return minLil + (maxLil - minLil) * curved;
+        }
+
+        private static float MapMToonRimLiftToLilRimBorder(float mtoonRimLift)
+        {
+            return 1f - Mathf.Clamp01(mtoonRimLift);
         }
 
         private static void ApplyFeatureEnables(Material source, Material destination)
