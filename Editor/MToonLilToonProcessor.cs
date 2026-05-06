@@ -297,10 +297,15 @@ namespace NdmfMToon10ToLilToon
                 ? ResolveMergedOutputRenderType(original, mergedIndices)
                 : RenderType.Cutout;
 
+            var mergedRepresentativeIndex = mergedIndices.Count >= 1
+                ? ResolveMergedRepresentativeIndex(original, mergedIndices, transparentRanks, mergedOutputRenderType)
+                : -1;
+
             if (mergedIndices.Count >= 1
                 && TryMergeHairMaterials(
                     original,
                     mergedIndices,
+                    mergedRepresentativeIndex,
                     mergedOutputRenderType,
                     lilToonShader,
                     globalOverrides,
@@ -314,7 +319,6 @@ namespace NdmfMToon10ToLilToon
                     onProgress))
             {
                 mergedMaterialCreated = true;
-                var mergedRepresentativeIndex = ResolveMergedRepresentativeIndex(original, mergedIndices, transparentRanks, mergedOutputRenderType);
                 onProgress?.Invoke("Rebuilding mesh...");
                 ApplyMergedMaterialAndMesh(renderer, result, resultSourceIndices, mergedIndices, mergedRepresentativeIndex, mergedMaterial, fakeShadowMaterial, mergedRects, enableHairOutlineCorrection, hairTipOutlineWidth, hairTipRange, report);
                 if (mergedHairMaterials != null && mergedMaterial != null)
@@ -361,6 +365,7 @@ namespace NdmfMToon10ToLilToon
         private static bool TryMergeHairMaterials(
             IReadOnlyList<Material> original,
             IReadOnlyList<int> mergedIndices,
+            int mergedRepresentativeIndex,
             RenderType mergedOutputRenderType,
             Shader lilToonShader,
             LilToonGlobalOverrides overrides,
@@ -377,18 +382,22 @@ namespace NdmfMToon10ToLilToon
             fakeShadowMaterial = null;
             atlasRects = null;
 
-            var cacheKey = BuildHairMergeCacheKey(original, mergedIndices, mergedOutputRenderType, enableFakeShadow);
+            var cacheKey = BuildHairMergeCacheKey(original, mergedIndices, mergedRepresentativeIndex, mergedOutputRenderType, enableFakeShadow);
             if (TryGetCachedHairMergeResult(cacheKey, overrides, fakeShadowDirection, fakeShadowOffset, out mergedMaterial, out fakeShadowMaterial, out atlasRects))
             {
                 return true;
             }
 
-            if (!MToonToLilToonMapper.TryConvert(original[mergedIndices[0]], lilToonShader, overrides, out mergedMaterial, report))
+            var baseIndex = mergedRepresentativeIndex >= 0 && mergedRepresentativeIndex < original.Count
+                ? mergedRepresentativeIndex
+                : mergedIndices[0];
+
+            if (!MToonToLilToonMapper.TryConvert(original[baseIndex], lilToonShader, overrides, out mergedMaterial, report))
             {
                 return false;
             }
             EnsureReferenceTrackableObjectFlags(mergedMaterial);
-            ForceMergedRenderType(mergedMaterial, original[mergedIndices[0]], mergedOutputRenderType);
+            ForceMergedRenderType(mergedMaterial, original[baseIndex], mergedOutputRenderType);
             fakeShadowMaterial = CreateFakeShadowMaterial(mergedMaterial, enableFakeShadow, fakeShadowDirection, fakeShadowOffset, report);
 
             if (mergedIndices.Count == 1)
@@ -457,10 +466,11 @@ namespace NdmfMToon10ToLilToon
         private static string BuildHairMergeCacheKey(
             IReadOnlyList<Material> original,
             IReadOnlyList<int> mergedIndices,
+            int mergedRepresentativeIndex,
             RenderType mergedOutputRenderType,
             bool enableFakeShadow)
         {
-            var parts = new List<string> { mergedOutputRenderType.ToString(), enableFakeShadow ? "1" : "0" };
+            var parts = new List<string> { mergedOutputRenderType.ToString(), enableFakeShadow ? "1" : "0", $"rep:{mergedRepresentativeIndex}" };
             for (var i = 0; i < mergedIndices.Count; i++)
             {
                 var index = mergedIndices[i];
