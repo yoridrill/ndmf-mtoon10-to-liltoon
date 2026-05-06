@@ -297,13 +297,12 @@ namespace NdmfMToon10ToLilToon
                 ApplyShadingFactorMapping(source, converted);
                 CopyTexture(source, converted, new[] { "_NormalMap", "_BumpMap" }, new[] { "_BumpMap", "_NormalMap" }, report, ignoreTinyDummyTexture: true);
                 CopyFloat(source, converted, new[] { "_BumpScale" }, new[] { "_BumpScale" }, report);
-                CopyColor(source, converted, new[] { "_EmissiveFactor", "_EmissionColor" }, new[] { "_EmissionColor" }, report);
+                CopyColor(source, converted, new[] { "_EmissionColor" }, new[] { "_EmissionColor" }, report);
                 CopyTexture(source, converted, new[] { "_EmissiveMap", "_EmissionMap" }, new[] { "_EmissionMap" }, report, ignoreTinyDummyTexture: true);
                 CopyColor(source, converted, new[] { "_MatcapColor" }, new[] { "_MatCapColor" }, report);
                 CopyTexture(source, converted, new[] { "_MatcapTex", "_SphereAdd" }, new[] { "_MatCapTex" }, report, ignoreTinyDummyTexture: true);
                 CopyColor(source, converted, new[] { "_RimColor" }, new[] { "_RimColor" }, report);
                 CopyTexture(source, converted, new[] { "_RimTex" }, new[] { "_RimColorTex" }, report, ignoreTinyDummyTexture: true);
-                CopyFloat(source, converted, new[] { "_RimFresnelPower" }, new[] { "_RimFresnelPower" }, report);
                 CopyColor(source, converted, new[] { "_OutlineColorFactor", "_OutlineColor" }, new[] { "_OutlineColor" }, report);
                 CopyTexture(source, converted, new[] { "_OutlineWidthTex", "_OutlineWidthTexture", "_OutlineWidthMultiplyTexture" }, new[] { "_OutlineWidthMask" }, report, ignoreTinyDummyTexture: true);
 
@@ -537,27 +536,57 @@ namespace NdmfMToon10ToLilToon
         private static void ApplyRimState(Material source, Material destination)
         {
             if (source == null || destination == null) return;
+            SetIfExists(destination, "_RimBlur", 0.3f);
 
-            CopyFloat(source, destination, new[] { "_RimLift" }, new[] { "_RimBorder" }, null);
+            // 一旦、見た目合わせのため反転して適用する。
+            if (TryGetFloat(source, new[] { "_RimLift" }, out var rimLift))
+            {
+                SetIfExists(destination, "_RimBorder", MapMToonRimLiftToLilRimBorder(rimLift));
+            }
+
+            if (TryGetFloat(source, new[] { "_RimFresnelPower" }, out var rimFresnelPower))
+            {
+                SetIfExists(destination, "_RimFresnelPower", MapMToonRimFresnelPowerToLilRimFresnelPower(rimFresnelPower));
+            }
+
             CopyFloat(source, destination, new[] { "_RimLightingMix" }, new[] { "_RimEnableLighting" }, null);
             CopyFloat(source, destination, new[] { "_OutlineLightingMix" }, new[] { "_OutlineEnableLighting" }, null);
+        }
+
+        private static float MapMToonRimFresnelPowerToLilRimFresnelPower(float mtoonRimFresnelPower)
+        {
+            const float mtoonSaturationPoint = 40f;
+            const float rimCurvePower = 1.2f;
+            const float minLil = 0.01f;
+            const float maxLil = 4.6f;
+
+            // MToon は 40 以降の変化が小さいため、40 を実質上限として扱う。
+            // lilToon 側で太めに出るケースを抑えるため、少し細め寄りに再調整。
+            var clamped = Mathf.Max(0f, mtoonRimFresnelPower);
+            var normalized = Mathf.Clamp01(clamped / mtoonSaturationPoint);
+            var curved = Mathf.Pow(normalized, rimCurvePower);
+            return minLil + (maxLil - minLil) * curved;
+        }
+
+        private static float MapMToonRimLiftToLilRimBorder(float mtoonRimLift)
+        {
+            return 1f - Mathf.Clamp01(mtoonRimLift);
         }
 
         private static void ApplyFeatureEnables(Material source, Material destination)
         {
             if (source == null || destination == null) return;
 
-            var hasEmissionTexture = HasTexture(source, true, "_EmissiveMap", "_EmissionMap");
-            var useEmission = hasEmissionTexture;
+            var useEmission = HasNonDefaultColor(source, new[] { "_EmissionColor" }, Color.black)
+                && IsNonDummyTextureOrUnset(source, "_EmissiveMap", "_EmissionMap");
             SetIfExists(destination, "_UseEmission", useEmission ? 1f : 0f);
 
             var hasMatCapTexture = HasTexture(source, true, "_MatcapTex", "_SphereAdd");
             var useMatCap = hasMatCapTexture;
             SetIfExists(destination, "_UseMatCap", useMatCap ? 1f : 0f);
 
-            var hasRimTexture = HasTexture(source, true, "_RimTex");
             var useRim = HasNonDefaultColor(source, new[] { "_RimColor" }, Color.black)
-                || hasRimTexture;
+                && IsNonDummyTextureOrUnset(source, "_RimTex");
             SetIfExists(destination, "_UseRim", useRim ? 1f : 0f);
 
             var useNormalMap = HasTexture(source, true, "_NormalMap", "_BumpMap")
@@ -897,23 +926,83 @@ namespace NdmfMToon10ToLilToon
             var hasScrollX = TryGetFloat(source, new[] { "_UvAnimScrollXSpeed", "_UvAnimScrollX", "_UvAnimationScrollXSpeedFactor" }, out var scrollX);
             var hasScrollY = TryGetFloat(source, new[] { "_UvAnimScrollYSpeed", "_UvAnimScrollY", "_UvAnimationScrollYSpeedFactor" }, out var scrollY);
             var hasRotation = TryGetFloat(source, new[] { "_UvAnimRotationSpeed", "_UvAnimRotation", "_UvAnimationRotationSpeedFactor" }, out var rotation);
+            // MToon 側の回転速度は 2π スケール差があるため lilToon 向けに補正する。
+            var lilRotation = hasRotation ? rotation * (Mathf.PI * 2f) : rotation;
 
-            if (destination.HasProperty("_EmissionBlendMask_ScrollRotate") && (hasScrollX || hasScrollY || hasRotation))
-            {
-                var current = destination.GetVector("_EmissionBlendMask_ScrollRotate");
-                current.x = hasScrollX ? scrollX : current.x;
-                current.y = hasScrollY ? scrollY : current.y;
-                current.w = hasRotation ? rotation : current.w;
-                destination.SetVector("_EmissionBlendMask_ScrollRotate", current);
-            }
+            if (!hasScrollX && !hasScrollY && !hasRotation) return;
 
+            var hasEmission = HasNonDefaultColor(source, new[] { "_EmissionColor" }, Color.black)
+                && IsNonDummyTextureOrUnset(source, "_EmissiveMap", "_EmissionMap");
+
+            var hasUvAnimMask = false;
+            Texture uvAnimMask = null;
             if (source.HasProperty("_UvAnimMaskTex") || source.HasProperty("_UvAnimMaskTexture"))
             {
-                var maskTex = source.HasProperty("_UvAnimMaskTex")
+                uvAnimMask = source.HasProperty("_UvAnimMaskTex")
                     ? source.GetTexture("_UvAnimMaskTex")
                     : source.GetTexture("_UvAnimMaskTexture");
-                SetTextureIfExists(destination, "_EmissionBlendMask", maskTex);
+                hasUvAnimMask = uvAnimMask != null;
             }
+
+            if (hasUvAnimMask)
+            {
+                SetTextureIfExists(destination, "_Main2ndBlendMask", uvAnimMask);
+                SetTextureIfExists(destination, "_Main2ndTex", destination.GetTexture("_MainTex"));
+                SetIfExists(destination, "_Color2nd", destination.GetColor("_Color"));
+                SetIfExists(destination, "_UseMain2ndTex", 1f);
+                SetScrollRotate(destination, "_Main2ndTex_ScrollRotate", hasScrollX, scrollX, hasScrollY, scrollY, hasRotation, lilRotation);
+                ApplyEmissionUvAnimationIfNeeded(destination, hasEmission, hasScrollX, scrollX, hasScrollY, scrollY, hasRotation, lilRotation);
+
+                return;
+            }
+
+            SetScrollRotate(destination, "_MainTex_ScrollRotate", hasScrollX, scrollX, hasScrollY, scrollY, hasRotation, lilRotation);
+            ApplyEmissionUvAnimationIfNeeded(destination, hasEmission, hasScrollX, scrollX, hasScrollY, scrollY, hasRotation, lilRotation);
+        }
+
+        private static void MoveEmissionMapToBlendMaskForUvAnimation(Material destination)
+        {
+            if (destination == null || !destination.HasProperty("_EmissionMap")) return;
+
+            var emissionMap = destination.GetTexture("_EmissionMap");
+            if (emissionMap == null) return;
+
+            SetTextureIfExists(destination, "_EmissionBlendMask", emissionMap);
+            SetTextureIfExists(destination, "_EmissionMap", null);
+        }
+
+        private static void ApplyEmissionUvAnimationIfNeeded(
+            Material destination,
+            bool hasEmission,
+            bool hasScrollX,
+            float scrollX,
+            bool hasScrollY,
+            float scrollY,
+            bool hasRotation,
+            float rotation)
+        {
+            if (!hasEmission) return;
+            MoveEmissionMapToBlendMaskForUvAnimation(destination);
+            SetScrollRotate(destination, "_EmissionBlendMask_ScrollRotate", hasScrollX, scrollX, hasScrollY, scrollY, hasRotation, rotation);
+        }
+
+        private static void SetScrollRotate(
+            Material material,
+            string propertyName,
+            bool hasScrollX,
+            float scrollX,
+            bool hasScrollY,
+            float scrollY,
+            bool hasRotation,
+            float rotation)
+        {
+            if (material == null || !material.HasProperty(propertyName)) return;
+
+            var current = material.GetVector(propertyName);
+            current.x = hasScrollX ? scrollX : current.x;
+            current.y = hasScrollY ? scrollY : current.y;
+            current.w = hasRotation ? rotation : current.w;
+            material.SetVector(propertyName, current);
         }
 
         private static bool TryGetFloat(Material material, IReadOnlyList<string> candidates, out float value)
@@ -937,6 +1026,27 @@ namespace NdmfMToon10ToLilToon
                 return true;
             }
 
+            return false;
+        }
+
+        private static bool IsNonDummyTextureOrUnset(Material material, params string[] properties)
+        {
+            if (material == null) return false;
+            var hasTextureProperty = false;
+            for (var i = 0; i < properties.Length; i++)
+            {
+                var propertyName = properties[i];
+                if (!material.HasProperty(propertyName)) continue;
+                hasTextureProperty = true;
+
+                var texture = material.GetTexture(propertyName);
+                if (texture == null) return true;
+                if (!IsLikelyDummyTexture(texture)) return true;
+            }
+
+            // テクスチャプロパティ自体が無い場合は「未設定」扱いにする。
+            if (!hasTextureProperty) return true;
+            // テクスチャが存在し、かつ全候補がダミーだった。
             return false;
         }
 
