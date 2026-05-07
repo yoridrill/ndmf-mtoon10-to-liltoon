@@ -89,6 +89,7 @@ namespace NdmfMToon10ToLilToon
                 ProcessRenderer(
                     renderer,
                     selectedForMerge,
+                    component.representativeHairMaterialOverride,
                     lilToonShader,
                     component.globalOverrides,
                     component.enableFakeShadow,
@@ -226,6 +227,7 @@ namespace NdmfMToon10ToLilToon
         private static void ProcessRenderer(
             Renderer renderer,
             HashSet<Material> selectedForMerge,
+            Material representativeHairMaterialOverride,
             Shader lilToonShader,
             LilToonGlobalOverrides globalOverrides,
             bool enableFakeShadow,
@@ -300,6 +302,24 @@ namespace NdmfMToon10ToLilToon
             var mergedRepresentativeIndex = mergedIndices.Count >= 1
                 ? ResolveMergedRepresentativeIndex(original, mergedIndices, transparentRanks, mergedOutputRenderType)
                 : -1;
+
+            if (mergedRepresentativeIndex >= 0 && representativeHairMaterialOverride != null)
+            {
+                var overrideIndex = -1;
+                for (var i = 0; i < mergedIndices.Count; i++)
+                {
+                    var candidate = mergedIndices[i];
+                    if (candidate < 0 || candidate >= original.Length) continue;
+                    if (original[candidate] != representativeHairMaterialOverride) continue;
+                    overrideIndex = candidate;
+                    break;
+                }
+
+                if (overrideIndex >= 0)
+                {
+                    mergedRepresentativeIndex = overrideIndex;
+                }
+            }
 
             if (mergedIndices.Count >= 1
                 && TryMergeHairMaterials(

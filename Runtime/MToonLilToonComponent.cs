@@ -21,6 +21,7 @@ namespace NdmfMToon10ToLilToon
         [Range(0f, 1f)] public float hairTipOutlineWidth = 0.2f;
         [Range(0f, 1f)] public float hairTipRange = 0.3f;
         public List<HairMaterialSelection> hairSelections = new();
+        public Material representativeHairMaterialOverride;
         public bool enableEyebrowStencil;
         public Material eyebrowStencilMaterial;
         public Material fakeShadowFaceMaterial;

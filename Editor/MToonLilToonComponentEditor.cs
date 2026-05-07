@@ -682,6 +682,15 @@ namespace NdmfMToon10ToLilToon
                 EditorGUI.ObjectField(materialRect, materialProp, typeof(Material), GUIContent.none);
             }
 
+            EditorGUILayout.Space(4f);
+            var representativeProp = serializedObject.FindProperty(nameof(MToonLilToonComponent.representativeHairMaterialOverride));
+            if (representativeProp != null)
+            {
+                EditorGUILayout.PropertyField(
+                    representativeProp,
+                    new GUIContent(T("Representative Material (Optional Override)", "Representative Material (Optional Override)")));
+            }
+
             return changed;
         }
 
