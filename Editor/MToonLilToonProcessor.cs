@@ -1563,7 +1563,26 @@ namespace NdmfMToon10ToLilToon
                 var averagedNormal = (accumulator.normalSum / accumulator.count).normalized;
                 var normalWs = normals[i].sqrMagnitude > 0f ? normals[i].normalized : Vector3.forward;
                 var tangentWs = new Vector3(tangents[i].x, tangents[i].y, tangents[i].z);
-                tangentWs = tangentWs.sqrMagnitude > 0f ? tangentWs.normalized : Vector3.right;
+                if (tangentWs.sqrMagnitude > 0f)
+                {
+                    tangentWs = tangentWs.normalized;
+                    tangentWs = (tangentWs - normalWs * Vector3.Dot(normalWs, tangentWs)).normalized;
+                }
+                else
+                {
+                    tangentWs = Vector3.right;
+                }
+
+                if (tangentWs.sqrMagnitude <= 0f)
+                {
+                    tangentWs = Vector3.Cross(Vector3.up, normalWs);
+                    if (tangentWs.sqrMagnitude <= 0f)
+                    {
+                        tangentWs = Vector3.Cross(Vector3.right, normalWs);
+                    }
+                    tangentWs = tangentWs.sqrMagnitude > 0f ? tangentWs.normalized : Vector3.right;
+                }
+
                 var bitangentSign = tangents[i].w >= 0f ? 1f : -1f;
                 var bitangentWs = Vector3.Cross(normalWs, tangentWs) * bitangentSign;
                 bitangentWs = bitangentWs.sqrMagnitude > 0f ? bitangentWs.normalized : Vector3.up;
