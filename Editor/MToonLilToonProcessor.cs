@@ -482,9 +482,8 @@ namespace NdmfMToon10ToLilToon
             atlasRects = atlas.PackTextures(packTextures, 2, atlasMaxSize, false).ToList();
             atlas.Apply(false, false);
             BleedTransparentPixels(atlas, 2);
-            var mainAtlas = SaveGeneratedAtlasTexture(generatedAssetScopeId, renderer, "_MainTex", atlas);
-            if (mainAtlas == null) throw new System.InvalidOperationException($"Failed to import generated atlas for _MainTex ({mergedMaterial.name}).");
-            mergedMaterial.SetTexture("_MainTex", mainAtlas);
+            CompressGeneratedAtlas(atlas, "_MainTex");
+            mergedMaterial.SetTexture("_MainTex", atlas);
             if (mergedMaterial.HasProperty("_MainTex"))
             {
                 mergedMaterial.SetTextureScale("_MainTex", Vector2.one);
@@ -497,7 +496,7 @@ namespace NdmfMToon10ToLilToon
             BakeOptionalAtlas(new[] { "_OutlineTex", "_OutlineMask" }, original, mergedIndices, mergedMaterial, new[] { "_OutlineWidthMultiplyTexture", "_OutlineMask" }, atlas.width, atlas.height, atlasRects, generatedAssetScopeId, renderer, report, TextureBakeKind.LinearMask);
             NormalizeMergedEmissionAndMatCapState(original, mergedIndices, mergedMaterial);
             ValidateMergedMaterialTextureReferences(mergedMaterial, report, verboseLog);
-            if (useHairMergeCache && HasPersistentMergedAtlasTextures(mergedMaterial) && IsValidHairMergeCacheHit(mergedMaterial, atlasRects, mergedIndices.Count))
+            if (useHairMergeCache && HasCacheableMergedAtlasTextures(mergedMaterial) && IsValidHairMergeCacheHit(mergedMaterial, atlasRects, mergedIndices.Count))
             {
                 CacheHairMergeResult(cacheKey, mergedMaterial, fakeShadowMaterial, atlasRects);
             }
@@ -1076,13 +1075,8 @@ namespace NdmfMToon10ToLilToon
             }
             atlas.Apply(false, false);
             BleedTransparentPixels(atlas, 2);
-            var importedAtlas = SaveGeneratedAtlasTexture(generatedAssetScopeId, renderer, destinationProperty, atlas);
-            if (importedAtlas == null)
-            {
-                throw new System.InvalidOperationException($"Failed to import generated atlas for {destinationProperty} ({mergedMaterial.name}).");
-            }
-
-            mergedMaterial.SetTexture(destinationProperty, importedAtlas);
+            CompressGeneratedAtlas(atlas, destinationProperty);
+            mergedMaterial.SetTexture(destinationProperty, atlas);
         }
 
 
@@ -1128,7 +1122,7 @@ namespace NdmfMToon10ToLilToon
             return imported;
         }
 
-        private static bool HasPersistentMergedAtlasTextures(Material mergedMaterial)
+        private static bool HasCacheableMergedAtlasTextures(Material mergedMaterial)
         {
             if (mergedMaterial == null) return false;
             var textureProperties = new[] { "_MainTex", "_ShadowColorTex", "_Shadow1stColorTex", "_EmissionMap", "_BumpMap", "_OutlineTex", "_OutlineMask" };
@@ -1138,7 +1132,7 @@ namespace NdmfMToon10ToLilToon
                 if (!mergedMaterial.HasProperty(property)) continue;
                 var texture = mergedMaterial.GetTexture(property);
                 if (texture == null) continue;
-                if (!EditorUtility.IsPersistent(texture)) return false;
+                if (texture is Texture2D t && t.format == TextureFormat.RGBA32) return false;
             }
 
             return true;
@@ -1157,12 +1151,29 @@ namespace NdmfMToon10ToLilToon
                 var path = AssetDatabase.GetAssetPath(texture);
                 if (verboseLog)
                 {
-                    Debug.Log($"[MToon10ToLilToon] {mergedMaterial.name} {propertyName} -> {path}");
+                    var format = texture is Texture2D tex2D ? tex2D.format.ToString() : "(non-Texture2D)";
+                    Debug.Log($"[MToon10ToLilToon] {mergedMaterial.name} {propertyName} -> {path} format={format}");
                 }
-                if (string.IsNullOrEmpty(path))
+                if (string.Equals(propertyName, "_MainTex", System.StringComparison.OrdinalIgnoreCase) && texture == null)
                 {
-                    report?.Warnings.Add(new ConversionWarning($"{mergedMaterial.name}: {propertyName} still references a runtime texture, not a generated imported asset."));
+                    throw new System.InvalidOperationException($"{mergedMaterial.name}: _MainTex is null.");
                 }
+                if (texture is Texture2D texture2D && texture2D.format == TextureFormat.RGBA32)
+                {
+                    report?.Warnings.Add(new ConversionWarning($"{mergedMaterial.name}: {propertyName} remains RGBA32 after compression."));
+                }
+            }
+        }
+
+        private static void CompressGeneratedAtlas(Texture2D atlas, string propertyName)
+        {
+            if (atlas == null) throw new System.InvalidOperationException($"CompressGeneratedAtlas: atlas is null ({propertyName}).");
+            var isNormal = string.Equals(propertyName, "_BumpMap", System.StringComparison.OrdinalIgnoreCase);
+            var targetFormat = isNormal ? TextureFormat.DXT5 : TextureFormat.DXT5;
+            EditorUtility.CompressTexture(atlas, targetFormat, TextureCompressionQuality.Normal);
+            if (atlas.format == TextureFormat.RGBA32)
+            {
+                throw new System.InvalidOperationException($"Generated atlas compression failed for {propertyName}; format is still RGBA32.");
             }
         }
 
