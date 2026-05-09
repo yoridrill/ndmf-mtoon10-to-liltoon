@@ -165,7 +165,7 @@ namespace NdmfMToon10ToLilToon
 
                 foreach (var component in _previewAvatar.GetComponentsInChildren<MToonLilToonComponent>(true))
                 {
-                    MToonLilToonProcessor.ApplyOnBuild(component, SetProgress);
+                    MToonLilToonProcessor.ApplyOnBuild(component, SetProgress, MToonLilToonProcessor.ConversionRoute.Preview);
                     component.isPreviewing = true;
                 }
 

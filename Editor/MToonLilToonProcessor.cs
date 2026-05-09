@@ -15,6 +15,11 @@ namespace NdmfMToon10ToLilToon
             LinearMask,
             NormalMap,
         }
+        internal enum ConversionRoute
+        {
+            Preview,
+            Build,
+        }
 
         private sealed class HairMergeCacheEntry
         {
@@ -55,7 +60,7 @@ namespace NdmfMToon10ToLilToon
             }
         }
 
-        internal static void ApplyOnBuild(MToonLilToonComponent component, System.Action<string> onProgress = null)
+        internal static void ApplyOnBuild(MToonLilToonComponent component, System.Action<string> onProgress = null, ConversionRoute route = ConversionRoute.Build)
         {
             if (component == null) return;
             EnsureHairSelectionsMatchAvatarMaterials(component);
@@ -112,6 +117,7 @@ namespace NdmfMToon10ToLilToon
                     mergedHairMaterials,
                     generatedAssetScopeId,
                     component.verboseLog,
+                    route == ConversionRoute.Preview,
                     report,
                     onProgress);
             }
@@ -252,6 +258,7 @@ namespace NdmfMToon10ToLilToon
             IList<Material> mergedHairMaterials,
             string generatedAssetScopeId,
             bool verboseLog,
+            bool useHairMergeCache,
             ConversionReport report,
             System.Action<string> onProgress)
         {
@@ -347,6 +354,7 @@ namespace NdmfMToon10ToLilToon
                     fakeShadowOffset,
                     generatedAssetScopeId,
                     verboseLog,
+                    useHairMergeCache,
                     renderer,
                     report,
                     out mergedMaterial,
@@ -410,6 +418,7 @@ namespace NdmfMToon10ToLilToon
             float fakeShadowOffset,
             string generatedAssetScopeId,
             bool verboseLog,
+            bool useHairMergeCache,
             Renderer renderer,
             ConversionReport report,
             out Material mergedMaterial,
@@ -422,7 +431,9 @@ namespace NdmfMToon10ToLilToon
             atlasRects = null;
 
             var cacheKey = BuildHairMergeCacheKey(original, mergedIndices, mergedRepresentativeIndex, mergedOutputRenderType, enableFakeShadow);
-            if (TryGetCachedHairMergeResult(cacheKey, overrides, fakeShadowDirection, fakeShadowOffset, out mergedMaterial, out fakeShadowMaterial, out atlasRects))
+            if (useHairMergeCache
+                && TryGetCachedHairMergeResult(cacheKey, overrides, fakeShadowDirection, fakeShadowOffset, out mergedMaterial, out fakeShadowMaterial, out atlasRects)
+                && IsValidHairMergeCacheHit(mergedMaterial, atlasRects, mergedIndices.Count))
             {
                 ValidateMergedMaterialTextureReferences(mergedMaterial, report, verboseLog);
                 return true;
@@ -456,28 +467,13 @@ namespace NdmfMToon10ToLilToon
                 Vector2 offset = Vector2.zero;
                 if (source != null)
                 {
-                    if (source.HasProperty("_BaseMap"))
-                    {
-                        texture = source.GetTexture("_BaseMap");
-                        scale = source.GetTextureScale("_BaseMap");
-                        offset = source.GetTextureOffset("_BaseMap");
-                    }
-                    else if (source.HasProperty("_MainTex"))
-                    {
-                        texture = source.GetTexture("_MainTex");
-                        scale = source.GetTextureScale("_MainTex");
-                        offset = source.GetTextureOffset("_MainTex");
-                    }
+                    TryGetMToonMainTextureWithTransform(source, out texture, out scale, out offset, out _);
                 }
 
                 atlasTextures.Add(ToReadableTextureWithTransform(texture, scale, offset));
             }
 
-            if (atlasTextures.All(t => t == null))
-            {
-                atlasRects = mergedIndices.Select(_ => new Rect(0f, 0f, 1f, 1f)).ToList();
-                return true;
-            }
+            if (atlasTextures.All(t => t == null)) throw new System.InvalidOperationException("Hair merge failed: no main textures resolved for selected materials.");
 
             var fallback = FirstNonNullTexture(atlasTextures) ?? NewSolidTexture(Color.white);
             var atlasMaxSize = ResolveAtlasMaxSize(atlasTextures);
@@ -501,7 +497,7 @@ namespace NdmfMToon10ToLilToon
             BakeOptionalAtlas(new[] { "_OutlineTex", "_OutlineMask" }, original, mergedIndices, mergedMaterial, new[] { "_OutlineWidthMultiplyTexture", "_OutlineMask" }, atlas.width, atlas.height, atlasRects, generatedAssetScopeId, renderer, report, TextureBakeKind.LinearMask);
             NormalizeMergedEmissionAndMatCapState(original, mergedIndices, mergedMaterial);
             ValidateMergedMaterialTextureReferences(mergedMaterial, report, verboseLog);
-            if (HasPersistentMergedAtlasTextures(mergedMaterial))
+            if (useHairMergeCache && HasPersistentMergedAtlasTextures(mergedMaterial) && IsValidHairMergeCacheHit(mergedMaterial, atlasRects, mergedIndices.Count))
             {
                 CacheHairMergeResult(cacheKey, mergedMaterial, fakeShadowMaterial, atlasRects);
             }
@@ -528,15 +524,9 @@ namespace NdmfMToon10ToLilToon
                     continue;
                 }
 
-                var tex = mat.HasProperty("_BaseMap") ? mat.GetTexture("_BaseMap") : (mat.HasProperty("_MainTex") ? mat.GetTexture("_MainTex") : null);
+                TryGetMToonMainTextureWithTransform(mat, out var tex, out var scale, out var offset, out var propertyName);
                 var texId = tex != null ? tex.GetInstanceID() : 0;
-                var scale = mat.HasProperty("_BaseMap")
-                    ? mat.GetTextureScale("_BaseMap")
-                    : (mat.HasProperty("_MainTex") ? mat.GetTextureScale("_MainTex") : Vector2.one);
-                var offset = mat.HasProperty("_BaseMap")
-                    ? mat.GetTextureOffset("_BaseMap")
-                    : (mat.HasProperty("_MainTex") ? mat.GetTextureOffset("_MainTex") : Vector2.zero);
-                parts.Add($"{index}:{mat.GetInstanceID()}:{texId}:{scale.x:G5},{scale.y:G5}:{offset.x:G5},{offset.y:G5}");
+                parts.Add($"{index}:{mat.GetInstanceID()}:{propertyName}:{texId}:{scale.x:G5},{scale.y:G5}:{offset.x:G5},{offset.y:G5}");
             }
 
             return string.Join("|", parts);
@@ -1992,3 +1982,33 @@ namespace NdmfMToon10ToLilToon
         }
     }
 }
+        private static bool IsValidHairMergeCacheHit(Material mergedMaterial, IReadOnlyList<Rect> atlasRects, int mergedCount)
+        {
+            if (mergedMaterial == null) return false;
+            if (atlasRects == null || atlasRects.Count != mergedCount) return false;
+            if (!mergedMaterial.HasProperty("_MainTex")) return true;
+            return mergedMaterial.GetTexture("_MainTex") != null;
+        }
+
+        private static bool TryGetMToonMainTextureWithTransform(Material material, out Texture texture, out Vector2 scale, out Vector2 offset, out string propertyName)
+        {
+            texture = null; scale = Vector2.one; offset = Vector2.zero; propertyName = null;
+            if (material == null) return false;
+            if (material.HasProperty("_MainTex"))
+            {
+                texture = material.GetTexture("_MainTex");
+                scale = material.GetTextureScale("_MainTex");
+                offset = material.GetTextureOffset("_MainTex");
+                propertyName = "_MainTex";
+                if (texture != null) return true;
+            }
+            if (material.HasProperty("_BaseMap"))
+            {
+                texture = material.GetTexture("_BaseMap");
+                scale = material.GetTextureScale("_BaseMap");
+                offset = material.GetTextureOffset("_BaseMap");
+                propertyName = "_BaseMap";
+                if (texture != null) return true;
+            }
+            return false;
+        }
