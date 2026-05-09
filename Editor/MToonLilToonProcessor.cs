@@ -1576,21 +1576,20 @@ namespace NdmfMToon10ToLilToon
                 groupedNormals[key] = accumulator;
             }
 
-            var defaultEncoded = new Vector3(0.5f, 0.5f, 1.0f);
             foreach (var index in bakeSet)
             {
                 var alpha = Mathf.Clamp(outlineAlphaByVertex[index], 0.2f, 1f);
 
                 if (normals == null || tangents == null || normals.Length <= index || tangents.Length <= index)
                 {
-                    colors[index] = new Color(defaultEncoded.x, defaultEncoded.y, defaultEncoded.z, alpha);
+                    SetOutlineFallbackColor(colors, index, alpha);
                     continue;
                 }
 
                 var key = QuantizePosition(vertices[index], quantizationScale);
                 if (!groupedNormals.TryGetValue(key, out var accumulator) || accumulator.count <= 0)
                 {
-                    colors[index] = new Color(defaultEncoded.x, defaultEncoded.y, defaultEncoded.z, alpha);
+                    SetOutlineFallbackColor(colors, index, alpha);
                     continue;
                 }
 
@@ -1600,7 +1599,7 @@ namespace NdmfMToon10ToLilToon
 
                 if (normalOs.sqrMagnitude <= 1e-10f || tangentOs.sqrMagnitude <= 1e-10f)
                 {
-                    colors[index] = new Color(defaultEncoded.x, defaultEncoded.y, defaultEncoded.z, alpha);
+                    SetOutlineFallbackColor(colors, index, alpha);
                     continue;
                 }
 
@@ -1610,7 +1609,7 @@ namespace NdmfMToon10ToLilToon
                 var bitangentOs = Vector3.Cross(normalOs, tangentOs) * tangents[index].w;
                 if (bitangentOs.sqrMagnitude <= 1e-10f)
                 {
-                    colors[index] = new Color(defaultEncoded.x, defaultEncoded.y, defaultEncoded.z, alpha);
+                    SetOutlineFallbackColor(colors, index, alpha);
                     continue;
                 }
                 bitangentOs.Normalize();
@@ -1625,6 +1624,12 @@ namespace NdmfMToon10ToLilToon
             }
 
             mesh.colors = colors;
+        }
+
+        private static void SetOutlineFallbackColor(Color[] colors, int index, float alpha)
+        {
+            if (colors == null || index < 0 || index >= colors.Length) return;
+            colors[index] = new Color(0.5f, 0.5f, 1.0f, alpha);
         }
 
         private static Vector3Int QuantizePosition(Vector3 position, float scale)
