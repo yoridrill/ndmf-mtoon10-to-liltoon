@@ -475,7 +475,15 @@ namespace NdmfMToon10ToLilToon
             atlas.Apply(false, false);
             BleedTransparentPixels(atlas, 2);
             var mainAtlas = SaveGeneratedAtlasTexture(generatedAssetScopeId, renderer, "_MainTex", atlas);
-            mergedMaterial.SetTexture("_MainTex", mainAtlas != null ? mainAtlas : atlas);
+            if (mainAtlas != null)
+            {
+                mergedMaterial.SetTexture("_MainTex", mainAtlas);
+            }
+            else
+            {
+                EnsureReferenceTrackableObjectFlags(atlas);
+                mergedMaterial.SetTexture("_MainTex", atlas);
+            }
             if (mergedMaterial.HasProperty("_MainTex"))
             {
                 mergedMaterial.SetTextureScale("_MainTex", Vector2.one);
@@ -487,7 +495,10 @@ namespace NdmfMToon10ToLilToon
             BakeOptionalAtlas(new[] { "_BumpMap" }, original, mergedIndices, mergedMaterial, new[] { "_NormalMap", "_BumpMap" }, atlas.width, atlas.height, atlasRects, generatedAssetScopeId, renderer);
             BakeOptionalAtlas(new[] { "_OutlineTex", "_OutlineMask" }, original, mergedIndices, mergedMaterial, new[] { "_OutlineWidthMultiplyTexture", "_OutlineMask" }, atlas.width, atlas.height, atlasRects, generatedAssetScopeId, renderer);
             NormalizeMergedEmissionAndMatCapState(original, mergedIndices, mergedMaterial);
-            CacheHairMergeResult(cacheKey, mergedMaterial, fakeShadowMaterial, atlasRects);
+            if (HasPersistentMergedAtlasTextures(mergedMaterial))
+            {
+                CacheHairMergeResult(cacheKey, mergedMaterial, fakeShadowMaterial, atlasRects);
+            }
 
             return true;
         }
@@ -1065,7 +1076,15 @@ namespace NdmfMToon10ToLilToon
             atlas.Apply(false, false);
             BleedTransparentPixels(atlas, 2);
             var importedAtlas = SaveGeneratedAtlasTexture(generatedAssetScopeId, renderer, destinationProperty, atlas);
-            mergedMaterial.SetTexture(destinationProperty, importedAtlas != null ? importedAtlas : atlas);
+            if (importedAtlas != null)
+            {
+                mergedMaterial.SetTexture(destinationProperty, importedAtlas);
+            }
+            else
+            {
+                EnsureReferenceTrackableObjectFlags(atlas);
+                mergedMaterial.SetTexture(destinationProperty, atlas);
+            }
         }
 
 
@@ -1081,15 +1100,31 @@ namespace NdmfMToon10ToLilToon
             var png = atlas.EncodeToPNG();
             if (png == null || png.Length == 0) return null;
             System.IO.File.WriteAllBytes(assetPath, png);
-            AssetDatabase.ImportAsset(assetPath, ImportAssetOptions.ForceUpdate);
+            AssetDatabase.ImportAsset(assetPath, ImportAssetOptions.ForceSynchronousImport | ImportAssetOptions.ForceUpdate);
             var importer = AssetImporter.GetAtPath(assetPath) as TextureImporter;
             if (importer != null)
             {
                 ConfigureAtlasImporter(importer, propertyName);
                 importer.SaveAndReimport();
             }
-
+            AssetDatabase.ImportAsset(assetPath, ImportAssetOptions.ForceSynchronousImport | ImportAssetOptions.ForceUpdate);
             return AssetDatabase.LoadAssetAtPath<Texture2D>(assetPath);
+        }
+
+        private static bool HasPersistentMergedAtlasTextures(Material mergedMaterial)
+        {
+            if (mergedMaterial == null) return false;
+            var textureProperties = new[] { "_MainTex", "_ShadowColorTex", "_Shadow1stColorTex", "_EmissionMap", "_BumpMap", "_OutlineTex", "_OutlineMask" };
+            for (var i = 0; i < textureProperties.Length; i++)
+            {
+                var property = textureProperties[i];
+                if (!mergedMaterial.HasProperty(property)) continue;
+                var texture = mergedMaterial.GetTexture(property);
+                if (texture == null) continue;
+                if (!EditorUtility.IsPersistent(texture)) return false;
+            }
+
+            return true;
         }
 
         private static void ConfigureAtlasImporter(TextureImporter importer, string propertyName)
