@@ -1137,9 +1137,14 @@ namespace NdmfMToon10ToLilToon
             importer.textureCompression = TextureImporterCompression.Compressed;
             importer.alphaSource = TextureImporterAlphaSource.FromInput;
             importer.sRGBTexture = !isNormal && !isMask;
+            importer.npotScale = TextureImporterNPOTScale.ToNearest;
+            importer.crunchedCompression = false;
             var settings = importer.GetPlatformTextureSettings("Standalone");
             settings.overridden = true;
+            settings.maxTextureSize = Mathf.NextPowerOfTwo(Mathf.Max(importer.maxTextureSize, 32));
+            settings.format = TextureImporterFormat.Automatic;
             settings.textureCompression = TextureImporterCompression.Compressed;
+            settings.crunchedCompression = false;
             importer.SetPlatformTextureSettings(settings);
         }
 
