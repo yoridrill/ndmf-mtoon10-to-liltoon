@@ -104,6 +104,7 @@ namespace NdmfMToon10ToLilToon
                     fakeShadowPairs,
                     mergedHairMaterials,
                     generatedAssetScopeId,
+                    component.verboseLog,
                     report,
                     onProgress);
             }
@@ -243,6 +244,7 @@ namespace NdmfMToon10ToLilToon
             IList<(Material hair, Material fake)> fakeShadowPairs,
             IList<Material> mergedHairMaterials,
             string generatedAssetScopeId,
+            bool verboseLog,
             ConversionReport report,
             System.Action<string> onProgress)
         {
@@ -337,6 +339,7 @@ namespace NdmfMToon10ToLilToon
                     fakeShadowDirection,
                     fakeShadowOffset,
                     generatedAssetScopeId,
+                    verboseLog,
                     renderer,
                     report,
                     out mergedMaterial,
@@ -399,6 +402,7 @@ namespace NdmfMToon10ToLilToon
             Vector3 fakeShadowDirection,
             float fakeShadowOffset,
             string generatedAssetScopeId,
+            bool verboseLog,
             Renderer renderer,
             ConversionReport report,
             out Material mergedMaterial,
@@ -413,6 +417,7 @@ namespace NdmfMToon10ToLilToon
             var cacheKey = BuildHairMergeCacheKey(original, mergedIndices, mergedRepresentativeIndex, mergedOutputRenderType, enableFakeShadow);
             if (TryGetCachedHairMergeResult(cacheKey, overrides, fakeShadowDirection, fakeShadowOffset, out mergedMaterial, out fakeShadowMaterial, out atlasRects))
             {
+                ValidateMergedMaterialTextureReferences(mergedMaterial, report, verboseLog);
                 return true;
             }
 
@@ -475,26 +480,20 @@ namespace NdmfMToon10ToLilToon
             atlas.Apply(false, false);
             BleedTransparentPixels(atlas, 2);
             var mainAtlas = SaveGeneratedAtlasTexture(generatedAssetScopeId, renderer, "_MainTex", atlas);
-            if (mainAtlas != null)
-            {
-                mergedMaterial.SetTexture("_MainTex", mainAtlas);
-            }
-            else
-            {
-                EnsureReferenceTrackableObjectFlags(atlas);
-                mergedMaterial.SetTexture("_MainTex", atlas);
-            }
+            if (mainAtlas == null) return false;
+            mergedMaterial.SetTexture("_MainTex", mainAtlas);
             if (mergedMaterial.HasProperty("_MainTex"))
             {
                 mergedMaterial.SetTextureScale("_MainTex", Vector2.one);
                 mergedMaterial.SetTextureOffset("_MainTex", Vector2.zero);
             }
 
-            BakeOptionalAtlas(new[] { "_ShadowColorTex", "_Shadow1stColorTex" }, original, mergedIndices, mergedMaterial, new[] { "_ShadeMap", "_ShadeMultiplyTexture" }, atlas.width, atlas.height, atlasRects, generatedAssetScopeId, renderer);
-            BakeOptionalAtlas(new[] { "_EmissionMap" }, original, mergedIndices, mergedMaterial, new[] { "_EmissiveMap", "_EmissionMap" }, atlas.width, atlas.height, atlasRects, generatedAssetScopeId, renderer);
-            BakeOptionalAtlas(new[] { "_BumpMap" }, original, mergedIndices, mergedMaterial, new[] { "_NormalMap", "_BumpMap" }, atlas.width, atlas.height, atlasRects, generatedAssetScopeId, renderer);
-            BakeOptionalAtlas(new[] { "_OutlineTex", "_OutlineMask" }, original, mergedIndices, mergedMaterial, new[] { "_OutlineWidthMultiplyTexture", "_OutlineMask" }, atlas.width, atlas.height, atlasRects, generatedAssetScopeId, renderer);
+            BakeOptionalAtlas(new[] { "_ShadowColorTex", "_Shadow1stColorTex" }, original, mergedIndices, mergedMaterial, new[] { "_ShadeMap", "_ShadeMultiplyTexture" }, atlas.width, atlas.height, atlasRects, generatedAssetScopeId, renderer, report);
+            BakeOptionalAtlas(new[] { "_EmissionMap" }, original, mergedIndices, mergedMaterial, new[] { "_EmissiveMap", "_EmissionMap" }, atlas.width, atlas.height, atlasRects, generatedAssetScopeId, renderer, report);
+            BakeOptionalAtlas(new[] { "_BumpMap" }, original, mergedIndices, mergedMaterial, new[] { "_NormalMap", "_BumpMap" }, atlas.width, atlas.height, atlasRects, generatedAssetScopeId, renderer, report);
+            BakeOptionalAtlas(new[] { "_OutlineTex", "_OutlineMask" }, original, mergedIndices, mergedMaterial, new[] { "_OutlineWidthMultiplyTexture", "_OutlineMask" }, atlas.width, atlas.height, atlasRects, generatedAssetScopeId, renderer, report);
             NormalizeMergedEmissionAndMatCapState(original, mergedIndices, mergedMaterial);
+            ValidateMergedMaterialTextureReferences(mergedMaterial, report, verboseLog);
             if (HasPersistentMergedAtlasTextures(mergedMaterial))
             {
                 CacheHairMergeResult(cacheKey, mergedMaterial, fakeShadowMaterial, atlasRects);
@@ -1032,7 +1031,7 @@ namespace NdmfMToon10ToLilToon
             return resized;
         }
 
-        private static void BakeOptionalAtlas(IReadOnlyList<string> destinationProperties, IReadOnlyList<Material> original, IReadOnlyList<int> mergedIndices, Material mergedMaterial, IReadOnlyList<string> sourceProperties, int atlasWidth, int atlasHeight, IReadOnlyList<Rect> rects, string generatedAssetScopeId, Renderer renderer)
+        private static void BakeOptionalAtlas(IReadOnlyList<string> destinationProperties, IReadOnlyList<Material> original, IReadOnlyList<int> mergedIndices, Material mergedMaterial, IReadOnlyList<string> sourceProperties, int atlasWidth, int atlasHeight, IReadOnlyList<Rect> rects, string generatedAssetScopeId, Renderer renderer, ConversionReport report)
         {
             var destinationProperty = destinationProperties.FirstOrDefault(mergedMaterial.HasProperty);
             if (string.IsNullOrEmpty(destinationProperty)) return;
@@ -1076,15 +1075,13 @@ namespace NdmfMToon10ToLilToon
             atlas.Apply(false, false);
             BleedTransparentPixels(atlas, 2);
             var importedAtlas = SaveGeneratedAtlasTexture(generatedAssetScopeId, renderer, destinationProperty, atlas);
-            if (importedAtlas != null)
+            if (importedAtlas == null)
             {
-                mergedMaterial.SetTexture(destinationProperty, importedAtlas);
+                report?.Warnings.Add(new ConversionWarning($"{mergedMaterial.name}: failed to import generated atlas for {destinationProperty}."));
+                return;
             }
-            else
-            {
-                EnsureReferenceTrackableObjectFlags(atlas);
-                mergedMaterial.SetTexture(destinationProperty, atlas);
-            }
+
+            mergedMaterial.SetTexture(destinationProperty, importedAtlas);
         }
 
 
@@ -1125,6 +1122,28 @@ namespace NdmfMToon10ToLilToon
             }
 
             return true;
+        }
+
+        private static void ValidateMergedMaterialTextureReferences(Material mergedMaterial, ConversionReport report, bool verboseLog)
+        {
+            if (mergedMaterial == null) return;
+            var propertyNames = new[] { "_MainTex", "_BumpMap", "_EmissionMap", "_ShadowColorTex", "_Shadow1stColorTex", "_OutlineTex", "_OutlineMask" };
+            for (var i = 0; i < propertyNames.Length; i++)
+            {
+                var propertyName = propertyNames[i];
+                if (!mergedMaterial.HasProperty(propertyName)) continue;
+                var texture = mergedMaterial.GetTexture(propertyName);
+                if (texture == null) continue;
+                var path = AssetDatabase.GetAssetPath(texture);
+                if (verboseLog)
+                {
+                    Debug.Log($"[MToon10ToLilToon] {mergedMaterial.name} {propertyName} -> {path}");
+                }
+                if (string.IsNullOrEmpty(path))
+                {
+                    report?.Warnings.Add(new ConversionWarning($"{mergedMaterial.name}: {propertyName} still references a runtime texture, not a generated imported asset."));
+                }
+            }
         }
 
         private static void ConfigureAtlasImporter(TextureImporter importer, string propertyName)
