@@ -26,21 +26,26 @@ namespace NdmfMToon10ToLilToon
             if (root == null) return;
 
             var components = root.GetComponentsInChildren<MToonLilToonComponent>(true);
-            if (components.Any(c => c != null && c.isPreviewing))
+            try
             {
-                MToonLilToonPreviewUtility.StopPreview();
-                foreach (var component in components.Where(c => c != null))
+                if (components.Any(c => c != null && c.isPreviewing))
                 {
-                    component.isPreviewing = false;
+                    MToonLilToonPreviewUtility.StopPreview();
+                    foreach (var component in components.Where(c => c != null))
+                    {
+                        component.isPreviewing = false;
+                    }
+                }
+
+                foreach (var component in components)
+                {
+                    ApplyOnBuild(component);
                 }
             }
-
-            foreach (var component in components)
+            finally
             {
-                ApplyOnBuild(component);
+                RemoveComponents(components);
             }
-
-            RemoveComponents(components);
         }
 
         private static GameObject ResolveAvatarRoot(BuildContext context)

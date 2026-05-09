@@ -9,6 +9,13 @@ namespace NdmfMToon10ToLilToon
 {
     internal static class MToonLilToonProcessor
     {
+        private enum TextureBakeKind
+        {
+            Color,
+            LinearMask,
+            NormalMap,
+        }
+
         private sealed class HairMergeCacheEntry
         {
             public Material mergedTemplate;
@@ -480,26 +487,18 @@ namespace NdmfMToon10ToLilToon
             atlas.Apply(false, false);
             BleedTransparentPixels(atlas, 2);
             var mainAtlas = SaveGeneratedAtlasTexture(generatedAssetScopeId, renderer, "_MainTex", atlas);
-            if (mainAtlas != null)
-            {
-                mergedMaterial.SetTexture("_MainTex", mainAtlas);
-            }
-            else
-            {
-                report?.Warnings.Add(new ConversionWarning($"{mergedMaterial.name}: failed to import generated atlas for _MainTex. Falling back to runtime atlas for this build."));
-                EnsureReferenceTrackableObjectFlags(atlas);
-                mergedMaterial.SetTexture("_MainTex", atlas);
-            }
+            if (mainAtlas == null) throw new System.InvalidOperationException($"Failed to import generated atlas for _MainTex ({mergedMaterial.name}).");
+            mergedMaterial.SetTexture("_MainTex", mainAtlas);
             if (mergedMaterial.HasProperty("_MainTex"))
             {
                 mergedMaterial.SetTextureScale("_MainTex", Vector2.one);
                 mergedMaterial.SetTextureOffset("_MainTex", Vector2.zero);
             }
 
-            BakeOptionalAtlas(new[] { "_ShadowColorTex", "_Shadow1stColorTex" }, original, mergedIndices, mergedMaterial, new[] { "_ShadeMap", "_ShadeMultiplyTexture" }, atlas.width, atlas.height, atlasRects, generatedAssetScopeId, renderer, report);
-            BakeOptionalAtlas(new[] { "_EmissionMap" }, original, mergedIndices, mergedMaterial, new[] { "_EmissiveMap", "_EmissionMap" }, atlas.width, atlas.height, atlasRects, generatedAssetScopeId, renderer, report);
-            BakeOptionalAtlas(new[] { "_BumpMap" }, original, mergedIndices, mergedMaterial, new[] { "_NormalMap", "_BumpMap" }, atlas.width, atlas.height, atlasRects, generatedAssetScopeId, renderer, report);
-            BakeOptionalAtlas(new[] { "_OutlineTex", "_OutlineMask" }, original, mergedIndices, mergedMaterial, new[] { "_OutlineWidthMultiplyTexture", "_OutlineMask" }, atlas.width, atlas.height, atlasRects, generatedAssetScopeId, renderer, report);
+            BakeOptionalAtlas(new[] { "_ShadowColorTex", "_Shadow1stColorTex" }, original, mergedIndices, mergedMaterial, new[] { "_ShadeMap", "_ShadeMultiplyTexture" }, atlas.width, atlas.height, atlasRects, generatedAssetScopeId, renderer, report, TextureBakeKind.Color);
+            BakeOptionalAtlas(new[] { "_EmissionMap" }, original, mergedIndices, mergedMaterial, new[] { "_EmissiveMap", "_EmissionMap" }, atlas.width, atlas.height, atlasRects, generatedAssetScopeId, renderer, report, TextureBakeKind.Color);
+            BakeOptionalAtlas(new[] { "_BumpMap" }, original, mergedIndices, mergedMaterial, new[] { "_NormalMap", "_BumpMap" }, atlas.width, atlas.height, atlasRects, generatedAssetScopeId, renderer, report, TextureBakeKind.NormalMap);
+            BakeOptionalAtlas(new[] { "_OutlineTex", "_OutlineMask" }, original, mergedIndices, mergedMaterial, new[] { "_OutlineWidthMultiplyTexture", "_OutlineMask" }, atlas.width, atlas.height, atlasRects, generatedAssetScopeId, renderer, report, TextureBakeKind.LinearMask);
             NormalizeMergedEmissionAndMatCapState(original, mergedIndices, mergedMaterial);
             ValidateMergedMaterialTextureReferences(mergedMaterial, report, verboseLog);
             if (HasPersistentMergedAtlasTextures(mergedMaterial))
@@ -1039,7 +1038,7 @@ namespace NdmfMToon10ToLilToon
             return resized;
         }
 
-        private static void BakeOptionalAtlas(IReadOnlyList<string> destinationProperties, IReadOnlyList<Material> original, IReadOnlyList<int> mergedIndices, Material mergedMaterial, IReadOnlyList<string> sourceProperties, int atlasWidth, int atlasHeight, IReadOnlyList<Rect> rects, string generatedAssetScopeId, Renderer renderer, ConversionReport report)
+        private static void BakeOptionalAtlas(IReadOnlyList<string> destinationProperties, IReadOnlyList<Material> original, IReadOnlyList<int> mergedIndices, Material mergedMaterial, IReadOnlyList<string> sourceProperties, int atlasWidth, int atlasHeight, IReadOnlyList<Rect> rects, string generatedAssetScopeId, Renderer renderer, ConversionReport report, TextureBakeKind bakeKind)
         {
             var destinationProperty = destinationProperties.FirstOrDefault(mergedMaterial.HasProperty);
             if (string.IsNullOrEmpty(destinationProperty)) return;
@@ -1065,7 +1064,7 @@ namespace NdmfMToon10ToLilToon
             }
 
             if (textures.All(t => t == null)) return;
-            var fallbackColor = ResolveAtlasFallbackColor(destinationProperty);
+            var fallbackColor = bakeKind == TextureBakeKind.NormalMap ? NeutralNormalColor() : ResolveAtlasFallbackColor(destinationProperty);
             var fallback = FirstNonNullTexture(textures) ?? NewSolidTexture(fallbackColor);
             var atlas = new Texture2D(atlasWidth, atlasHeight, TextureFormat.RGBA32, false);
             atlas.SetPixels(Enumerable.Repeat(new Color(0f, 0f, 0f, 0f), atlasWidth * atlasHeight).ToArray());
@@ -1078,15 +1077,19 @@ namespace NdmfMToon10ToLilToon
                 var pixelX = Mathf.RoundToInt(rect.x * atlasWidth);
                 var pixelY = Mathf.RoundToInt(rect.y * atlasHeight);
                 var resized = ResizeTexture(src, pixelWidth, pixelHeight);
-                atlas.SetPixels(pixelX, pixelY, pixelWidth, pixelHeight, resized.GetPixels());
+                var pixels = resized.GetPixels();
+                if (bakeKind == TextureBakeKind.NormalMap)
+                {
+                    for (var p = 0; p < pixels.Length; p++) pixels[p] = ConvertNormalSampleToRgbNormal(pixels[p]);
+                }
+                atlas.SetPixels(pixelX, pixelY, pixelWidth, pixelHeight, pixels);
             }
             atlas.Apply(false, false);
             BleedTransparentPixels(atlas, 2);
             var importedAtlas = SaveGeneratedAtlasTexture(generatedAssetScopeId, renderer, destinationProperty, atlas);
             if (importedAtlas == null)
             {
-                report?.Warnings.Add(new ConversionWarning($"{mergedMaterial.name}: failed to import generated atlas for {destinationProperty}."));
-                return;
+                throw new System.InvalidOperationException($"Failed to import generated atlas for {destinationProperty} ({mergedMaterial.name}).");
             }
 
             mergedMaterial.SetTexture(destinationProperty, importedAtlas);
@@ -1161,6 +1164,8 @@ namespace NdmfMToon10ToLilToon
                 || string.Equals(propertyName, "_OutlineMask", System.StringComparison.OrdinalIgnoreCase);
             importer.textureType = isNormal ? TextureImporterType.NormalMap : TextureImporterType.Default;
             importer.mipmapEnabled = true;
+            importer.streamingMipmaps = true;
+            importer.streamingMipmapsPriority = 0;
             importer.textureCompression = TextureImporterCompression.Compressed;
             importer.alphaSource = TextureImporterAlphaSource.FromInput;
             importer.sRGBTexture = !isNormal && !isMask;
@@ -1171,6 +1176,35 @@ namespace NdmfMToon10ToLilToon
             settings.textureCompression = TextureImporterCompression.Compressed;
             settings.crunchedCompression = false;
             importer.SetPlatformTextureSettings(settings);
+        }
+
+        private static Color NeutralNormalColor()
+        {
+            return new Color(0.5f, 0.5f, 1f, 1f);
+        }
+
+        private static Color EncodeNormalRgb(Vector3 normal)
+        {
+            if (normal.sqrMagnitude <= 1e-8f) return NeutralNormalColor();
+            normal.Normalize();
+            return new Color(normal.x * 0.5f + 0.5f, normal.y * 0.5f + 0.5f, normal.z * 0.5f + 0.5f, 1f);
+        }
+
+        private static Vector3 DecodeNormalFromPackedOrRgb(Color c)
+        {
+            var packedX = c.a * 2f - 1f;
+            var packedY = c.g * 2f - 1f;
+            var packedZ2 = 1f - Mathf.Clamp01(packedX * packedX + packedY * packedY);
+            var packed = new Vector3(packedX, packedY, Mathf.Sqrt(Mathf.Max(0f, packedZ2)));
+            var rgb = new Vector3(c.r * 2f - 1f, c.g * 2f - 1f, c.b * 2f - 1f);
+            if (rgb.sqrMagnitude > 1e-8f) rgb.Normalize();
+            var looksPacked = c.a < 0.99f || c.r > 0.95f || c.b > 0.95f;
+            return looksPacked ? packed.normalized : rgb;
+        }
+
+        private static Color ConvertNormalSampleToRgbNormal(Color source)
+        {
+            return EncodeNormalRgb(DecodeNormalFromPackedOrRgb(source));
         }
 
         private static void EnsureAssetFolder(string folderPath)
