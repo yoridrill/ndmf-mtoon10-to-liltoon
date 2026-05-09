@@ -1407,7 +1407,8 @@ namespace NdmfMToon10ToLilToon
 
             if (enableHairOutlineCorrection)
             {
-                ApplyHairOutlineCorrection(meshCopy, outlineAlphaByVertex);
+                var bakeIndices = mergedTriangles.Distinct().ToArray();
+                ApplyHairOutlineCorrection(meshCopy, bakeIndices, outlineAlphaByVertex);
                 if (mergedMaterial != null && mergedMaterial.HasProperty("_OutlineVertexR2Width"))
                 {
                     // lilToon の _OutlineVertexR2Width: 0=None, 1=R, 2=RGBA
@@ -1526,56 +1527,101 @@ namespace NdmfMToon10ToLilToon
         // Based on lilOutlineUtil by lilxyzw
         // https://github.com/lilxyzw/lilOutlineUtil
         // Licensed under the MIT License
-        private static void ApplyHairOutlineCorrection(Mesh mesh, IReadOnlyList<float> outlineAlphaByVertex)
+        private static void ApplyHairOutlineCorrection(Mesh mesh, IReadOnlyList<int> bakeVertexIndices, IReadOnlyList<float> outlineAlphaByVertex)
         {
             if (mesh == null) return;
 
             var vertices = mesh.vertices;
-            var normals = mesh.normals;
-            var tangents = mesh.tangents;
-            if (vertices == null || normals == null || tangents == null) return;
-            var vertexCount = vertices.Length;
-            if (vertexCount == 0 || normals.Length < vertexCount || tangents.Length < vertexCount) return;
+            var vertexCount = vertices?.Length ?? 0;
+            if (vertexCount == 0) return;
+            if (bakeVertexIndices == null || bakeVertexIndices.Count == 0) return;
             if (outlineAlphaByVertex == null || outlineAlphaByVertex.Count < vertexCount) return;
 
-            const float quantizationScale = 10000f;
-            var groupedNormals = new Dictionary<Vector3Int, AveragedNormalAccumulator>(vertexCount);
-
-            for (var i = 0; i < vertexCount; i++)
+            var normals = mesh.normals;
+            if (normals == null || normals.Length != vertexCount)
             {
-                var key = QuantizePosition(vertices[i], quantizationScale);
+                mesh.RecalculateNormals();
+                normals = mesh.normals;
+            }
+
+            var tangents = mesh.tangents;
+            if (tangents == null || tangents.Length != vertexCount)
+            {
+                mesh.RecalculateTangents();
+                tangents = mesh.tangents;
+            }
+
+            var colors = mesh.colors;
+            if (colors == null || colors.Length != vertexCount)
+            {
+                colors = Enumerable.Repeat(Color.white, vertexCount).ToArray();
+            }
+
+            const float quantizationScale = 10000f;
+            var bakeSet = new HashSet<int>(bakeVertexIndices.Where(i => i >= 0 && i < vertexCount));
+            if (bakeSet.Count == 0)
+            {
+                mesh.colors = colors;
+                return;
+            }
+
+            var groupedNormals = new Dictionary<Vector3Int, AveragedNormalAccumulator>(bakeSet.Count);
+            foreach (var index in bakeSet)
+            {
+                if (normals == null || normals.Length <= index) continue;
+                var key = QuantizePosition(vertices[index], quantizationScale);
                 groupedNormals.TryGetValue(key, out var accumulator);
-                accumulator.normalSum += normals[i];
+                accumulator.normalSum += normals[index];
                 accumulator.count++;
                 groupedNormals[key] = accumulator;
             }
 
-            var colors = new Color[vertexCount];
-            for (var i = 0; i < vertexCount; i++)
+            var defaultEncoded = new Vector3(0.5f, 0.5f, 1.0f);
+            foreach (var index in bakeSet)
             {
-                var key = QuantizePosition(vertices[i], quantizationScale);
+                var alpha = Mathf.Clamp(outlineAlphaByVertex[index], 0.2f, 1f);
+
+                if (normals == null || tangents == null || normals.Length <= index || tangents.Length <= index)
+                {
+                    colors[index] = new Color(defaultEncoded.x, defaultEncoded.y, defaultEncoded.z, alpha);
+                    continue;
+                }
+
+                var key = QuantizePosition(vertices[index], quantizationScale);
                 if (!groupedNormals.TryGetValue(key, out var accumulator) || accumulator.count <= 0)
                 {
-                    colors[i] = Color.white;
+                    colors[index] = new Color(defaultEncoded.x, defaultEncoded.y, defaultEncoded.z, alpha);
                     continue;
                 }
 
                 var averagedNormal = (accumulator.normalSum / accumulator.count).normalized;
-                var normalWs = normals[i].sqrMagnitude > 0f ? normals[i].normalized : Vector3.forward;
-                var tangentWs = new Vector3(tangents[i].x, tangents[i].y, tangents[i].z);
-                tangentWs = tangentWs.sqrMagnitude > 0f ? tangentWs.normalized : Vector3.right;
-                var bitangentSign = tangents[i].w >= 0f ? 1f : -1f;
-                var bitangentWs = Vector3.Cross(normalWs, tangentWs) * bitangentSign;
-                bitangentWs = bitangentWs.sqrMagnitude > 0f ? bitangentWs.normalized : Vector3.up;
+                var normalOs = normals[index];
+                var tangentOs = new Vector3(tangents[index].x, tangents[index].y, tangents[index].z);
+
+                if (normalOs.sqrMagnitude <= 1e-10f || tangentOs.sqrMagnitude <= 1e-10f)
+                {
+                    colors[index] = new Color(defaultEncoded.x, defaultEncoded.y, defaultEncoded.z, alpha);
+                    continue;
+                }
+
+                normalOs.Normalize();
+                tangentOs.Normalize();
+
+                var bitangentOs = Vector3.Cross(normalOs, tangentOs) * tangents[index].w;
+                if (bitangentOs.sqrMagnitude <= 1e-10f)
+                {
+                    colors[index] = new Color(defaultEncoded.x, defaultEncoded.y, defaultEncoded.z, alpha);
+                    continue;
+                }
+                bitangentOs.Normalize();
 
                 var normalTs = new Vector3(
-                    Vector3.Dot(averagedNormal, tangentWs),
-                    Vector3.Dot(averagedNormal, bitangentWs),
-                    Vector3.Dot(averagedNormal, normalWs));
+                    Vector3.Dot(averagedNormal, tangentOs),
+                    Vector3.Dot(averagedNormal, bitangentOs),
+                    Vector3.Dot(averagedNormal, normalOs));
                 if (normalTs.sqrMagnitude > 0f) normalTs.Normalize();
                 var encoded = normalTs * 0.5f + Vector3.one * 0.5f;
-                var alpha = Mathf.Clamp(outlineAlphaByVertex[i], 0.2f, 1f);
-                colors[i] = new Color(encoded.x, encoded.y, encoded.z, alpha);
+                colors[index] = new Color(encoded.x, encoded.y, encoded.z, alpha);
             }
 
             mesh.colors = colors;
