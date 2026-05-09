@@ -89,6 +89,7 @@ namespace NdmfMToon10ToLilToon
                 ProcessRenderer(
                     renderer,
                     selectedForMerge,
+                    component.representativeHairMaterialOverride,
                     lilToonShader,
                     component.globalOverrides,
                     component.enableFakeShadow,
@@ -226,6 +227,7 @@ namespace NdmfMToon10ToLilToon
         private static void ProcessRenderer(
             Renderer renderer,
             HashSet<Material> selectedForMerge,
+            Material representativeHairMaterialOverride,
             Shader lilToonShader,
             LilToonGlobalOverrides globalOverrides,
             bool enableFakeShadow,
@@ -297,10 +299,33 @@ namespace NdmfMToon10ToLilToon
                 ? ResolveMergedOutputRenderType(original, mergedIndices)
                 : RenderType.Cutout;
 
+            var mergedRepresentativeIndex = mergedIndices.Count >= 1
+                ? ResolveMergedRepresentativeIndex(original, mergedIndices, transparentRanks, mergedOutputRenderType)
+                : -1;
+
+            if (mergedRepresentativeIndex >= 0 && representativeHairMaterialOverride != null)
+            {
+                var overrideIndex = -1;
+                for (var i = 0; i < mergedIndices.Count; i++)
+                {
+                    var candidate = mergedIndices[i];
+                    if (candidate < 0 || candidate >= original.Length) continue;
+                    if (original[candidate] != representativeHairMaterialOverride) continue;
+                    overrideIndex = candidate;
+                    break;
+                }
+
+                if (overrideIndex >= 0)
+                {
+                    mergedRepresentativeIndex = overrideIndex;
+                }
+            }
+
             if (mergedIndices.Count >= 1
                 && TryMergeHairMaterials(
                     original,
                     mergedIndices,
+                    mergedRepresentativeIndex,
                     mergedOutputRenderType,
                     lilToonShader,
                     globalOverrides,
@@ -314,7 +339,6 @@ namespace NdmfMToon10ToLilToon
                     onProgress))
             {
                 mergedMaterialCreated = true;
-                var mergedRepresentativeIndex = ResolveMergedRepresentativeIndex(original, mergedIndices, transparentRanks, mergedOutputRenderType);
                 onProgress?.Invoke("Rebuilding mesh...");
                 ApplyMergedMaterialAndMesh(renderer, result, resultSourceIndices, mergedIndices, mergedRepresentativeIndex, mergedMaterial, fakeShadowMaterial, mergedRects, enableHairOutlineCorrection, hairTipOutlineWidth, hairTipRange, report);
                 if (mergedHairMaterials != null && mergedMaterial != null)
@@ -361,6 +385,7 @@ namespace NdmfMToon10ToLilToon
         private static bool TryMergeHairMaterials(
             IReadOnlyList<Material> original,
             IReadOnlyList<int> mergedIndices,
+            int mergedRepresentativeIndex,
             RenderType mergedOutputRenderType,
             Shader lilToonShader,
             LilToonGlobalOverrides overrides,
@@ -377,18 +402,22 @@ namespace NdmfMToon10ToLilToon
             fakeShadowMaterial = null;
             atlasRects = null;
 
-            var cacheKey = BuildHairMergeCacheKey(original, mergedIndices, mergedOutputRenderType, enableFakeShadow);
+            var cacheKey = BuildHairMergeCacheKey(original, mergedIndices, mergedRepresentativeIndex, mergedOutputRenderType, enableFakeShadow);
             if (TryGetCachedHairMergeResult(cacheKey, overrides, fakeShadowDirection, fakeShadowOffset, out mergedMaterial, out fakeShadowMaterial, out atlasRects))
             {
                 return true;
             }
 
-            if (!MToonToLilToonMapper.TryConvert(original[mergedIndices[0]], lilToonShader, overrides, out mergedMaterial, report))
+            var baseIndex = mergedRepresentativeIndex >= 0 && mergedRepresentativeIndex < original.Count
+                ? mergedRepresentativeIndex
+                : mergedIndices[0];
+
+            if (!MToonToLilToonMapper.TryConvert(original[baseIndex], lilToonShader, overrides, out mergedMaterial, report))
             {
                 return false;
             }
             EnsureReferenceTrackableObjectFlags(mergedMaterial);
-            ForceMergedRenderType(mergedMaterial, original[mergedIndices[0]], mergedOutputRenderType);
+            ForceMergedRenderType(mergedMaterial, original[baseIndex], mergedOutputRenderType);
             fakeShadowMaterial = CreateFakeShadowMaterial(mergedMaterial, enableFakeShadow, fakeShadowDirection, fakeShadowOffset, report);
 
             if (mergedIndices.Count == 1)
@@ -457,10 +486,11 @@ namespace NdmfMToon10ToLilToon
         private static string BuildHairMergeCacheKey(
             IReadOnlyList<Material> original,
             IReadOnlyList<int> mergedIndices,
+            int mergedRepresentativeIndex,
             RenderType mergedOutputRenderType,
             bool enableFakeShadow)
         {
-            var parts = new List<string> { mergedOutputRenderType.ToString(), enableFakeShadow ? "1" : "0" };
+            var parts = new List<string> { mergedOutputRenderType.ToString(), enableFakeShadow ? "1" : "0", $"rep:{mergedRepresentativeIndex}" };
             for (var i = 0; i < mergedIndices.Count; i++)
             {
                 var index = mergedIndices[i];
@@ -1377,7 +1407,8 @@ namespace NdmfMToon10ToLilToon
 
             if (enableHairOutlineCorrection)
             {
-                ApplyHairOutlineCorrection(meshCopy, outlineAlphaByVertex);
+                var bakeIndices = mergedTriangles.Distinct().ToArray();
+                ApplyHairOutlineCorrection(meshCopy, bakeIndices, outlineAlphaByVertex);
                 if (mergedMaterial != null && mergedMaterial.HasProperty("_OutlineVertexR2Width"))
                 {
                     // lilToon の _OutlineVertexR2Width: 0=None, 1=R, 2=RGBA
@@ -1496,59 +1527,109 @@ namespace NdmfMToon10ToLilToon
         // Based on lilOutlineUtil by lilxyzw
         // https://github.com/lilxyzw/lilOutlineUtil
         // Licensed under the MIT License
-        private static void ApplyHairOutlineCorrection(Mesh mesh, IReadOnlyList<float> outlineAlphaByVertex)
+        private static void ApplyHairOutlineCorrection(Mesh mesh, IReadOnlyList<int> bakeVertexIndices, IReadOnlyList<float> outlineAlphaByVertex)
         {
             if (mesh == null) return;
 
             var vertices = mesh.vertices;
-            var normals = mesh.normals;
-            var tangents = mesh.tangents;
-            if (vertices == null || normals == null || tangents == null) return;
-            var vertexCount = vertices.Length;
-            if (vertexCount == 0 || normals.Length < vertexCount || tangents.Length < vertexCount) return;
+            var vertexCount = vertices?.Length ?? 0;
+            if (vertexCount == 0) return;
+            if (bakeVertexIndices == null || bakeVertexIndices.Count == 0) return;
             if (outlineAlphaByVertex == null || outlineAlphaByVertex.Count < vertexCount) return;
 
-            const float quantizationScale = 10000f;
-            var groupedNormals = new Dictionary<Vector3Int, AveragedNormalAccumulator>(vertexCount);
-
-            for (var i = 0; i < vertexCount; i++)
+            var normals = mesh.normals;
+            if (normals == null || normals.Length != vertexCount)
             {
-                var key = QuantizePosition(vertices[i], quantizationScale);
+                mesh.RecalculateNormals();
+                normals = mesh.normals;
+            }
+
+            var tangents = mesh.tangents;
+            if (tangents == null || tangents.Length != vertexCount)
+            {
+                mesh.RecalculateTangents();
+                tangents = mesh.tangents;
+            }
+
+            var colors = mesh.colors;
+            if (colors == null || colors.Length != vertexCount)
+            {
+                colors = Enumerable.Repeat(Color.white, vertexCount).ToArray();
+            }
+
+            const float quantizationScale = 10000f;
+            var bakeSet = new HashSet<int>(bakeVertexIndices.Where(i => i >= 0 && i < vertexCount));
+            if (bakeSet.Count == 0)
+            {
+                mesh.colors = colors;
+                return;
+            }
+
+            var groupedNormals = new Dictionary<Vector3Int, AveragedNormalAccumulator>(bakeSet.Count);
+            foreach (var index in bakeSet)
+            {
+                if (normals == null || normals.Length <= index) continue;
+                var key = QuantizePosition(vertices[index], quantizationScale);
                 groupedNormals.TryGetValue(key, out var accumulator);
-                accumulator.normalSum += normals[i];
+                accumulator.normalSum += normals[index];
                 accumulator.count++;
                 groupedNormals[key] = accumulator;
             }
 
-            var colors = new Color[vertexCount];
-            for (var i = 0; i < vertexCount; i++)
+            foreach (var index in bakeSet)
             {
-                var key = QuantizePosition(vertices[i], quantizationScale);
+                var alpha = Mathf.Clamp(outlineAlphaByVertex[index], 0.2f, 1f);
+
+                if (normals == null || tangents == null || normals.Length <= index || tangents.Length <= index)
+                {
+                    SetOutlineFallbackColor(colors, index, alpha);
+                    continue;
+                }
+
+                var key = QuantizePosition(vertices[index], quantizationScale);
                 if (!groupedNormals.TryGetValue(key, out var accumulator) || accumulator.count <= 0)
                 {
-                    colors[i] = Color.white;
+                    SetOutlineFallbackColor(colors, index, alpha);
                     continue;
                 }
 
                 var averagedNormal = (accumulator.normalSum / accumulator.count).normalized;
-                var normalWs = normals[i].sqrMagnitude > 0f ? normals[i].normalized : Vector3.forward;
-                var tangentWs = new Vector3(tangents[i].x, tangents[i].y, tangents[i].z);
-                tangentWs = tangentWs.sqrMagnitude > 0f ? tangentWs.normalized : Vector3.right;
-                var bitangentSign = tangents[i].w >= 0f ? 1f : -1f;
-                var bitangentWs = Vector3.Cross(normalWs, tangentWs) * bitangentSign;
-                bitangentWs = bitangentWs.sqrMagnitude > 0f ? bitangentWs.normalized : Vector3.up;
+                var normalOs = normals[index];
+                var tangentOs = new Vector3(tangents[index].x, tangents[index].y, tangents[index].z);
+
+                if (normalOs.sqrMagnitude <= 1e-10f || tangentOs.sqrMagnitude <= 1e-10f)
+                {
+                    SetOutlineFallbackColor(colors, index, alpha);
+                    continue;
+                }
+
+                normalOs.Normalize();
+                tangentOs.Normalize();
+
+                var bitangentOs = Vector3.Cross(normalOs, tangentOs) * tangents[index].w;
+                if (bitangentOs.sqrMagnitude <= 1e-10f)
+                {
+                    SetOutlineFallbackColor(colors, index, alpha);
+                    continue;
+                }
+                bitangentOs.Normalize();
 
                 var normalTs = new Vector3(
-                    Vector3.Dot(averagedNormal, tangentWs),
-                    Vector3.Dot(averagedNormal, bitangentWs),
-                    Vector3.Dot(averagedNormal, normalWs));
+                    Vector3.Dot(averagedNormal, tangentOs),
+                    Vector3.Dot(averagedNormal, bitangentOs),
+                    Vector3.Dot(averagedNormal, normalOs));
                 if (normalTs.sqrMagnitude > 0f) normalTs.Normalize();
                 var encoded = normalTs * 0.5f + Vector3.one * 0.5f;
-                var alpha = Mathf.Clamp(outlineAlphaByVertex[i], 0.2f, 1f);
-                colors[i] = new Color(encoded.x, encoded.y, encoded.z, alpha);
+                colors[index] = new Color(encoded.x, encoded.y, encoded.z, alpha);
             }
 
             mesh.colors = colors;
+        }
+
+        private static void SetOutlineFallbackColor(Color[] colors, int index, float alpha)
+        {
+            if (colors == null || index < 0 || index >= colors.Length) return;
+            colors[index] = new Color(0.5f, 0.5f, 1.0f, alpha);
         }
 
         private static Vector3Int QuantizePosition(Vector3 position, float scale)
