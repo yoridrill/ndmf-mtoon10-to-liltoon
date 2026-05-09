@@ -686,9 +686,45 @@ namespace NdmfMToon10ToLilToon
             var representativeProp = serializedObject.FindProperty(nameof(MToonLilToonComponent.representativeHairMaterialOverride));
             if (representativeProp != null)
             {
-                EditorGUILayout.PropertyField(
-                    representativeProp,
-                    new GUIContent(T("Representative Material (Optional Override)", "Representative Material (Optional Override)")));
+                var selectedCandidates = new List<Material>();
+                for (var i = 0; i < hairSelectionsProp.arraySize; i++)
+                {
+                    var entryProp = hairSelectionsProp.GetArrayElementAtIndex(i);
+                    if (entryProp == null) continue;
+                    var materialProp = entryProp.FindPropertyRelative(nameof(HairMaterialSelection.material));
+                    var selectedProp = entryProp.FindPropertyRelative(nameof(HairMaterialSelection.selected));
+                    if (materialProp == null || selectedProp == null || !selectedProp.boolValue) continue;
+                    var material = materialProp.objectReferenceValue as Material;
+                    if (material == null || selectedCandidates.Contains(material)) continue;
+                    selectedCandidates.Add(material);
+                }
+
+                if (selectedCandidates.Count == 0)
+                {
+                    representativeProp.objectReferenceValue = null;
+                    EditorGUILayout.HelpBox(T("代表マテリアル候補がありません。対象マテリアルにチェックを入れてください。", "No representative candidates. Check target materials."), MessageType.Info);
+                }
+                else
+                {
+                    var currentMaterial = representativeProp.objectReferenceValue as Material;
+                    if (currentMaterial == null || !selectedCandidates.Contains(currentMaterial))
+                    {
+                        representativeProp.objectReferenceValue = selectedCandidates[0];
+                        currentMaterial = selectedCandidates[0];
+                        changed = true;
+                    }
+
+                    var labels = selectedCandidates.Select(m => m != null ? m.name : "(null)").ToArray();
+                    var currentIndex = Mathf.Max(0, selectedCandidates.IndexOf(currentMaterial));
+                    var nextIndex = EditorGUILayout.Popup(T("代表マテリアル", "Representative Material"), currentIndex, labels);
+                    nextIndex = Mathf.Clamp(nextIndex, 0, selectedCandidates.Count - 1);
+                    var nextMaterial = selectedCandidates[nextIndex];
+                    if (nextMaterial != currentMaterial)
+                    {
+                        representativeProp.objectReferenceValue = nextMaterial;
+                        changed = true;
+                    }
+                }
             }
 
             return changed;
