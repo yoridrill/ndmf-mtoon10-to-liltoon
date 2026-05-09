@@ -480,8 +480,16 @@ namespace NdmfMToon10ToLilToon
             atlas.Apply(false, false);
             BleedTransparentPixels(atlas, 2);
             var mainAtlas = SaveGeneratedAtlasTexture(generatedAssetScopeId, renderer, "_MainTex", atlas);
-            if (mainAtlas == null) return false;
-            mergedMaterial.SetTexture("_MainTex", mainAtlas);
+            if (mainAtlas != null)
+            {
+                mergedMaterial.SetTexture("_MainTex", mainAtlas);
+            }
+            else
+            {
+                report?.Warnings.Add(new ConversionWarning($"{mergedMaterial.name}: failed to import generated atlas for _MainTex. Falling back to runtime atlas for this build."));
+                EnsureReferenceTrackableObjectFlags(atlas);
+                mergedMaterial.SetTexture("_MainTex", atlas);
+            }
             if (mergedMaterial.HasProperty("_MainTex"))
             {
                 mergedMaterial.SetTextureScale("_MainTex", Vector2.one);
