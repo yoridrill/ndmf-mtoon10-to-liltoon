@@ -1980,8 +1980,7 @@ namespace NdmfMToon10ToLilToon
                 .Select(AssetDatabase.LoadAssetAtPath<Shader>)
                 .FirstOrDefault(shader => shader != null && shader.name.IndexOf("liltoonfakeshadow", System.StringComparison.OrdinalIgnoreCase) >= 0);
         }
-    }
-}
+
         private static bool IsValidHairMergeCacheHit(Material mergedMaterial, IReadOnlyList<Rect> atlasRects, int mergedCount)
         {
             if (mergedMaterial == null) return false;
@@ -2012,3 +2011,5 @@ namespace NdmfMToon10ToLilToon
             }
             return false;
         }
+    }
+}
