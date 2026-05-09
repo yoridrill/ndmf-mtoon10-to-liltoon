@@ -1098,6 +1098,12 @@ namespace NdmfMToon10ToLilToon
             var png = atlas.EncodeToPNG();
             if (png == null || png.Length == 0) return null;
             System.IO.File.WriteAllBytes(assetPath, png);
+            if (!System.IO.File.Exists(assetPath))
+            {
+                return null;
+            }
+
+            AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
             AssetDatabase.ImportAsset(assetPath, ImportAssetOptions.ForceSynchronousImport | ImportAssetOptions.ForceUpdate);
             var importer = AssetImporter.GetAtPath(assetPath) as TextureImporter;
             if (importer != null)
@@ -1106,7 +1112,20 @@ namespace NdmfMToon10ToLilToon
                 importer.SaveAndReimport();
             }
             AssetDatabase.ImportAsset(assetPath, ImportAssetOptions.ForceSynchronousImport | ImportAssetOptions.ForceUpdate);
-            return AssetDatabase.LoadAssetAtPath<Texture2D>(assetPath);
+            var imported = AssetDatabase.LoadAssetAtPath<Texture2D>(assetPath);
+            if (imported != null) return imported;
+
+            var guid = AssetDatabase.AssetPathToGUID(assetPath);
+            if (!string.IsNullOrEmpty(guid))
+            {
+                var resolvedPath = AssetDatabase.GUIDToAssetPath(guid);
+                if (!string.IsNullOrEmpty(resolvedPath))
+                {
+                    imported = AssetDatabase.LoadAssetAtPath<Texture2D>(resolvedPath);
+                }
+            }
+
+            return imported;
         }
 
         private static bool HasPersistentMergedAtlasTextures(Material mergedMaterial)
