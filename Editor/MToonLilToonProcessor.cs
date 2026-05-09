@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -62,6 +63,7 @@ namespace NdmfMToon10ToLilToon
             }
 
             var report = new ConversionReport();
+            var generatedAssetScopeId = BuildGeneratedAssetScopeId(component);
             var lilToonShader = ResolveLilToonShader(component);
             if (lilToonShader == null)
             {
@@ -101,6 +103,7 @@ namespace NdmfMToon10ToLilToon
                     convertedBySource,
                     fakeShadowPairs,
                     mergedHairMaterials,
+                    generatedAssetScopeId,
                     report,
                     onProgress);
             }
@@ -239,6 +242,7 @@ namespace NdmfMToon10ToLilToon
             IDictionary<Material, Material> convertedBySource,
             IList<(Material hair, Material fake)> fakeShadowPairs,
             IList<Material> mergedHairMaterials,
+            string generatedAssetScopeId,
             ConversionReport report,
             System.Action<string> onProgress)
         {
@@ -332,6 +336,8 @@ namespace NdmfMToon10ToLilToon
                     enableFakeShadow,
                     fakeShadowDirection,
                     fakeShadowOffset,
+                    generatedAssetScopeId,
+                    renderer,
                     report,
                     out mergedMaterial,
                     out fakeShadowMaterial,
@@ -392,6 +398,8 @@ namespace NdmfMToon10ToLilToon
             bool enableFakeShadow,
             Vector3 fakeShadowDirection,
             float fakeShadowOffset,
+            string generatedAssetScopeId,
+            Renderer renderer,
             ConversionReport report,
             out Material mergedMaterial,
             out Material fakeShadowMaterial,
@@ -464,19 +472,20 @@ namespace NdmfMToon10ToLilToon
             var packTextures = PrepareBaseAtlasTextures(atlasTextures, fallback);
             var atlas = new Texture2D(2, 2, TextureFormat.RGBA32, false);
             atlasRects = atlas.PackTextures(packTextures, 2, atlasMaxSize, false).ToList();
+            atlas.Apply(false, false);
             BleedTransparentPixels(atlas, 2);
-            EnsureReferenceTrackableObjectFlags(atlas);
-            mergedMaterial.SetTexture("_MainTex", atlas);
+            var mainAtlas = SaveGeneratedAtlasTexture(generatedAssetScopeId, renderer, "_MainTex", atlas);
+            mergedMaterial.SetTexture("_MainTex", mainAtlas != null ? mainAtlas : atlas);
             if (mergedMaterial.HasProperty("_MainTex"))
             {
                 mergedMaterial.SetTextureScale("_MainTex", Vector2.one);
                 mergedMaterial.SetTextureOffset("_MainTex", Vector2.zero);
             }
 
-            BakeOptionalAtlas(new[] { "_ShadowColorTex", "_Shadow1stColorTex" }, original, mergedIndices, mergedMaterial, new[] { "_ShadeMap", "_ShadeMultiplyTexture" }, atlas.width, atlas.height, atlasRects);
-            BakeOptionalAtlas(new[] { "_EmissionMap" }, original, mergedIndices, mergedMaterial, new[] { "_EmissiveMap", "_EmissionMap" }, atlas.width, atlas.height, atlasRects);
-            BakeOptionalAtlas(new[] { "_BumpMap" }, original, mergedIndices, mergedMaterial, new[] { "_NormalMap", "_BumpMap" }, atlas.width, atlas.height, atlasRects);
-            BakeOptionalAtlas(new[] { "_OutlineTex", "_OutlineMask" }, original, mergedIndices, mergedMaterial, new[] { "_OutlineWidthMultiplyTexture", "_OutlineMask" }, atlas.width, atlas.height, atlasRects);
+            BakeOptionalAtlas(new[] { "_ShadowColorTex", "_Shadow1stColorTex" }, original, mergedIndices, mergedMaterial, new[] { "_ShadeMap", "_ShadeMultiplyTexture" }, atlas.width, atlas.height, atlasRects, generatedAssetScopeId, renderer);
+            BakeOptionalAtlas(new[] { "_EmissionMap" }, original, mergedIndices, mergedMaterial, new[] { "_EmissiveMap", "_EmissionMap" }, atlas.width, atlas.height, atlasRects, generatedAssetScopeId, renderer);
+            BakeOptionalAtlas(new[] { "_BumpMap" }, original, mergedIndices, mergedMaterial, new[] { "_NormalMap", "_BumpMap" }, atlas.width, atlas.height, atlasRects, generatedAssetScopeId, renderer);
+            BakeOptionalAtlas(new[] { "_OutlineTex", "_OutlineMask" }, original, mergedIndices, mergedMaterial, new[] { "_OutlineWidthMultiplyTexture", "_OutlineMask" }, atlas.width, atlas.height, atlasRects, generatedAssetScopeId, renderer);
             NormalizeMergedEmissionAndMatCapState(original, mergedIndices, mergedMaterial);
             CacheHairMergeResult(cacheKey, mergedMaterial, fakeShadowMaterial, atlasRects);
 
@@ -1012,7 +1021,7 @@ namespace NdmfMToon10ToLilToon
             return resized;
         }
 
-        private static void BakeOptionalAtlas(IReadOnlyList<string> destinationProperties, IReadOnlyList<Material> original, IReadOnlyList<int> mergedIndices, Material mergedMaterial, IReadOnlyList<string> sourceProperties, int atlasWidth, int atlasHeight, IReadOnlyList<Rect> rects)
+        private static void BakeOptionalAtlas(IReadOnlyList<string> destinationProperties, IReadOnlyList<Material> original, IReadOnlyList<int> mergedIndices, Material mergedMaterial, IReadOnlyList<string> sourceProperties, int atlasWidth, int atlasHeight, IReadOnlyList<Rect> rects, string generatedAssetScopeId, Renderer renderer)
         {
             var destinationProperty = destinationProperties.FirstOrDefault(mergedMaterial.HasProperty);
             if (string.IsNullOrEmpty(destinationProperty)) return;
@@ -1053,10 +1062,89 @@ namespace NdmfMToon10ToLilToon
                 var resized = ResizeTexture(src, pixelWidth, pixelHeight);
                 atlas.SetPixels(pixelX, pixelY, pixelWidth, pixelHeight, resized.GetPixels());
             }
-            atlas.Apply();
+            atlas.Apply(false, false);
             BleedTransparentPixels(atlas, 2);
-            EnsureReferenceTrackableObjectFlags(atlas);
-            mergedMaterial.SetTexture(destinationProperty, atlas);
+            var importedAtlas = SaveGeneratedAtlasTexture(generatedAssetScopeId, renderer, destinationProperty, atlas);
+            mergedMaterial.SetTexture(destinationProperty, importedAtlas != null ? importedAtlas : atlas);
+        }
+
+
+        private static Texture2D SaveGeneratedAtlasTexture(string scopeId, Renderer renderer, string propertyName, Texture2D atlas)
+        {
+            if (atlas == null) return null;
+            var rendererId = renderer != null ? SanitizePathSegment(renderer.name) : "Renderer";
+            var directory = $"Assets/NdmfMToon10ToLilToon.Generated/{SanitizePathSegment(scopeId)}";
+            EnsureAssetFolder(directory);
+            var propertyId = SanitizePathSegment(propertyName).TrimStart('_');
+            var fileName = $"Hair_{rendererId}_{propertyId}.png";
+            var assetPath = $"{directory}/{fileName}";
+            var png = atlas.EncodeToPNG();
+            if (png == null || png.Length == 0) return null;
+            System.IO.File.WriteAllBytes(assetPath, png);
+            AssetDatabase.ImportAsset(assetPath, ImportAssetOptions.ForceUpdate);
+            var importer = AssetImporter.GetAtPath(assetPath) as TextureImporter;
+            if (importer != null)
+            {
+                ConfigureAtlasImporter(importer, propertyName);
+                importer.SaveAndReimport();
+            }
+
+            return AssetDatabase.LoadAssetAtPath<Texture2D>(assetPath);
+        }
+
+        private static void ConfigureAtlasImporter(TextureImporter importer, string propertyName)
+        {
+            var isNormal = string.Equals(propertyName, "_BumpMap", System.StringComparison.OrdinalIgnoreCase);
+            var isMask = string.Equals(propertyName, "_OutlineTex", System.StringComparison.OrdinalIgnoreCase)
+                || string.Equals(propertyName, "_OutlineMask", System.StringComparison.OrdinalIgnoreCase);
+            importer.textureType = isNormal ? TextureImporterType.NormalMap : TextureImporterType.Default;
+            importer.mipmapEnabled = true;
+            importer.textureCompression = TextureImporterCompression.Compressed;
+            importer.alphaSource = TextureImporterAlphaSource.FromInput;
+            importer.sRGBTexture = !isNormal && !isMask;
+            var settings = importer.GetPlatformTextureSettings("Standalone");
+            settings.overridden = true;
+            settings.textureCompression = TextureImporterCompression.Compressed;
+            importer.SetPlatformTextureSettings(settings);
+        }
+
+        private static void EnsureAssetFolder(string folderPath)
+        {
+            var segments = folderPath.Split('/');
+            var current = segments[0];
+            for (var i = 1; i < segments.Length; i++)
+            {
+                var next = $"{current}/{segments[i]}";
+                if (!AssetDatabase.IsValidFolder(next))
+                {
+                    AssetDatabase.CreateFolder(current, segments[i]);
+                }
+
+                current = next;
+            }
+        }
+
+        private static string BuildGeneratedAssetScopeId(MToonLilToonComponent component)
+        {
+            if (component == null) return "Avatar_Unknown";
+            var root = component.transform != null ? component.transform.root : null;
+            var baseName = root != null ? root.name : component.name;
+            var globalId = GlobalObjectId.GetGlobalObjectIdSlow(component).ToString();
+            return $"Avatar_{SanitizePathSegment(baseName)}_{SanitizePathSegment(globalId)}";
+        }
+
+        private static string SanitizePathSegment(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return "Unknown";
+            var builder = new StringBuilder(value.Length);
+            for (var i = 0; i < value.Length; i++)
+            {
+                var c = value[i];
+                if (char.IsLetterOrDigit(c) || c == '_' || c == '-') builder.Append(c);
+                else builder.Append('_');
+            }
+
+            return builder.ToString().Trim('_');
         }
 
         private static Color ResolveAtlasFallbackColor(string destinationProperty)

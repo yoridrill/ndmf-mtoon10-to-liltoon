@@ -14,6 +14,9 @@ namespace NdmfMToon10ToLilToon
         protected override void Configure()
         {
             InPhase(BuildPhase.Transforming)
+                .AfterPlugin("jp.yoridrill.ndmf-vroid-arm-patch")
+                .AfterPlugin("jp.yoridrill.ndmf-vroid-mesh-trimmer")
+                .BeforePlugin("com.github.kurotu.vrc-quest-tools")
                 .Run("Convert MToon10 Materials to lilToon", Execute);
         }
 
