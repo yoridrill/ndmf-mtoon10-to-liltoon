@@ -1084,7 +1084,7 @@ namespace NdmfMToon10ToLilToon
                 {
                     for (var p = 0; p < pixels.Length; p++)
                     {
-                        pixels[p] = ConvertNormalSampleToInspectorRgbNormal(pixels[p]);
+                        pixels[p] = ConvertNormalSampleForAtlasPreview(pixels[p]);
                     }
                 }
                 if (verboseLog && bakeKind == TextureBakeKind.NormalMap)
@@ -1238,43 +1238,14 @@ namespace NdmfMToon10ToLilToon
             return new Color(0.5f, 0.5f, 1f, 1f);
         }
 
-        private static Color EncodeNormalRgb(Vector3 normal)
+        private static Color ConvertNormalSampleForAtlasPreview(Color c)
         {
-            if (normal.sqrMagnitude <= 1e-8f) return NeutralNormalRgbColor();
-            normal.Normalize();
-            return new Color(normal.x * 0.5f + 0.5f, normal.y * 0.5f + 0.5f, normal.z * 0.5f + 0.5f, 1f);
-        }
-
-        private static bool LooksLikeRgbNormal(Color c)
-        {
-            return c.b >= 0.5f
-                && c.r > 0.02f && c.r < 0.98f
-                && c.g > 0.02f && c.g < 0.98f;
-        }
-
-        private static Vector3 DecodeRgbNormal(Color c)
-        {
-            var normal = new Vector3(c.r * 2f - 1f, c.g * 2f - 1f, c.b * 2f - 1f);
-            if (normal.sqrMagnitude <= 1e-8f) return Vector3.forward;
-            normal.Normalize();
-            return normal;
-        }
-
-        private static Vector3 DecodePackedNormalAg(Color c)
-        {
-            var x = c.a * 2f - 1f;
-            var y = c.g * 2f - 1f;
-            var z2 = 1f - Mathf.Clamp01(x * x + y * y);
-            return new Vector3(x, y, Mathf.Sqrt(Mathf.Max(0f, z2))).normalized;
-        }
-
-        private static Color ConvertNormalSampleToInspectorRgbNormal(Color source)
-        {
-            if (LooksLikeRgbNormal(source))
+            if (c.r > 0.95f && c.a > 0.001f && c.a < 0.999f)
             {
-                return EncodeNormalRgb(DecodeRgbNormal(source));
+                return new Color(c.a, c.g, c.b, 1f);
             }
-            return EncodeNormalRgb(DecodePackedNormalAg(source));
+
+            return new Color(c.r, c.g, c.b, 1f);
         }
 
         private static void ReplaceTransparentPixels(Texture2D texture, Color replacement)
