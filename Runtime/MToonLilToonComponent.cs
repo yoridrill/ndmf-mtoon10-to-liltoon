@@ -35,6 +35,7 @@ namespace NdmfMToon10ToLilToon
         public float shadowStrengthMaskLod;
         public bool disableShadowReceiveForFace;
         public bool disableBacklightStrengthForFace;
+        public bool useToonStandardFallback;
         public LilToonGlobalOverrides globalOverrides = new();
         public bool verboseLog;
         [HideInInspector] public bool showAdvanced;

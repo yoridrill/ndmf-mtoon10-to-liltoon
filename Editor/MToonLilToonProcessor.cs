@@ -292,7 +292,7 @@ namespace NdmfMToon10ToLilToon
                 }
 
                 var canMerge = selectedForMerge.Contains(source);
-                if (MToonToLilToonMapper.TryConvert(source, lilToonShader, globalOverrides, out var converted, report))
+                if (MToonToLilToonMapper.TryConvert(source, lilToonShader, globalOverrides, component.useToonStandardFallback, out var converted, report))
                 {
                     result.Add(converted);
                     report.ConvertedMaterialCount++;
@@ -447,7 +447,7 @@ namespace NdmfMToon10ToLilToon
                 ? mergedRepresentativeIndex
                 : mergedIndices[0];
 
-            if (!MToonToLilToonMapper.TryConvert(original[baseIndex], lilToonShader, overrides, out mergedMaterial, report))
+            if (!MToonToLilToonMapper.TryConvert(original[baseIndex], lilToonShader, overrides, component.useToonStandardFallback, out mergedMaterial, report))
             {
                 return false;
             }

@@ -273,7 +273,7 @@ namespace NdmfMToon10ToLilToon
             "normal map",
         };
 
-        public static bool TryConvert(Material source, Shader lilToonShader, LilToonGlobalOverrides overrides, out Material converted, ConversionReport report)
+        public static bool TryConvert(Material source, Shader lilToonShader, LilToonGlobalOverrides overrides, bool useToonStandardFallback, out Material converted, ConversionReport report)
         {
             converted = null;
             if (source == null || lilToonShader == null) return false;
@@ -312,7 +312,7 @@ namespace NdmfMToon10ToLilToon
                 ApplyRimState(source, converted);
                 ApplyUvAnimationMapping(source, converted);
                 ApplyFeatureEnables(source, converted);
-                ApplyFallback(converted, renderType);
+                ApplyFallback(converted, renderType, hasOutline, useToonStandardFallback);
                 ApplyRenderQueue(source, converted, renderType);
                 ApplyTransparentMode(converted, renderType);
                 ApplyTransparentZWrite(converted, renderType, transparentWithZWrite);
@@ -693,8 +693,15 @@ namespace NdmfMToon10ToLilToon
             SetIfExists(destination, "_OutlineVertexR2Width", 0f);
         }
 
-        private static void ApplyFallback(Material destination, RenderType renderType)
+        private static void ApplyFallback(Material destination, RenderType renderType, bool hasOutline, bool useToonStandardFallback)
         {
+            if (useToonStandardFallback)
+            {
+                destination.SetOverrideTag("VRCFallback", hasOutline ? "toonstandardoutline" : "toonstandard");
+                SetToonStandardFallbackShadingRealistic(destination);
+                return;
+            }
+
             var fallback = renderType switch
             {
                 RenderType.Cutout => "UnlitCutout",
@@ -702,6 +709,15 @@ namespace NdmfMToon10ToLilToon
                 _ => "Unlit"
             };
             destination.SetOverrideTag("VRCFallback", fallback);
+        }
+
+        private static void SetToonStandardFallbackShadingRealistic(Material destination)
+        {
+            if (destination == null) return;
+            // Toon Standard fallback uses same-named properties/keywords where available.
+            // Prefer Realistic shading when the corresponding properties exist.
+            SetIfExists(destination, "_ShadingMode", 0f);
+            SetIfExists(destination, "_Shading", 0f);
         }
 
         private static void ApplyRenderQueue(Material source, Material destination, RenderType renderType)

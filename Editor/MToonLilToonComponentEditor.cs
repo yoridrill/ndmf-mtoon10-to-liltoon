@@ -770,9 +770,18 @@ namespace NdmfMToon10ToLilToon
 
             using (new EditorGUI.IndentLevelScope())
             {
-                EditorGUILayout.PropertyField(
-                    serializedObject.FindProperty(nameof(MToonLilToonComponent.verboseLog)),
-                    new GUIContent("Verbose Log"));
+                var useToonStandardFallbackProp = serializedObject.FindProperty(nameof(MToonLilToonComponent.useToonStandardFallback));
+                useToonStandardFallbackProp.boolValue = EditorGUILayout.ToggleLeft(
+                    T("Custom Safety FallbackをToon Standardにする", "Use Toon Standard for Custom Safety Fallback"),
+                    useToonStandardFallbackProp.boolValue);
+                EditorGUILayout.HelpBox(
+                    T(
+                        "Toon Standardは、CutoutやTransparentは非対応です。 事前にメッシュをトリミングしたり、頬染めなどは削除しておく必要があります。",
+                        "Toon Standard does not support Cutout or Transparent. You need to trim meshes and remove blush-like transparent effects beforehand."),
+                    MessageType.Warning);
+
+                var verboseLogProp = serializedObject.FindProperty(nameof(MToonLilToonComponent.verboseLog));
+                verboseLogProp.boolValue = EditorGUILayout.ToggleLeft("Verbose Log", verboseLogProp.boolValue);
                 EditorGUILayout.Space(4f);
 
                 var rawButtonRect = EditorGUILayout.GetControlRect(false, EditorGUIUtility.singleLineHeight);
