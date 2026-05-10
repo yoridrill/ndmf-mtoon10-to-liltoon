@@ -1053,7 +1053,7 @@ namespace NdmfMToon10ToLilToon
             }
 
             if (textures.All(t => t == null)) return;
-            var fallbackColor = bakeKind == TextureBakeKind.NormalMap ? NeutralNormalColor() : ResolveAtlasFallbackColor(destinationProperty);
+            var fallbackColor = bakeKind == TextureBakeKind.NormalMap ? NeutralNormalDxt5nmColor() : ResolveAtlasFallbackColor(destinationProperty);
             var fallback = FirstNonNullTexture(textures) ?? NewSolidTexture(fallbackColor);
             var atlas = new Texture2D(atlasWidth, atlasHeight, TextureFormat.RGBA32, false);
             atlas.SetPixels(Enumerable.Repeat(new Color(0f, 0f, 0f, 0f), atlasWidth * atlasHeight).ToArray());
@@ -1067,12 +1067,19 @@ namespace NdmfMToon10ToLilToon
                 var pixelY = Mathf.RoundToInt(rect.y * atlasHeight);
                 var resized = ResizeTexture(src, pixelWidth, pixelHeight);
                 var pixels = resized.GetPixels();
+                if (bakeKind == TextureBakeKind.NormalMap)
+                {
+                    for (var p = 0; p < pixels.Length; p++)
+                    {
+                        pixels[p] = ConvertNormalSampleToDxt5nm(pixels[p]);
+                    }
+                }
                 atlas.SetPixels(pixelX, pixelY, pixelWidth, pixelHeight, pixels);
             }
             atlas.Apply(false, false);
             if (bakeKind == TextureBakeKind.NormalMap)
             {
-                ReplaceTransparentPixels(atlas, NeutralNormalColor());
+                ReplaceTransparentPixels(atlas, NeutralNormalDxt5nmColor());
             }
             else
             {
@@ -1201,9 +1208,35 @@ namespace NdmfMToon10ToLilToon
             importer.SetPlatformTextureSettings(settings);
         }
 
-        private static Color NeutralNormalColor()
+        private static Color NeutralNormalDxt5nmColor()
         {
-            return new Color(0.5f, 0.5f, 1f, 1f);
+            return new Color(1f, 0.5f, 1f, 0.5f);
+        }
+
+        private static Color EncodeNormalDxt5nm(Vector3 normal)
+        {
+            if (normal.sqrMagnitude <= 1e-8f) return NeutralNormalDxt5nmColor();
+            normal.Normalize();
+            return new Color(1f, normal.y * 0.5f + 0.5f, 1f, normal.x * 0.5f + 0.5f);
+        }
+
+        private static Vector3 DecodeSourceNormal(Color c)
+        {
+            var packedX = c.a * 2f - 1f;
+            var packedY = c.g * 2f - 1f;
+            var packedZ2 = 1f - Mathf.Clamp01(packedX * packedX + packedY * packedY);
+            var packed = new Vector3(packedX, packedY, Mathf.Sqrt(Mathf.Max(0f, packedZ2)));
+
+            var rgb = new Vector3(c.r * 2f - 1f, c.g * 2f - 1f, c.b * 2f - 1f);
+            if (rgb.sqrMagnitude > 1e-8f) rgb.Normalize();
+
+            var looksPacked = c.a < 0.98f && c.r > 0.90f;
+            return looksPacked ? packed.normalized : rgb;
+        }
+
+        private static Color ConvertNormalSampleToDxt5nm(Color source)
+        {
+            return EncodeNormalDxt5nm(DecodeSourceNormal(source));
         }
 
         private static void ReplaceTransparentPixels(Texture2D texture, Color replacement)
