@@ -51,6 +51,8 @@ namespace NdmfMToon10ToLilToon
                 MToonToLilToonMapper.ApplyGlobalOverridesToMaterial(materials[i], overrides);
             }
 
+            ApplyBacklightExclusionToMouthMaterials(materials);
+
             if (!disableShadowReceiveForFace && !disableBacklightStrengthForFace) return;
 
             ApplyFaceGlobalExclusionSettings(component.fakeShadowFaceMaterial, disableShadowReceiveForFace, disableBacklightStrengthForFace);
@@ -196,6 +198,8 @@ namespace NdmfMToon10ToLilToon
                         component.disableBacklightStrengthForFace);
                 }
             }
+
+            ApplyBacklightExclusionToMouthMaterials(convertedBySource.Values);
 
             component.scannedMaterialCount = report.ScannedMaterialCount;
             component.convertedMaterialCount = report.ConvertedMaterialCount;
@@ -774,6 +778,24 @@ namespace NdmfMToon10ToLilToon
                     var backlightColor = faceMaterial.GetColor("_BacklightColor");
                     backlightColor.a = 0f;
                     faceMaterial.SetColor("_BacklightColor", backlightColor);
+                }
+            }
+        }
+
+        private static void ApplyBacklightExclusionToMouthMaterials(IEnumerable<Material> materials)
+        {
+            if (materials == null) return;
+
+            foreach (var material in materials)
+            {
+                if (material == null) continue;
+                if (material.name.IndexOf("mouth", System.StringComparison.OrdinalIgnoreCase) < 0) continue;
+                SetFloatIfAnyExists(material, new[] { "_UseBacklight", "_BacklightMainStrength" }, 0f);
+                if (material.HasProperty("_BacklightColor"))
+                {
+                    var backlightColor = material.GetColor("_BacklightColor");
+                    backlightColor.a = 0f;
+                    material.SetColor("_BacklightColor", backlightColor);
                 }
             }
         }
