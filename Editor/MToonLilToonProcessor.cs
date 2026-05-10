@@ -1049,13 +1049,13 @@ namespace NdmfMToon10ToLilToon
                         offset = source.GetTextureOffset(sourceProperty);
                     }
                 }
-                textures.Add(ToReadableTextureWithTransform(texture, scale, offset));
+                textures.Add(ToReadableTextureWithTransform(texture, scale, offset, bakeKind == TextureBakeKind.NormalMap));
             }
 
             if (textures.All(t => t == null)) return;
             var fallbackColor = bakeKind == TextureBakeKind.NormalMap ? NeutralNormalRgbColor() : ResolveAtlasFallbackColor(destinationProperty);
             var fallback = FirstNonNullTexture(textures) ?? NewSolidTexture(fallbackColor);
-            var atlas = new Texture2D(atlasWidth, atlasHeight, TextureFormat.RGBA32, false);
+            var atlas = new Texture2D(atlasWidth, atlasHeight, TextureFormat.RGBA32, false, bakeKind == TextureBakeKind.NormalMap);
             atlas.SetPixels(Enumerable.Repeat(new Color(0f, 0f, 0f, 0f), atlasWidth * atlasHeight).ToArray());
             for (var i = 0; i < textures.Count && i < rects.Count; i++)
             {
@@ -1065,7 +1065,7 @@ namespace NdmfMToon10ToLilToon
                 var pixelHeight = Mathf.Max(1, Mathf.RoundToInt(rect.height * atlasHeight));
                 var pixelX = Mathf.RoundToInt(rect.x * atlasWidth);
                 var pixelY = Mathf.RoundToInt(rect.y * atlasHeight);
-                var resized = ResizeTexture(src, pixelWidth, pixelHeight);
+                var resized = ResizeTexture(src, pixelWidth, pixelHeight, bakeKind == TextureBakeKind.NormalMap);
                 var pixels = resized.GetPixels();
                 if (bakeKind == TextureBakeKind.NormalMap)
                 {
@@ -1398,13 +1398,13 @@ namespace NdmfMToon10ToLilToon
             texture.Apply();
         }
 
-        private static Texture2D ResizeTexture(Texture2D source, int width, int height)
+        private static Texture2D ResizeTexture(Texture2D source, int width, int height, bool linear = false)
         {
-            var rt = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Default);
+            var rt = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGB32, linear ? RenderTextureReadWrite.Linear : RenderTextureReadWrite.sRGB);
             var current = RenderTexture.active;
             Graphics.Blit(source, rt);
             RenderTexture.active = rt;
-            var resized = new Texture2D(width, height, TextureFormat.RGBA32, false);
+            var resized = new Texture2D(width, height, TextureFormat.RGBA32, false, linear);
             resized.ReadPixels(new Rect(0, 0, width, height), 0, 0);
             resized.Apply();
             RenderTexture.active = current;
@@ -1412,16 +1412,16 @@ namespace NdmfMToon10ToLilToon
             return resized;
         }
 
-        private static Texture2D ToReadableTexture(Texture texture)
+        private static Texture2D ToReadableTexture(Texture texture, bool linear = false)
         {
             if (texture == null) return null;
             var width = texture.width;
             var height = texture.height;
-            var rt = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Default);
+            var rt = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGB32, linear ? RenderTextureReadWrite.Linear : RenderTextureReadWrite.sRGB);
             var current = RenderTexture.active;
             Graphics.Blit(texture, rt);
             RenderTexture.active = rt;
-            var readable = new Texture2D(width, height, TextureFormat.RGBA32, false);
+            var readable = new Texture2D(width, height, TextureFormat.RGBA32, false, linear);
             readable.ReadPixels(new Rect(0, 0, width, height), 0, 0);
             readable.Apply();
             RenderTexture.active = current;
@@ -1429,15 +1429,15 @@ namespace NdmfMToon10ToLilToon
             return readable;
         }
 
-        private static Texture2D ToReadableTextureWithTransform(Texture texture, Vector2 scale, Vector2 offset)
+        private static Texture2D ToReadableTextureWithTransform(Texture texture, Vector2 scale, Vector2 offset, bool linear = false)
         {
-            var readable = ToReadableTexture(texture);
+            var readable = ToReadableTexture(texture, linear);
             if (readable == null) return null;
             if ((scale - Vector2.one).sqrMagnitude < 0.000001f && offset.sqrMagnitude < 0.000001f) return readable;
 
             var width = readable.width;
             var height = readable.height;
-            var transformed = new Texture2D(width, height, TextureFormat.RGBA32, false);
+            var transformed = new Texture2D(width, height, TextureFormat.RGBA32, false, linear);
             var colors = new Color[width * height];
             for (var y = 0; y < height; y++)
             {
