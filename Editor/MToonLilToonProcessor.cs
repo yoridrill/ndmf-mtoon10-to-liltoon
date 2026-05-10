@@ -1082,6 +1082,11 @@ namespace NdmfMToon10ToLilToon
                 }
                 if (bakeKind == TextureBakeKind.NormalMap)
                 {
+                    if (verboseLog)
+                    {
+                        var pre = SampleCenterColor(pixels, pixelWidth, pixelHeight);
+                        Debug.Log($"[BumpMapDebug] preConvert center={FormatColor(pre)} alpha={pre.a:F4}");
+                    }
                     for (var p = 0; p < pixels.Length; p++)
                     {
                         pixels[p] = EncodeRgbNormal(DecodeNormalFromSource(pixels[p]));
@@ -1264,8 +1269,8 @@ namespace NdmfMToon10ToLilToon
 
         private static Vector3 DecodeNormalFromSource(Color c)
         {
-            // Heuristic: Unity packed normal / DXT5nm-like samples tend to keep R near 1 while A carries X.
-            var looksPacked = c.r > 0.90f && c.a < 0.999f;
+            // Heuristic: packed normals often keep R high; alpha should carry X but may be lost in some paths.
+            var looksPacked = c.r > 0.90f && (c.a < 0.999f || c.b < 0.90f);
             return looksPacked ? DecodePackedNormalAg(c) : DecodeRgbNormal(c);
         }
 
