@@ -1051,18 +1051,18 @@ namespace NdmfMToon10ToLilToon
                 }
                 if (verboseLog && bakeKind == TextureBakeKind.NormalMap && texture != null)
                 {
-                    Debug.Log($"[BumpMapDebug] source name={texture.name} format={(texture as Texture2D)?.format.ToString() ?? "n/a"} readable={(texture as Texture2D)?.isReadable.ToString() ?? "n/a"} center={SampleTextureCenter(texture)}");
+                    Debug.Log($"[BumpMapDebug] source name={texture.name} format={(texture as Texture2D)?.format.ToString() ?? "n/a"} readable={(texture as Texture2D)?.isReadable.ToString() ?? "n/a"} center={FormatColor(SampleTextureCenterColor(texture))} unpack={FormatVector3(UnityUnpackNormalRGorAG(SampleTextureCenterColor(texture)))}");
                 }
                 var readable = ToReadableTextureWithTransform(texture, scale, offset, bakeKind == TextureBakeKind.NormalMap);
                 if (verboseLog && bakeKind == TextureBakeKind.NormalMap && readable != null)
                 {
-                    Debug.Log($"[BumpMapDebug] readable center={SampleTextureCenter(readable)}");
+                    Debug.Log($"[BumpMapDebug] readable center={FormatColor(SampleTextureCenterColor(readable))} unpack={FormatVector3(UnityUnpackNormalRGorAG(SampleTextureCenterColor(readable)))}");
                 }
                 textures.Add(readable);
             }
 
             if (textures.All(t => t == null)) return;
-            var fallbackColor = bakeKind == TextureBakeKind.NormalMap ? NeutralNormalRgbColor() : ResolveAtlasFallbackColor(destinationProperty);
+            var fallbackColor = bakeKind == TextureBakeKind.NormalMap ? NeutralNormalDxt5nmPreserveBlueColor() : ResolveAtlasFallbackColor(destinationProperty);
             var fallback = FirstNonNullTexture(textures) ?? NewSolidTexture(fallbackColor);
             var atlas = new Texture2D(atlasWidth, atlasHeight, TextureFormat.RGBA32, false, bakeKind == TextureBakeKind.NormalMap);
             atlas.SetPixels(Enumerable.Repeat(new Color(0f, 0f, 0f, 0f), atlasWidth * atlasHeight).ToArray());
@@ -1078,25 +1078,25 @@ namespace NdmfMToon10ToLilToon
                 var pixels = resized.GetPixels();
                 if (verboseLog && bakeKind == TextureBakeKind.NormalMap)
                 {
-                    Debug.Log($"[BumpMapDebug] resized center={SampleCenter(pixels, pixelWidth, pixelHeight)}");
+                    Debug.Log($"[BumpMapDebug] resized center={FormatColor(SampleCenterColor(pixels, pixelWidth, pixelHeight))} unpack={FormatVector3(UnityUnpackNormalRGorAG(SampleCenterColor(pixels, pixelWidth, pixelHeight)))}");
                 }
                 if (bakeKind == TextureBakeKind.NormalMap)
                 {
                     for (var p = 0; p < pixels.Length; p++)
                     {
-                        pixels[p] = ConvertNormalSampleForAtlasPreview(pixels[p]);
+                        pixels[p] = ConvertNormalSampleToDxt5nmPreserveBlue(pixels[p]);
                     }
                 }
                 if (verboseLog && bakeKind == TextureBakeKind.NormalMap)
                 {
-                    Debug.Log($"[BumpMapDebug] beforeSetPixels center={SampleCenter(pixels, pixelWidth, pixelHeight)}");
+                    Debug.Log($"[BumpMapDebug] beforeSetPixels center={FormatColor(SampleCenterColor(pixels, pixelWidth, pixelHeight))} unpack={FormatVector3(UnityUnpackNormalRGorAG(SampleCenterColor(pixels, pixelWidth, pixelHeight)))}");
                 }
                 atlas.SetPixels(pixelX, pixelY, pixelWidth, pixelHeight, pixels);
             }
             atlas.Apply(false, false);
             if (bakeKind == TextureBakeKind.NormalMap)
             {
-                ReplaceTransparentPixels(atlas, NeutralNormalRgbColor());
+                ReplaceTransparentPixels(atlas, NeutralNormalDxt5nmPreserveBlueColor());
             }
             else
             {
@@ -1104,12 +1104,12 @@ namespace NdmfMToon10ToLilToon
             }
             if (verboseLog && bakeKind == TextureBakeKind.NormalMap)
             {
-                Debug.Log($"[BumpMapDebug] atlasBeforeCompress center={SampleTextureCenter(atlas)}");
+                Debug.Log($"[BumpMapDebug] atlasBeforeCompress center={FormatColor(SampleTextureCenterColor(atlas))} unpack={FormatVector3(UnityUnpackNormalRGorAG(SampleTextureCenterColor(atlas)))}");
             }
             CompressGeneratedAtlas(atlas, destinationProperty);
             if (verboseLog && bakeKind == TextureBakeKind.NormalMap)
             {
-                Debug.Log($"[BumpMapDebug] atlasAfterCompress center={SampleTextureCenter(atlas)} format={atlas.format}");
+                Debug.Log($"[BumpMapDebug] atlasAfterCompress center={FormatColor(SampleTextureCenterColor(atlas))} unpack={FormatVector3(UnityUnpackNormalRGorAG(SampleTextureCenterColor(atlas)))} format={atlas.format}");
             }
             mergedMaterial.SetTexture(destinationProperty, atlas);
         }
@@ -1233,19 +1233,15 @@ namespace NdmfMToon10ToLilToon
             importer.SetPlatformTextureSettings(settings);
         }
 
-        private static Color NeutralNormalRgbColor()
+        private static Color NeutralNormalDxt5nmPreserveBlueColor()
         {
-            return new Color(0.5f, 0.5f, 1f, 1f);
+            return new Color(1f, 0.5f, 1f, 0.5f);
         }
 
-        private static Color ConvertNormalSampleForAtlasPreview(Color c)
+        private static Color ConvertNormalSampleToDxt5nmPreserveBlue(Color c)
         {
-            if (c.r > 0.95f && c.a > 0.001f && c.a < 0.999f)
-            {
-                return new Color(c.a, c.g, c.b, 1f);
-            }
-
-            return new Color(c.r, c.g, c.b, 1f);
+            var encodedX = Mathf.Clamp01(c.r * c.a);
+            return new Color(1f, c.g, c.b, encodedX);
         }
 
         private static void ReplaceTransparentPixels(Texture2D texture, Color replacement)
@@ -1261,22 +1257,30 @@ namespace NdmfMToon10ToLilToon
             texture.Apply(false, false);
         }
 
-        private static string SampleTextureCenter(Texture texture)
+        private static Color SampleTextureCenterColor(Texture texture)
         {
-            if (texture == null) return "(null)";
-            if (texture is not Texture2D t || !t.isReadable) return "(unreadable)";
-            var px = t.GetPixel(Mathf.Clamp(t.width / 2, 0, t.width - 1), Mathf.Clamp(t.height / 2, 0, t.height - 1));
-            return $"({px.r:F4},{px.g:F4},{px.b:F4},{px.a:F4})";
+            if (texture is not Texture2D t || !t.isReadable) return Color.clear;
+            return t.GetPixel(Mathf.Clamp(t.width / 2, 0, t.width - 1), Mathf.Clamp(t.height / 2, 0, t.height - 1));
         }
 
-        private static string SampleCenter(Color[] pixels, int width, int height)
+        private static Color SampleCenterColor(Color[] pixels, int width, int height)
         {
-            if (pixels == null || pixels.Length == 0 || width <= 0 || height <= 0) return "(empty)";
+            if (pixels == null || pixels.Length == 0 || width <= 0 || height <= 0) return Color.clear;
             var x = Mathf.Clamp(width / 2, 0, width - 1);
             var y = Mathf.Clamp(height / 2, 0, height - 1);
-            var c = pixels[y * width + x];
-            return $"({c.r:F4},{c.g:F4},{c.b:F4},{c.a:F4})";
+            return pixels[y * width + x];
         }
+
+        private static Vector3 UnityUnpackNormalRGorAG(Color c)
+        {
+            var x = c.r * c.a * 2f - 1f;
+            var y = c.g * 2f - 1f;
+            var z = Mathf.Sqrt(Mathf.Max(0f, 1f - Mathf.Clamp01(x * x + y * y)));
+            return new Vector3(x, y, z);
+        }
+
+        private static string FormatColor(Color c) => $"({c.r:F4},{c.g:F4},{c.b:F4},{c.a:F4})";
+        private static string FormatVector3(Vector3 v) => $"({v.x:F4},{v.y:F4},{v.z:F4})";
 
         private static void EnsureAssetFolder(string folderPath)
         {
