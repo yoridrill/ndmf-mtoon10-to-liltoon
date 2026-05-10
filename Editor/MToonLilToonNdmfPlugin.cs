@@ -14,6 +14,9 @@ namespace NdmfMToon10ToLilToon
         protected override void Configure()
         {
             InPhase(BuildPhase.Transforming)
+                .AfterPlugin("jp.yoridrill.ndmf-vroid-arm-patch")
+                .AfterPlugin("jp.yoridrill.ndmf-vroid-mesh-trimmer")
+                .BeforePlugin("com.github.kurotu.vrc-quest-tools")
                 .Run("Convert MToon10 Materials to lilToon", Execute);
         }
 
@@ -23,21 +26,26 @@ namespace NdmfMToon10ToLilToon
             if (root == null) return;
 
             var components = root.GetComponentsInChildren<MToonLilToonComponent>(true);
-            if (components.Any(c => c != null && c.isPreviewing))
+            try
             {
-                MToonLilToonPreviewUtility.StopPreview();
-                foreach (var component in components.Where(c => c != null))
+                if (components.Any(c => c != null && c.isPreviewing))
                 {
-                    component.isPreviewing = false;
+                    MToonLilToonPreviewUtility.StopPreview();
+                    foreach (var component in components.Where(c => c != null))
+                    {
+                        component.isPreviewing = false;
+                    }
+                }
+
+                foreach (var component in components)
+                {
+                    ApplyOnBuild(component);
                 }
             }
-
-            foreach (var component in components)
+            finally
             {
-                ApplyOnBuild(component);
+                RemoveComponents(components);
             }
-
-            RemoveComponents(components);
         }
 
         private static GameObject ResolveAvatarRoot(BuildContext context)

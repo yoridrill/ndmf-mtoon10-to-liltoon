@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -8,6 +9,18 @@ namespace NdmfMToon10ToLilToon
 {
     internal static class MToonLilToonProcessor
     {
+        private enum TextureBakeKind
+        {
+            Color,
+            LinearMask,
+            NormalMap,
+        }
+        internal enum ConversionRoute
+        {
+            Preview,
+            Build,
+        }
+
         private sealed class HairMergeCacheEntry
         {
             public Material mergedTemplate;
@@ -47,7 +60,7 @@ namespace NdmfMToon10ToLilToon
             }
         }
 
-        internal static void ApplyOnBuild(MToonLilToonComponent component, System.Action<string> onProgress = null)
+        internal static void ApplyOnBuild(MToonLilToonComponent component, System.Action<string> onProgress = null, ConversionRoute route = ConversionRoute.Build)
         {
             if (component == null) return;
             EnsureHairSelectionsMatchAvatarMaterials(component);
@@ -62,6 +75,7 @@ namespace NdmfMToon10ToLilToon
             }
 
             var report = new ConversionReport();
+            var generatedAssetScopeId = BuildGeneratedAssetScopeId(component);
             var lilToonShader = ResolveLilToonShader(component);
             if (lilToonShader == null)
             {
@@ -101,6 +115,9 @@ namespace NdmfMToon10ToLilToon
                     convertedBySource,
                     fakeShadowPairs,
                     mergedHairMaterials,
+                    generatedAssetScopeId,
+                    component.verboseLog,
+                    route == ConversionRoute.Preview,
                     report,
                     onProgress);
             }
@@ -239,6 +256,9 @@ namespace NdmfMToon10ToLilToon
             IDictionary<Material, Material> convertedBySource,
             IList<(Material hair, Material fake)> fakeShadowPairs,
             IList<Material> mergedHairMaterials,
+            string generatedAssetScopeId,
+            bool verboseLog,
+            bool useHairMergeCache,
             ConversionReport report,
             System.Action<string> onProgress)
         {
@@ -332,6 +352,10 @@ namespace NdmfMToon10ToLilToon
                     enableFakeShadow,
                     fakeShadowDirection,
                     fakeShadowOffset,
+                    generatedAssetScopeId,
+                    verboseLog,
+                    useHairMergeCache,
+                    renderer,
                     report,
                     out mergedMaterial,
                     out fakeShadowMaterial,
@@ -392,6 +416,10 @@ namespace NdmfMToon10ToLilToon
             bool enableFakeShadow,
             Vector3 fakeShadowDirection,
             float fakeShadowOffset,
+            string generatedAssetScopeId,
+            bool verboseLog,
+            bool useHairMergeCache,
+            Renderer renderer,
             ConversionReport report,
             out Material mergedMaterial,
             out Material fakeShadowMaterial,
@@ -403,8 +431,11 @@ namespace NdmfMToon10ToLilToon
             atlasRects = null;
 
             var cacheKey = BuildHairMergeCacheKey(original, mergedIndices, mergedRepresentativeIndex, mergedOutputRenderType, enableFakeShadow);
-            if (TryGetCachedHairMergeResult(cacheKey, overrides, fakeShadowDirection, fakeShadowOffset, out mergedMaterial, out fakeShadowMaterial, out atlasRects))
+            if (useHairMergeCache
+                && TryGetCachedHairMergeResult(cacheKey, overrides, fakeShadowDirection, fakeShadowOffset, out mergedMaterial, out fakeShadowMaterial, out atlasRects)
+                && IsValidHairMergeCacheHit(mergedMaterial, atlasRects, mergedIndices.Count))
             {
+                ValidateMergedMaterialTextureReferences(mergedMaterial, report, verboseLog);
                 return true;
             }
 
@@ -436,36 +467,22 @@ namespace NdmfMToon10ToLilToon
                 Vector2 offset = Vector2.zero;
                 if (source != null)
                 {
-                    if (source.HasProperty("_BaseMap"))
-                    {
-                        texture = source.GetTexture("_BaseMap");
-                        scale = source.GetTextureScale("_BaseMap");
-                        offset = source.GetTextureOffset("_BaseMap");
-                    }
-                    else if (source.HasProperty("_MainTex"))
-                    {
-                        texture = source.GetTexture("_MainTex");
-                        scale = source.GetTextureScale("_MainTex");
-                        offset = source.GetTextureOffset("_MainTex");
-                    }
+                    TryGetMToonMainTextureWithTransform(source, out texture, out scale, out offset, out _);
                 }
 
                 atlasTextures.Add(ToReadableTextureWithTransform(texture, scale, offset));
             }
 
-            if (atlasTextures.All(t => t == null))
-            {
-                atlasRects = mergedIndices.Select(_ => new Rect(0f, 0f, 1f, 1f)).ToList();
-                return true;
-            }
+            if (atlasTextures.All(t => t == null)) throw new System.InvalidOperationException("Hair merge failed: no main textures resolved for selected materials.");
 
             var fallback = FirstNonNullTexture(atlasTextures) ?? NewSolidTexture(Color.white);
             var atlasMaxSize = ResolveAtlasMaxSize(atlasTextures);
             var packTextures = PrepareBaseAtlasTextures(atlasTextures, fallback);
             var atlas = new Texture2D(2, 2, TextureFormat.RGBA32, false);
             atlasRects = atlas.PackTextures(packTextures, 2, atlasMaxSize, false).ToList();
+            atlas.Apply(false, false);
             BleedTransparentPixels(atlas, 2);
-            EnsureReferenceTrackableObjectFlags(atlas);
+            CompressGeneratedAtlas(atlas, "_MainTex");
             mergedMaterial.SetTexture("_MainTex", atlas);
             if (mergedMaterial.HasProperty("_MainTex"))
             {
@@ -473,12 +490,16 @@ namespace NdmfMToon10ToLilToon
                 mergedMaterial.SetTextureOffset("_MainTex", Vector2.zero);
             }
 
-            BakeOptionalAtlas(new[] { "_ShadowColorTex", "_Shadow1stColorTex" }, original, mergedIndices, mergedMaterial, new[] { "_ShadeMap", "_ShadeMultiplyTexture" }, atlas.width, atlas.height, atlasRects);
-            BakeOptionalAtlas(new[] { "_EmissionMap" }, original, mergedIndices, mergedMaterial, new[] { "_EmissiveMap", "_EmissionMap" }, atlas.width, atlas.height, atlasRects);
-            BakeOptionalAtlas(new[] { "_BumpMap" }, original, mergedIndices, mergedMaterial, new[] { "_NormalMap", "_BumpMap" }, atlas.width, atlas.height, atlasRects);
-            BakeOptionalAtlas(new[] { "_OutlineTex", "_OutlineMask" }, original, mergedIndices, mergedMaterial, new[] { "_OutlineWidthMultiplyTexture", "_OutlineMask" }, atlas.width, atlas.height, atlasRects);
+            BakeOptionalAtlas(new[] { "_ShadowColorTex", "_Shadow1stColorTex" }, original, mergedIndices, mergedMaterial, new[] { "_ShadeMap", "_ShadeMultiplyTexture" }, atlas.width, atlas.height, atlasRects, generatedAssetScopeId, renderer, report, TextureBakeKind.Color, verboseLog);
+            BakeOptionalAtlas(new[] { "_EmissionMap" }, original, mergedIndices, mergedMaterial, new[] { "_EmissiveMap", "_EmissionMap" }, atlas.width, atlas.height, atlasRects, generatedAssetScopeId, renderer, report, TextureBakeKind.Color, verboseLog);
+            BakeOptionalAtlas(new[] { "_BumpMap" }, original, mergedIndices, mergedMaterial, new[] { "_NormalMap", "_BumpMap" }, atlas.width, atlas.height, atlasRects, generatedAssetScopeId, renderer, report, TextureBakeKind.NormalMap, verboseLog);
+            BakeOptionalAtlas(new[] { "_OutlineTex", "_OutlineMask" }, original, mergedIndices, mergedMaterial, new[] { "_OutlineWidthMultiplyTexture", "_OutlineMask" }, atlas.width, atlas.height, atlasRects, generatedAssetScopeId, renderer, report, TextureBakeKind.LinearMask, verboseLog);
             NormalizeMergedEmissionAndMatCapState(original, mergedIndices, mergedMaterial);
-            CacheHairMergeResult(cacheKey, mergedMaterial, fakeShadowMaterial, atlasRects);
+            ValidateMergedMaterialTextureReferences(mergedMaterial, report, verboseLog);
+            if (useHairMergeCache && HasCacheableMergedAtlasTextures(mergedMaterial) && IsValidHairMergeCacheHit(mergedMaterial, atlasRects, mergedIndices.Count))
+            {
+                CacheHairMergeResult(cacheKey, mergedMaterial, fakeShadowMaterial, atlasRects);
+            }
 
             return true;
         }
@@ -502,15 +523,9 @@ namespace NdmfMToon10ToLilToon
                     continue;
                 }
 
-                var tex = mat.HasProperty("_BaseMap") ? mat.GetTexture("_BaseMap") : (mat.HasProperty("_MainTex") ? mat.GetTexture("_MainTex") : null);
+                TryGetMToonMainTextureWithTransform(mat, out var tex, out var scale, out var offset, out var propertyName);
                 var texId = tex != null ? tex.GetInstanceID() : 0;
-                var scale = mat.HasProperty("_BaseMap")
-                    ? mat.GetTextureScale("_BaseMap")
-                    : (mat.HasProperty("_MainTex") ? mat.GetTextureScale("_MainTex") : Vector2.one);
-                var offset = mat.HasProperty("_BaseMap")
-                    ? mat.GetTextureOffset("_BaseMap")
-                    : (mat.HasProperty("_MainTex") ? mat.GetTextureOffset("_MainTex") : Vector2.zero);
-                parts.Add($"{index}:{mat.GetInstanceID()}:{texId}:{scale.x:G5},{scale.y:G5}:{offset.x:G5},{offset.y:G5}");
+                parts.Add($"{index}:{mat.GetInstanceID()}:{propertyName}:{texId}:{scale.x:G5},{scale.y:G5}:{offset.x:G5},{offset.y:G5}");
             }
 
             return string.Join("|", parts);
@@ -1012,7 +1027,7 @@ namespace NdmfMToon10ToLilToon
             return resized;
         }
 
-        private static void BakeOptionalAtlas(IReadOnlyList<string> destinationProperties, IReadOnlyList<Material> original, IReadOnlyList<int> mergedIndices, Material mergedMaterial, IReadOnlyList<string> sourceProperties, int atlasWidth, int atlasHeight, IReadOnlyList<Rect> rects)
+        private static void BakeOptionalAtlas(IReadOnlyList<string> destinationProperties, IReadOnlyList<Material> original, IReadOnlyList<int> mergedIndices, Material mergedMaterial, IReadOnlyList<string> sourceProperties, int atlasWidth, int atlasHeight, IReadOnlyList<Rect> rects, string generatedAssetScopeId, Renderer renderer, ConversionReport report, TextureBakeKind bakeKind, bool verboseLog)
         {
             var destinationProperty = destinationProperties.FirstOrDefault(mergedMaterial.HasProperty);
             if (string.IsNullOrEmpty(destinationProperty)) return;
@@ -1034,13 +1049,26 @@ namespace NdmfMToon10ToLilToon
                         offset = source.GetTextureOffset(sourceProperty);
                     }
                 }
-                textures.Add(ToReadableTextureWithTransform(texture, scale, offset));
+                if (verboseLog && bakeKind == TextureBakeKind.NormalMap && texture != null)
+                {
+                    LogBumpMapSample("source", SampleTextureCenterColor(texture), (texture as Texture2D)?.format.ToString() ?? "n/a", texture.name);
+                }
+                var readable = ToReadableTextureWithTransform(texture, scale, offset, bakeKind == TextureBakeKind.NormalMap);
+                if (bakeKind == TextureBakeKind.NormalMap && readable != null)
+                {
+                    ConvertPackedNormalTextureToRgbNormal(readable);
+                }
+                if (verboseLog && bakeKind == TextureBakeKind.NormalMap && readable != null)
+                {
+                    LogBumpMapSample("readable", SampleTextureCenterColor(readable), readable.format.ToString());
+                }
+                textures.Add(readable);
             }
 
             if (textures.All(t => t == null)) return;
-            var fallbackColor = ResolveAtlasFallbackColor(destinationProperty);
+            var fallbackColor = bakeKind == TextureBakeKind.NormalMap ? NeutralNormalColor() : ResolveAtlasFallbackColor(destinationProperty);
             var fallback = FirstNonNullTexture(textures) ?? NewSolidTexture(fallbackColor);
-            var atlas = new Texture2D(atlasWidth, atlasHeight, TextureFormat.RGBA32, false);
+            var atlas = new Texture2D(atlasWidth, atlasHeight, TextureFormat.RGBA32, false, bakeKind == TextureBakeKind.NormalMap);
             atlas.SetPixels(Enumerable.Repeat(new Color(0f, 0f, 0f, 0f), atlasWidth * atlasHeight).ToArray());
             for (var i = 0; i < textures.Count && i < rects.Count; i++)
             {
@@ -1050,13 +1078,298 @@ namespace NdmfMToon10ToLilToon
                 var pixelHeight = Mathf.Max(1, Mathf.RoundToInt(rect.height * atlasHeight));
                 var pixelX = Mathf.RoundToInt(rect.x * atlasWidth);
                 var pixelY = Mathf.RoundToInt(rect.y * atlasHeight);
-                var resized = ResizeTexture(src, pixelWidth, pixelHeight);
-                atlas.SetPixels(pixelX, pixelY, pixelWidth, pixelHeight, resized.GetPixels());
+                var resized = ResizeTexture(src, pixelWidth, pixelHeight, bakeKind == TextureBakeKind.NormalMap);
+                var pixels = resized.GetPixels();
+                if (verboseLog && bakeKind == TextureBakeKind.NormalMap)
+                {
+                    LogBumpMapSample("resized", SampleCenterColor(pixels, pixelWidth, pixelHeight), resized.format.ToString());
+                }
+                if (verboseLog && bakeKind == TextureBakeKind.NormalMap)
+                {
+                    var center = SampleCenterColor(pixels, pixelWidth, pixelHeight);
+                    LogBumpMapSample("beforeSetPixels", center);
+                }
+                atlas.SetPixels(pixelX, pixelY, pixelWidth, pixelHeight, pixels);
+                if (verboseLog && bakeKind == TextureBakeKind.NormalMap)
+                {
+                    var sampleX = Mathf.Clamp(pixelX + pixelWidth / 2, 0, atlasWidth - 1);
+                    var sampleY = Mathf.Clamp(pixelY + pixelHeight / 2, 0, atlasHeight - 1);
+                    var atlasColor = atlas.GetPixel(sampleX, sampleY);
+                    LogBumpMapSample($"atlasAfterSetPixels({sampleX},{sampleY})", atlasColor);
+                }
             }
-            atlas.Apply();
-            BleedTransparentPixels(atlas, 2);
-            EnsureReferenceTrackableObjectFlags(atlas);
+            atlas.Apply(false, false);
+            if (bakeKind == TextureBakeKind.NormalMap)
+            {
+                ReplaceTransparentPixels(atlas, NeutralNormalColor());
+            }
+            else
+            {
+                BleedTransparentPixels(atlas, 2);
+            }
+            if (verboseLog && bakeKind == TextureBakeKind.NormalMap)
+            {
+                LogBumpMapSample("atlasBeforeCompress", SampleTextureCenterColor(atlas), atlas.format.ToString());
+            }
+            CompressGeneratedAtlas(atlas, destinationProperty);
+            if (verboseLog && bakeKind == TextureBakeKind.NormalMap)
+            {
+                LogBumpMapSample("atlasAfterCompress", SampleTextureCenterColor(atlas), atlas.format.ToString());
+            }
             mergedMaterial.SetTexture(destinationProperty, atlas);
+        }
+
+
+        private static Texture2D SaveGeneratedAtlasTexture(string scopeId, Renderer renderer, string propertyName, Texture2D atlas)
+        {
+            if (atlas == null) return null;
+            var rendererId = renderer != null ? SanitizePathSegment(renderer.name) : "Renderer";
+            var directory = $"Assets/NdmfMToon10ToLilToon.Generated/{SanitizePathSegment(scopeId)}";
+            EnsureAssetFolder(directory);
+            var propertyId = SanitizePathSegment(propertyName).TrimStart('_');
+            var fileName = $"Hair_{rendererId}_{propertyId}.png";
+            var assetPath = $"{directory}/{fileName}";
+            var png = atlas.EncodeToPNG();
+            if (png == null || png.Length == 0) return null;
+            System.IO.File.WriteAllBytes(assetPath, png);
+            if (!System.IO.File.Exists(assetPath))
+            {
+                return null;
+            }
+
+            AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
+            AssetDatabase.ImportAsset(assetPath, ImportAssetOptions.ForceSynchronousImport | ImportAssetOptions.ForceUpdate);
+            var importer = AssetImporter.GetAtPath(assetPath) as TextureImporter;
+            if (importer != null)
+            {
+                ConfigureAtlasImporter(importer, propertyName);
+                importer.SaveAndReimport();
+            }
+            AssetDatabase.ImportAsset(assetPath, ImportAssetOptions.ForceSynchronousImport | ImportAssetOptions.ForceUpdate);
+            var imported = AssetDatabase.LoadAssetAtPath<Texture2D>(assetPath);
+            if (imported != null) return imported;
+
+            var guid = AssetDatabase.AssetPathToGUID(assetPath);
+            if (!string.IsNullOrEmpty(guid))
+            {
+                var resolvedPath = AssetDatabase.GUIDToAssetPath(guid);
+                if (!string.IsNullOrEmpty(resolvedPath))
+                {
+                    imported = AssetDatabase.LoadAssetAtPath<Texture2D>(resolvedPath);
+                }
+            }
+
+            return imported;
+        }
+
+        private static bool HasCacheableMergedAtlasTextures(Material mergedMaterial)
+        {
+            if (mergedMaterial == null) return false;
+            var textureProperties = new[] { "_MainTex", "_ShadowColorTex", "_Shadow1stColorTex", "_EmissionMap", "_BumpMap", "_OutlineTex", "_OutlineMask" };
+            for (var i = 0; i < textureProperties.Length; i++)
+            {
+                var property = textureProperties[i];
+                if (!mergedMaterial.HasProperty(property)) continue;
+                var texture = mergedMaterial.GetTexture(property);
+                if (texture == null) continue;
+                if (texture is Texture2D t && t.format == TextureFormat.RGBA32) return false;
+            }
+
+            return true;
+        }
+
+        private static void ValidateMergedMaterialTextureReferences(Material mergedMaterial, ConversionReport report, bool verboseLog)
+        {
+            if (mergedMaterial == null) return;
+            var propertyNames = new[] { "_MainTex", "_BumpMap", "_EmissionMap", "_ShadowColorTex", "_Shadow1stColorTex", "_OutlineTex", "_OutlineMask" };
+            for (var i = 0; i < propertyNames.Length; i++)
+            {
+                var propertyName = propertyNames[i];
+                if (!mergedMaterial.HasProperty(propertyName)) continue;
+                var texture = mergedMaterial.GetTexture(propertyName);
+                if (texture == null) continue;
+                var path = AssetDatabase.GetAssetPath(texture);
+                if (verboseLog)
+                {
+                    var format = texture is Texture2D tex2D ? tex2D.format.ToString() : "(non-Texture2D)";
+                    Debug.Log($"[MToon10ToLilToon] {mergedMaterial.name} {propertyName} -> {path} format={format}");
+                }
+                if (string.Equals(propertyName, "_MainTex", System.StringComparison.OrdinalIgnoreCase) && texture == null)
+                {
+                    throw new System.InvalidOperationException($"{mergedMaterial.name}: _MainTex is null.");
+                }
+                if (texture is Texture2D texture2D && texture2D.format == TextureFormat.RGBA32)
+                {
+                    report?.Warnings.Add(new ConversionWarning($"{mergedMaterial.name}: {propertyName} remains RGBA32 after compression."));
+                }
+            }
+        }
+
+        private static void CompressGeneratedAtlas(Texture2D atlas, string propertyName)
+        {
+            if (atlas == null) throw new System.InvalidOperationException($"CompressGeneratedAtlas: atlas is null ({propertyName}).");
+            var isNormal = string.Equals(propertyName, "_BumpMap", System.StringComparison.OrdinalIgnoreCase);
+            var targetFormat = isNormal ? TextureFormat.DXT5 : TextureFormat.DXT5;
+            EditorUtility.CompressTexture(atlas, targetFormat, TextureCompressionQuality.Normal);
+            if (atlas.format == TextureFormat.RGBA32)
+            {
+                throw new System.InvalidOperationException($"Generated atlas compression failed for {propertyName}; format is still RGBA32.");
+            }
+        }
+
+        private static void ConfigureAtlasImporter(TextureImporter importer, string propertyName)
+        {
+            var isNormal = string.Equals(propertyName, "_BumpMap", System.StringComparison.OrdinalIgnoreCase);
+            var isMask = string.Equals(propertyName, "_OutlineTex", System.StringComparison.OrdinalIgnoreCase)
+                || string.Equals(propertyName, "_OutlineMask", System.StringComparison.OrdinalIgnoreCase);
+            importer.textureType = isNormal ? TextureImporterType.NormalMap : TextureImporterType.Default;
+            importer.mipmapEnabled = true;
+            importer.streamingMipmaps = true;
+            importer.streamingMipmapsPriority = 0;
+            importer.textureCompression = TextureImporterCompression.Compressed;
+            importer.alphaSource = TextureImporterAlphaSource.FromInput;
+            importer.sRGBTexture = !isNormal && !isMask;
+            importer.crunchedCompression = false;
+            var settings = importer.GetPlatformTextureSettings("Standalone");
+            settings.overridden = true;
+            settings.format = TextureImporterFormat.Automatic;
+            settings.textureCompression = TextureImporterCompression.Compressed;
+            settings.crunchedCompression = false;
+            importer.SetPlatformTextureSettings(settings);
+        }
+
+        private static Color NeutralNormalColor()
+        {
+            return new Color(0.5f, 0.5f, 1f, 1f);
+        }
+
+        private static Vector3 DecodeRgbNormal(Color c)
+        {
+            var n = new Vector3(c.r * 2f - 1f, c.g * 2f - 1f, c.b * 2f - 1f);
+            if (n.sqrMagnitude <= 1e-8f) return Vector3.forward;
+            n.Normalize();
+            return n;
+        }
+
+        private static Vector3 DecodePackedNormalAg(Color c)
+        {
+            var x = c.a * 2f - 1f;
+            var y = c.g * 2f - 1f;
+            var z2 = 1f - Mathf.Clamp01(x * x + y * y);
+            return new Vector3(x, y, Mathf.Sqrt(Mathf.Max(0f, z2))).normalized;
+        }
+
+        private static Vector3 DecodeNormalFromSource(Color c)
+        {
+            // Heuristic: packed normals often keep R high; alpha should carry X but may be lost in some paths.
+            var looksPacked = c.r > 0.90f && (c.a < 0.999f || c.b < 0.90f);
+            return looksPacked ? DecodePackedNormalAg(c) : DecodeRgbNormal(c);
+        }
+
+        private static void ConvertPackedNormalTextureToRgbNormal(Texture2D texture)
+        {
+            if (texture == null) return;
+            var pixels = texture.GetPixels();
+            for (var i = 0; i < pixels.Length; i++)
+            {
+                pixels[i] = EncodeRgbNormal(DecodeNormalFromSource(pixels[i]));
+            }
+            texture.SetPixels(pixels);
+            texture.Apply(false, false);
+        }
+
+        private static Color EncodeRgbNormal(Vector3 n)
+        {
+            if (n.sqrMagnitude <= 1e-8f) n = Vector3.forward;
+            n.Normalize();
+            return new Color(n.x * 0.5f + 0.5f, n.y * 0.5f + 0.5f, n.z * 0.5f + 0.5f, 1f);
+        }
+
+        private static void ReplaceTransparentPixels(Texture2D texture, Color replacement)
+        {
+            if (texture == null) return;
+            var pixels = texture.GetPixels();
+            for (var i = 0; i < pixels.Length; i++)
+            {
+                if (pixels[i].a > 0.0001f) continue;
+                pixels[i] = replacement;
+            }
+            texture.SetPixels(pixels);
+            texture.Apply(false, false);
+        }
+
+        private static Color SampleTextureCenterColor(Texture texture)
+        {
+            if (texture is not Texture2D t || !t.isReadable) return Color.clear;
+            return t.GetPixel(Mathf.Clamp(t.width / 2, 0, t.width - 1), Mathf.Clamp(t.height / 2, 0, t.height - 1));
+        }
+
+        private static Color SampleCenterColor(Color[] pixels, int width, int height)
+        {
+            if (pixels == null || pixels.Length == 0 || width <= 0 || height <= 0) return Color.clear;
+            var x = Mathf.Clamp(width / 2, 0, width - 1);
+            var y = Mathf.Clamp(height / 2, 0, height - 1);
+            return pixels[y * width + x];
+        }
+
+        private static Vector3 UnityUnpackNormalRGorAG(Color c)
+        {
+            var x = c.r * c.a * 2f - 1f;
+            var y = c.g * 2f - 1f;
+            var z = Mathf.Sqrt(Mathf.Max(0f, 1f - Mathf.Clamp01(x * x + y * y)));
+            return new Vector3(x, y, z);
+        }
+
+
+        private static void LogBumpMapSample(string stage, Color color, string format = null, string textureName = null)
+        {
+            var formatPart = string.IsNullOrEmpty(format) ? "" : $" format={format}";
+            var namePart = string.IsNullOrEmpty(textureName) ? "" : $" name={textureName}";
+            Debug.Log($"[BumpMapDebug] {stage}{namePart} center={FormatColor(color)} encodedX={EncodedX(color):F4} encodedY={EncodedY(color):F4} unpack={FormatVector3(UnityUnpackNormalRGorAG(color))}{formatPart}");
+        }
+
+        private static string FormatColor(Color c) => $"({c.r:F4},{c.g:F4},{c.b:F4},{c.a:F4})";
+        private static string FormatVector3(Vector3 v) => $"({v.x:F4},{v.y:F4},{v.z:F4})";
+        private static float EncodedX(Color c) => c.r * c.a;
+        private static float EncodedY(Color c) => c.g;
+
+        private static void EnsureAssetFolder(string folderPath)
+        {
+            var segments = folderPath.Split('/');
+            var current = segments[0];
+            for (var i = 1; i < segments.Length; i++)
+            {
+                var next = $"{current}/{segments[i]}";
+                if (!AssetDatabase.IsValidFolder(next))
+                {
+                    AssetDatabase.CreateFolder(current, segments[i]);
+                }
+
+                current = next;
+            }
+        }
+
+        private static string BuildGeneratedAssetScopeId(MToonLilToonComponent component)
+        {
+            if (component == null) return "Avatar_Unknown";
+            var root = component.transform != null ? component.transform.root : null;
+            var baseName = root != null ? root.name : component.name;
+            var globalId = GlobalObjectId.GetGlobalObjectIdSlow(component).ToString();
+            return $"Avatar_{SanitizePathSegment(baseName)}_{SanitizePathSegment(globalId)}";
+        }
+
+        private static string SanitizePathSegment(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return "Unknown";
+            var builder = new StringBuilder(value.Length);
+            for (var i = 0; i < value.Length; i++)
+            {
+                var c = value[i];
+                if (char.IsLetterOrDigit(c) || c == '_' || c == '-') builder.Append(c);
+                else builder.Append('_');
+            }
+
+            return builder.ToString().Trim('_');
         }
 
         private static Color ResolveAtlasFallbackColor(string destinationProperty)
@@ -1153,13 +1466,13 @@ namespace NdmfMToon10ToLilToon
             texture.Apply();
         }
 
-        private static Texture2D ResizeTexture(Texture2D source, int width, int height)
+        private static Texture2D ResizeTexture(Texture2D source, int width, int height, bool linear = false)
         {
-            var rt = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Default);
+            var rt = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGB32, linear ? RenderTextureReadWrite.Linear : RenderTextureReadWrite.sRGB);
             var current = RenderTexture.active;
             Graphics.Blit(source, rt);
             RenderTexture.active = rt;
-            var resized = new Texture2D(width, height, TextureFormat.RGBA32, false);
+            var resized = new Texture2D(width, height, TextureFormat.RGBA32, false, linear);
             resized.ReadPixels(new Rect(0, 0, width, height), 0, 0);
             resized.Apply();
             RenderTexture.active = current;
@@ -1167,16 +1480,16 @@ namespace NdmfMToon10ToLilToon
             return resized;
         }
 
-        private static Texture2D ToReadableTexture(Texture texture)
+        private static Texture2D ToReadableTexture(Texture texture, bool linear = false)
         {
             if (texture == null) return null;
             var width = texture.width;
             var height = texture.height;
-            var rt = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Default);
+            var rt = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGB32, linear ? RenderTextureReadWrite.Linear : RenderTextureReadWrite.sRGB);
             var current = RenderTexture.active;
             Graphics.Blit(texture, rt);
             RenderTexture.active = rt;
-            var readable = new Texture2D(width, height, TextureFormat.RGBA32, false);
+            var readable = new Texture2D(width, height, TextureFormat.RGBA32, false, linear);
             readable.ReadPixels(new Rect(0, 0, width, height), 0, 0);
             readable.Apply();
             RenderTexture.active = current;
@@ -1184,15 +1497,15 @@ namespace NdmfMToon10ToLilToon
             return readable;
         }
 
-        private static Texture2D ToReadableTextureWithTransform(Texture texture, Vector2 scale, Vector2 offset)
+        private static Texture2D ToReadableTextureWithTransform(Texture texture, Vector2 scale, Vector2 offset, bool linear = false)
         {
-            var readable = ToReadableTexture(texture);
+            var readable = ToReadableTexture(texture, linear);
             if (readable == null) return null;
             if ((scale - Vector2.one).sqrMagnitude < 0.000001f && offset.sqrMagnitude < 0.000001f) return readable;
 
             var width = readable.width;
             var height = readable.height;
-            var transformed = new Texture2D(width, height, TextureFormat.RGBA32, false);
+            var transformed = new Texture2D(width, height, TextureFormat.RGBA32, false, linear);
             var colors = new Color[width * height];
             for (var y = 0; y < height; y++)
             {
@@ -1802,6 +2115,37 @@ namespace NdmfMToon10ToLilToon
                 .Select(AssetDatabase.GUIDToAssetPath)
                 .Select(AssetDatabase.LoadAssetAtPath<Shader>)
                 .FirstOrDefault(shader => shader != null && shader.name.IndexOf("liltoonfakeshadow", System.StringComparison.OrdinalIgnoreCase) >= 0);
+        }
+
+        private static bool IsValidHairMergeCacheHit(Material mergedMaterial, IReadOnlyList<Rect> atlasRects, int mergedCount)
+        {
+            if (mergedMaterial == null) return false;
+            if (atlasRects == null || atlasRects.Count != mergedCount) return false;
+            if (!mergedMaterial.HasProperty("_MainTex")) return true;
+            return mergedMaterial.GetTexture("_MainTex") != null;
+        }
+
+        private static bool TryGetMToonMainTextureWithTransform(Material material, out Texture texture, out Vector2 scale, out Vector2 offset, out string propertyName)
+        {
+            texture = null; scale = Vector2.one; offset = Vector2.zero; propertyName = null;
+            if (material == null) return false;
+            if (material.HasProperty("_MainTex"))
+            {
+                texture = material.GetTexture("_MainTex");
+                scale = material.GetTextureScale("_MainTex");
+                offset = material.GetTextureOffset("_MainTex");
+                propertyName = "_MainTex";
+                if (texture != null) return true;
+            }
+            if (material.HasProperty("_BaseMap"))
+            {
+                texture = material.GetTexture("_BaseMap");
+                scale = material.GetTextureScale("_BaseMap");
+                offset = material.GetTextureOffset("_BaseMap");
+                propertyName = "_BaseMap";
+                if (texture != null) return true;
+            }
+            return false;
         }
     }
 }
