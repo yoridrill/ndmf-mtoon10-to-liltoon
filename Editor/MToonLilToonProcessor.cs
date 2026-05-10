@@ -490,10 +490,10 @@ namespace NdmfMToon10ToLilToon
                 mergedMaterial.SetTextureOffset("_MainTex", Vector2.zero);
             }
 
-            BakeOptionalAtlas(new[] { "_ShadowColorTex", "_Shadow1stColorTex" }, original, mergedIndices, mergedMaterial, new[] { "_ShadeMap", "_ShadeMultiplyTexture" }, atlas.width, atlas.height, atlasRects, generatedAssetScopeId, renderer, report, TextureBakeKind.Color);
-            BakeOptionalAtlas(new[] { "_EmissionMap" }, original, mergedIndices, mergedMaterial, new[] { "_EmissiveMap", "_EmissionMap" }, atlas.width, atlas.height, atlasRects, generatedAssetScopeId, renderer, report, TextureBakeKind.Color);
-            BakeOptionalAtlas(new[] { "_BumpMap" }, original, mergedIndices, mergedMaterial, new[] { "_NormalMap", "_BumpMap" }, atlas.width, atlas.height, atlasRects, generatedAssetScopeId, renderer, report, TextureBakeKind.NormalMap);
-            BakeOptionalAtlas(new[] { "_OutlineTex", "_OutlineMask" }, original, mergedIndices, mergedMaterial, new[] { "_OutlineWidthMultiplyTexture", "_OutlineMask" }, atlas.width, atlas.height, atlasRects, generatedAssetScopeId, renderer, report, TextureBakeKind.LinearMask);
+            BakeOptionalAtlas(new[] { "_ShadowColorTex", "_Shadow1stColorTex" }, original, mergedIndices, mergedMaterial, new[] { "_ShadeMap", "_ShadeMultiplyTexture" }, atlas.width, atlas.height, atlasRects, generatedAssetScopeId, renderer, report, TextureBakeKind.Color, verboseLog);
+            BakeOptionalAtlas(new[] { "_EmissionMap" }, original, mergedIndices, mergedMaterial, new[] { "_EmissiveMap", "_EmissionMap" }, atlas.width, atlas.height, atlasRects, generatedAssetScopeId, renderer, report, TextureBakeKind.Color, verboseLog);
+            BakeOptionalAtlas(new[] { "_BumpMap" }, original, mergedIndices, mergedMaterial, new[] { "_NormalMap", "_BumpMap" }, atlas.width, atlas.height, atlasRects, generatedAssetScopeId, renderer, report, TextureBakeKind.NormalMap, verboseLog);
+            BakeOptionalAtlas(new[] { "_OutlineTex", "_OutlineMask" }, original, mergedIndices, mergedMaterial, new[] { "_OutlineWidthMultiplyTexture", "_OutlineMask" }, atlas.width, atlas.height, atlasRects, generatedAssetScopeId, renderer, report, TextureBakeKind.LinearMask, verboseLog);
             NormalizeMergedEmissionAndMatCapState(original, mergedIndices, mergedMaterial);
             ValidateMergedMaterialTextureReferences(mergedMaterial, report, verboseLog);
             if (useHairMergeCache && HasCacheableMergedAtlasTextures(mergedMaterial) && IsValidHairMergeCacheHit(mergedMaterial, atlasRects, mergedIndices.Count))
@@ -1027,7 +1027,7 @@ namespace NdmfMToon10ToLilToon
             return resized;
         }
 
-        private static void BakeOptionalAtlas(IReadOnlyList<string> destinationProperties, IReadOnlyList<Material> original, IReadOnlyList<int> mergedIndices, Material mergedMaterial, IReadOnlyList<string> sourceProperties, int atlasWidth, int atlasHeight, IReadOnlyList<Rect> rects, string generatedAssetScopeId, Renderer renderer, ConversionReport report, TextureBakeKind bakeKind)
+        private static void BakeOptionalAtlas(IReadOnlyList<string> destinationProperties, IReadOnlyList<Material> original, IReadOnlyList<int> mergedIndices, Material mergedMaterial, IReadOnlyList<string> sourceProperties, int atlasWidth, int atlasHeight, IReadOnlyList<Rect> rects, string generatedAssetScopeId, Renderer renderer, ConversionReport report, TextureBakeKind bakeKind, bool verboseLog)
         {
             var destinationProperty = destinationProperties.FirstOrDefault(mergedMaterial.HasProperty);
             if (string.IsNullOrEmpty(destinationProperty)) return;
@@ -1049,7 +1049,16 @@ namespace NdmfMToon10ToLilToon
                         offset = source.GetTextureOffset(sourceProperty);
                     }
                 }
-                textures.Add(ToReadableTextureWithTransform(texture, scale, offset, bakeKind == TextureBakeKind.NormalMap));
+                if (verboseLog && bakeKind == TextureBakeKind.NormalMap && texture != null)
+                {
+                    Debug.Log($"[BumpMapDebug] source name={texture.name} format={(texture as Texture2D)?.format.ToString() ?? "n/a"} readable={(texture as Texture2D)?.isReadable.ToString() ?? "n/a"} center={SampleTextureCenter(texture)}");
+                }
+                var readable = ToReadableTextureWithTransform(texture, scale, offset, bakeKind == TextureBakeKind.NormalMap);
+                if (verboseLog && bakeKind == TextureBakeKind.NormalMap && readable != null)
+                {
+                    Debug.Log($"[BumpMapDebug] readable center={SampleTextureCenter(readable)}");
+                }
+                textures.Add(readable);
             }
 
             if (textures.All(t => t == null)) return;
@@ -1067,12 +1076,20 @@ namespace NdmfMToon10ToLilToon
                 var pixelY = Mathf.RoundToInt(rect.y * atlasHeight);
                 var resized = ResizeTexture(src, pixelWidth, pixelHeight, bakeKind == TextureBakeKind.NormalMap);
                 var pixels = resized.GetPixels();
+                if (verboseLog && bakeKind == TextureBakeKind.NormalMap)
+                {
+                    Debug.Log($"[BumpMapDebug] resized center={SampleCenter(pixels, pixelWidth, pixelHeight)}");
+                }
                 if (bakeKind == TextureBakeKind.NormalMap)
                 {
                     for (var p = 0; p < pixels.Length; p++)
                     {
                         pixels[p] = ConvertNormalSampleToInspectorRgbNormal(pixels[p]);
                     }
+                }
+                if (verboseLog && bakeKind == TextureBakeKind.NormalMap)
+                {
+                    Debug.Log($"[BumpMapDebug] beforeSetPixels center={SampleCenter(pixels, pixelWidth, pixelHeight)}");
                 }
                 atlas.SetPixels(pixelX, pixelY, pixelWidth, pixelHeight, pixels);
             }
@@ -1085,7 +1102,15 @@ namespace NdmfMToon10ToLilToon
             {
                 BleedTransparentPixels(atlas, 2);
             }
+            if (verboseLog && bakeKind == TextureBakeKind.NormalMap)
+            {
+                Debug.Log($"[BumpMapDebug] atlasBeforeCompress center={SampleTextureCenter(atlas)}");
+            }
             CompressGeneratedAtlas(atlas, destinationProperty);
+            if (verboseLog && bakeKind == TextureBakeKind.NormalMap)
+            {
+                Debug.Log($"[BumpMapDebug] atlasAfterCompress center={SampleTextureCenter(atlas)} format={atlas.format}");
+            }
             mergedMaterial.SetTexture(destinationProperty, atlas);
         }
 
@@ -1263,6 +1288,23 @@ namespace NdmfMToon10ToLilToon
             }
             texture.SetPixels(pixels);
             texture.Apply(false, false);
+        }
+
+        private static string SampleTextureCenter(Texture texture)
+        {
+            if (texture == null) return "(null)";
+            if (texture is not Texture2D t || !t.isReadable) return "(unreadable)";
+            var px = t.GetPixel(Mathf.Clamp(t.width / 2, 0, t.width - 1), Mathf.Clamp(t.height / 2, 0, t.height - 1));
+            return $"({px.r:F4},{px.g:F4},{px.b:F4},{px.a:F4})";
+        }
+
+        private static string SampleCenter(Color[] pixels, int width, int height)
+        {
+            if (pixels == null || pixels.Length == 0 || width <= 0 || height <= 0) return "(empty)";
+            var x = Mathf.Clamp(width / 2, 0, width - 1);
+            var y = Mathf.Clamp(height / 2, 0, height - 1);
+            var c = pixels[y * width + x];
+            return $"({c.r:F4},{c.g:F4},{c.b:F4},{c.a:F4})";
         }
 
         private static void EnsureAssetFolder(string folderPath)
