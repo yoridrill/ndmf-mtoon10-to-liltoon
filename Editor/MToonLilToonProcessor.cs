@@ -1080,6 +1080,13 @@ namespace NdmfMToon10ToLilToon
                 {
                     Debug.Log($"[BumpMapDebug] resized center={FormatColor(SampleCenterColor(pixels, pixelWidth, pixelHeight))} encodedX={EncodedX(SampleCenterColor(pixels, pixelWidth, pixelHeight)):F4} encodedY={EncodedY(SampleCenterColor(pixels, pixelWidth, pixelHeight)):F4} unpack={FormatVector3(UnityUnpackNormalRGorAG(SampleCenterColor(pixels, pixelWidth, pixelHeight)))}");
                 }
+                if (bakeKind == TextureBakeKind.NormalMap)
+                {
+                    for (var p = 0; p < pixels.Length; p++)
+                    {
+                        pixels[p] = EncodeRgbNormal(DecodeRgbNormal(pixels[p]));
+                    }
+                }
                 if (verboseLog && bakeKind == TextureBakeKind.NormalMap)
                 {
                     var center = SampleCenterColor(pixels, pixelWidth, pixelHeight);
@@ -1237,6 +1244,21 @@ namespace NdmfMToon10ToLilToon
         private static Color NeutralNormalColor()
         {
             return new Color(0.5f, 0.5f, 1f, 1f);
+        }
+
+        private static Vector3 DecodeRgbNormal(Color c)
+        {
+            var n = new Vector3(c.r * 2f - 1f, c.g * 2f - 1f, c.b * 2f - 1f);
+            if (n.sqrMagnitude <= 1e-8f) return Vector3.forward;
+            n.Normalize();
+            return n;
+        }
+
+        private static Color EncodeRgbNormal(Vector3 n)
+        {
+            if (n.sqrMagnitude <= 1e-8f) n = Vector3.forward;
+            n.Normalize();
+            return new Color(n.x * 0.5f + 0.5f, n.y * 0.5f + 0.5f, n.z * 0.5f + 0.5f, 1f);
         }
 
         private static void ReplaceTransparentPixels(Texture2D texture, Color replacement)
