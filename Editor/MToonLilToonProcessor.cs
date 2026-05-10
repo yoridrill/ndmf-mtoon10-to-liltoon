@@ -1054,6 +1054,10 @@ namespace NdmfMToon10ToLilToon
                     Debug.Log($"[BumpMapDebug] source name={texture.name} format={(texture as Texture2D)?.format.ToString() ?? "n/a"} readable={(texture as Texture2D)?.isReadable.ToString() ?? "n/a"} center={FormatColor(SampleTextureCenterColor(texture))} encodedX={EncodedX(SampleTextureCenterColor(texture)):F4} encodedY={EncodedY(SampleTextureCenterColor(texture)):F4} unpack={FormatVector3(UnityUnpackNormalRGorAG(SampleTextureCenterColor(texture)))}");
                 }
                 var readable = ToReadableTextureWithTransform(texture, scale, offset, bakeKind == TextureBakeKind.NormalMap);
+                if (bakeKind == TextureBakeKind.NormalMap && readable != null)
+                {
+                    ConvertPackedNormalTextureToRgbNormal(readable);
+                }
                 if (verboseLog && bakeKind == TextureBakeKind.NormalMap && readable != null)
                 {
                     Debug.Log($"[BumpMapDebug] readable center={FormatColor(SampleTextureCenterColor(readable))} encodedX={EncodedX(SampleTextureCenterColor(readable)):F4} encodedY={EncodedY(SampleTextureCenterColor(readable)):F4} unpack={FormatVector3(UnityUnpackNormalRGorAG(SampleTextureCenterColor(readable)))}");
@@ -1079,18 +1083,6 @@ namespace NdmfMToon10ToLilToon
                 if (verboseLog && bakeKind == TextureBakeKind.NormalMap)
                 {
                     Debug.Log($"[BumpMapDebug] resized center={FormatColor(SampleCenterColor(pixels, pixelWidth, pixelHeight))} encodedX={EncodedX(SampleCenterColor(pixels, pixelWidth, pixelHeight)):F4} encodedY={EncodedY(SampleCenterColor(pixels, pixelWidth, pixelHeight)):F4} unpack={FormatVector3(UnityUnpackNormalRGorAG(SampleCenterColor(pixels, pixelWidth, pixelHeight)))}");
-                }
-                if (bakeKind == TextureBakeKind.NormalMap)
-                {
-                    if (verboseLog)
-                    {
-                        var pre = SampleCenterColor(pixels, pixelWidth, pixelHeight);
-                        Debug.Log($"[BumpMapDebug] preConvert center={FormatColor(pre)} alpha={pre.a:F4}");
-                    }
-                    for (var p = 0; p < pixels.Length; p++)
-                    {
-                        pixels[p] = EncodeRgbNormal(DecodeNormalFromSource(pixels[p]));
-                    }
                 }
                 if (verboseLog && bakeKind == TextureBakeKind.NormalMap)
                 {
@@ -1272,6 +1264,18 @@ namespace NdmfMToon10ToLilToon
             // Heuristic: packed normals often keep R high; alpha should carry X but may be lost in some paths.
             var looksPacked = c.r > 0.90f && (c.a < 0.999f || c.b < 0.90f);
             return looksPacked ? DecodePackedNormalAg(c) : DecodeRgbNormal(c);
+        }
+
+        private static void ConvertPackedNormalTextureToRgbNormal(Texture2D texture)
+        {
+            if (texture == null) return;
+            var pixels = texture.GetPixels();
+            for (var i = 0; i < pixels.Length; i++)
+            {
+                pixels[i] = EncodeRgbNormal(DecodeNormalFromSource(pixels[i]));
+            }
+            texture.SetPixels(pixels);
+            texture.Apply(false, false);
         }
 
         private static Color EncodeRgbNormal(Vector3 n)
