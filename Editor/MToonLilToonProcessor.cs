@@ -1067,14 +1067,17 @@ namespace NdmfMToon10ToLilToon
                 var pixelY = Mathf.RoundToInt(rect.y * atlasHeight);
                 var resized = ResizeTexture(src, pixelWidth, pixelHeight);
                 var pixels = resized.GetPixels();
-                if (bakeKind == TextureBakeKind.NormalMap)
-                {
-                    for (var p = 0; p < pixels.Length; p++) pixels[p] = ConvertNormalSampleToRgbNormal(pixels[p]);
-                }
                 atlas.SetPixels(pixelX, pixelY, pixelWidth, pixelHeight, pixels);
             }
             atlas.Apply(false, false);
-            BleedTransparentPixels(atlas, 2);
+            if (bakeKind == TextureBakeKind.NormalMap)
+            {
+                ReplaceTransparentPixels(atlas, NeutralNormalColor());
+            }
+            else
+            {
+                BleedTransparentPixels(atlas, 2);
+            }
             CompressGeneratedAtlas(atlas, destinationProperty);
             mergedMaterial.SetTexture(destinationProperty, atlas);
         }
@@ -1203,28 +1206,17 @@ namespace NdmfMToon10ToLilToon
             return new Color(0.5f, 0.5f, 1f, 1f);
         }
 
-        private static Color EncodeNormalRgb(Vector3 normal)
+        private static void ReplaceTransparentPixels(Texture2D texture, Color replacement)
         {
-            if (normal.sqrMagnitude <= 1e-8f) return NeutralNormalColor();
-            normal.Normalize();
-            return new Color(normal.x * 0.5f + 0.5f, normal.y * 0.5f + 0.5f, normal.z * 0.5f + 0.5f, 1f);
-        }
-
-        private static Vector3 DecodeNormalFromPackedOrRgb(Color c)
-        {
-            var packedX = c.a * 2f - 1f;
-            var packedY = c.g * 2f - 1f;
-            var packedZ2 = 1f - Mathf.Clamp01(packedX * packedX + packedY * packedY);
-            var packed = new Vector3(packedX, packedY, Mathf.Sqrt(Mathf.Max(0f, packedZ2)));
-            var rgb = new Vector3(c.r * 2f - 1f, c.g * 2f - 1f, c.b * 2f - 1f);
-            if (rgb.sqrMagnitude > 1e-8f) rgb.Normalize();
-            var looksPacked = c.a < 0.99f || c.r > 0.95f || c.b > 0.95f;
-            return looksPacked ? packed.normalized : rgb;
-        }
-
-        private static Color ConvertNormalSampleToRgbNormal(Color source)
-        {
-            return EncodeNormalRgb(DecodeNormalFromPackedOrRgb(source));
+            if (texture == null) return;
+            var pixels = texture.GetPixels();
+            for (var i = 0; i < pixels.Length; i++)
+            {
+                if (pixels[i].a > 0.0001f) continue;
+                pixels[i] = replacement;
+            }
+            texture.SetPixels(pixels);
+            texture.Apply(false, false);
         }
 
         private static void EnsureAssetFolder(string folderPath)
