@@ -114,6 +114,7 @@ namespace NdmfMToon10ToLilToon
                     component.enableHairOutlineCorrection,
                     component.hairTipOutlineWidth,
                     component.hairTipRange,
+                    component.useToonStandardFallback,
                     convertedBySource,
                     fakeShadowPairs,
                     mergedHairMaterials,
@@ -257,6 +258,7 @@ namespace NdmfMToon10ToLilToon
             bool enableHairOutlineCorrection,
             float hairTipOutlineWidth,
             float hairTipRange,
+            bool useToonStandardFallback,
             IDictionary<Material, Material> convertedBySource,
             IList<(Material hair, Material fake)> fakeShadowPairs,
             IList<Material> mergedHairMaterials,
@@ -292,7 +294,7 @@ namespace NdmfMToon10ToLilToon
                 }
 
                 var canMerge = selectedForMerge.Contains(source);
-                if (MToonToLilToonMapper.TryConvert(source, lilToonShader, globalOverrides, component.useToonStandardFallback, out var converted, report))
+                if (MToonToLilToonMapper.TryConvert(source, lilToonShader, globalOverrides, useToonStandardFallback, out var converted, report))
                 {
                     result.Add(converted);
                     report.ConvertedMaterialCount++;
@@ -354,11 +356,12 @@ namespace NdmfMToon10ToLilToon
                     lilToonShader,
                     globalOverrides,
                     enableFakeShadow,
-                    fakeShadowDirection,
-                    fakeShadowOffset,
-                    generatedAssetScopeId,
-                    verboseLog,
-                    useHairMergeCache,
+                        fakeShadowDirection,
+                        fakeShadowOffset,
+                        useToonStandardFallback,
+                        generatedAssetScopeId,
+                        verboseLog,
+                        useHairMergeCache,
                     renderer,
                     report,
                     out mergedMaterial,
@@ -420,6 +423,7 @@ namespace NdmfMToon10ToLilToon
             bool enableFakeShadow,
             Vector3 fakeShadowDirection,
             float fakeShadowOffset,
+            bool useToonStandardFallback,
             string generatedAssetScopeId,
             bool verboseLog,
             bool useHairMergeCache,
@@ -447,7 +451,7 @@ namespace NdmfMToon10ToLilToon
                 ? mergedRepresentativeIndex
                 : mergedIndices[0];
 
-            if (!MToonToLilToonMapper.TryConvert(original[baseIndex], lilToonShader, overrides, component.useToonStandardFallback, out mergedMaterial, report))
+            if (!MToonToLilToonMapper.TryConvert(original[baseIndex], lilToonShader, overrides, useToonStandardFallback, out mergedMaterial, report))
             {
                 return false;
             }
