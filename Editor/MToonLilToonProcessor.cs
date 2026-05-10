@@ -1084,7 +1084,7 @@ namespace NdmfMToon10ToLilToon
                 {
                     for (var p = 0; p < pixels.Length; p++)
                     {
-                        pixels[p] = EncodeRgbNormal(DecodeRgbNormal(pixels[p]));
+                        pixels[p] = EncodeRgbNormal(DecodeNormalFromSource(pixels[p]));
                     }
                 }
                 if (verboseLog && bakeKind == TextureBakeKind.NormalMap)
@@ -1252,6 +1252,21 @@ namespace NdmfMToon10ToLilToon
             if (n.sqrMagnitude <= 1e-8f) return Vector3.forward;
             n.Normalize();
             return n;
+        }
+
+        private static Vector3 DecodePackedNormalAg(Color c)
+        {
+            var x = c.a * 2f - 1f;
+            var y = c.g * 2f - 1f;
+            var z2 = 1f - Mathf.Clamp01(x * x + y * y);
+            return new Vector3(x, y, Mathf.Sqrt(Mathf.Max(0f, z2))).normalized;
+        }
+
+        private static Vector3 DecodeNormalFromSource(Color c)
+        {
+            // Heuristic: Unity packed normal / DXT5nm-like samples tend to keep R near 1 while A carries X.
+            var looksPacked = c.r > 0.90f && c.a < 0.999f;
+            return looksPacked ? DecodePackedNormalAg(c) : DecodeRgbNormal(c);
         }
 
         private static Color EncodeRgbNormal(Vector3 n)
