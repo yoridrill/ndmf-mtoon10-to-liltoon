@@ -698,7 +698,7 @@ namespace NdmfMToon10ToLilToon
             if (useToonStandardFallback)
             {
                 destination.SetOverrideTag("VRCFallback", hasOutline ? "toonstandardoutline" : "toonstandard");
-                SetToonStandardFallbackShadingRealistic(destination);
+                ApplyToonStandardFallbackControlParameters(destination, renderType);
                 return;
             }
 
@@ -711,13 +711,28 @@ namespace NdmfMToon10ToLilToon
             destination.SetOverrideTag("VRCFallback", fallback);
         }
 
-        private static void SetToonStandardFallbackShadingRealistic(Material destination)
+        private static void ApplyToonStandardFallbackControlParameters(Material destination, RenderType renderType)
         {
             if (destination == null) return;
-            // Toon Standard fallback uses same-named properties/keywords where available.
-            // Prefer Realistic shading when the corresponding properties exist.
+
+            // Rendering Mode: MToon の分類に合わせる
+            // 0: Opaque, 1: Cutout, 2: Fade, 3: Transparent
+            var mode = renderType switch
+            {
+                RenderType.Cutout => 1f,
+                RenderType.Transparent => 3f,
+                _ => 0f
+            };
+            SetIfExists(destination, "_Mode", mode);
+
+            // Facing: 元の Cull 設定に合わせる
+            var cull = (float)CullModeResolver.ResolveFromMaterial(destination);
+            SetIfExists(destination, "_Cull", cull);
+
+            // Shading: Toon Standard 標準 Ramp の Realistic
             SetIfExists(destination, "_ShadingMode", 0f);
             SetIfExists(destination, "_Shading", 0f);
+            SetIfExists(destination, "_ShadingType", 0f);
         }
 
         private static void ApplyRenderQueue(Material source, Material destination, RenderType renderType)
