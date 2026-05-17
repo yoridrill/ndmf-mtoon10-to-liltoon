@@ -748,15 +748,6 @@ namespace NdmfMToon10ToLilToon
             };
             SetIfExists(destination, "_Mode", mode);
 
-            // Facing: 元の Cull 設定に合わせる
-            var cull = (float)CullModeResolver.ResolveFromMaterial(destination);
-            SetIfExists(destination, "_Cull", cull);
-
-            // Shading: Toon Standard 標準 Ramp の Realistic
-            SetIfExists(destination, "_ShadingMode", 0f);
-            SetIfExists(destination, "_Shading", 0f);
-            SetIfExists(destination, "_ShadingType", 0f);
-
 #if UNITY_EDITOR
             destination.SetTexture("_Ramp", AssetDatabase.LoadAssetAtPath<Texture2D>(
                 AssetDatabase.GUIDToAssetPath("348500adef1d2da428abc7b720b8b699")
