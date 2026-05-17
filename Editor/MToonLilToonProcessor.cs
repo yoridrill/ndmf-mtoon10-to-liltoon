@@ -200,6 +200,11 @@ namespace NdmfMToon10ToLilToon
                 }
             }
 
+            if (component.useToonStandardFallback)
+            {
+                ApplyToonStandardFallbackRampToMaterials(convertedBySource.Values);
+            }
+
             ApplyBacklightExclusionToMouthMaterials(convertedBySource.Values);
 
             component.scannedMaterialCount = report.ScannedMaterialCount;
@@ -801,6 +806,28 @@ namespace NdmfMToon10ToLilToon
                     backlightColor.a = 0f;
                     material.SetColor("_BacklightColor", backlightColor);
                 }
+            }
+        }
+
+        private static void ApplyToonStandardFallbackRampToMaterials(IEnumerable<Material> materials)
+        {
+            if (materials == null) return;
+
+            var path = AssetDatabase.GUIDToAssetPath("348500adef1d2da428abc7b720b8b699");
+            var ramp = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+            if (ramp == null)
+            {
+                Debug.LogWarning("[MToon10ToLilToon] Toon Standard Realistic ramp was not found.");
+                return;
+            }
+
+            foreach (var material in materials)
+            {
+                if (material == null) continue;
+                if (!material.HasProperty("_Ramp")) continue;
+
+                material.SetTexture("_Ramp", ramp);
+                EditorUtility.SetDirty(material);
             }
         }
 

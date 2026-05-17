@@ -4,9 +4,6 @@ using System.Linq;
 using UnityEngine;
 using UnityEngine.Serialization;
 using UnityEngine.Rendering;
-#if UNITY_EDITOR
-using UnityEditor;
-#endif
 
 namespace NdmfMToon10ToLilToon
 {
@@ -703,7 +700,6 @@ namespace NdmfMToon10ToLilToon
             if (useToonStandardFallback)
             {
                 destination.SetOverrideTag("VRCFallback", BuildToonStandardFallbackTag(renderType, hasOutline, cullMode));
-                ApplyToonStandardFallbackControlParameters(destination);
                 return;
             }
 
@@ -732,17 +728,6 @@ namespace NdmfMToon10ToLilToon
             };
             var sidedSuffix = cullMode == CullMode.Off ? "DoubleSided" : string.Empty;
             return $"{baseTag}{modeSuffix}{sidedSuffix}";
-        }
-
-        private static void ApplyToonStandardFallbackControlParameters(Material destination)
-        {
-            if (destination == null) return;
-
-#if UNITY_EDITOR
-            destination.SetTexture("_Ramp", AssetDatabase.LoadAssetAtPath<Texture2D>(
-                AssetDatabase.GUIDToAssetPath("348500adef1d2da428abc7b720b8b699")
-            ));
-#endif
         }
 
         private static void ApplyRenderQueue(Material source, Material destination, RenderType renderType)
