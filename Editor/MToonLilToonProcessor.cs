@@ -51,6 +51,8 @@ namespace NdmfMToon10ToLilToon
                 MToonToLilToonMapper.ApplyGlobalOverridesToMaterial(materials[i], overrides);
             }
 
+            ApplyBacklightExclusionToMouthMaterials(materials);
+
             if (!disableShadowReceiveForFace && !disableBacklightStrengthForFace) return;
 
             ApplyFaceGlobalExclusionSettings(component.fakeShadowFaceMaterial, disableShadowReceiveForFace, disableBacklightStrengthForFace);
@@ -112,6 +114,7 @@ namespace NdmfMToon10ToLilToon
                     component.enableHairOutlineCorrection,
                     component.hairTipOutlineWidth,
                     component.hairTipRange,
+                    component.useToonStandardFallback,
                     convertedBySource,
                     fakeShadowPairs,
                     mergedHairMaterials,
@@ -197,6 +200,13 @@ namespace NdmfMToon10ToLilToon
                 }
             }
 
+            if (component.useToonStandardFallback)
+            {
+                ApplyToonStandardFallbackRampToMaterials(convertedBySource.Values);
+            }
+
+            ApplyBacklightExclusionToMouthMaterials(convertedBySource.Values);
+
             component.scannedMaterialCount = report.ScannedMaterialCount;
             component.convertedMaterialCount = report.ConvertedMaterialCount;
             component.skippedMaterialCount = report.SkippedMaterialCount;
@@ -253,6 +263,7 @@ namespace NdmfMToon10ToLilToon
             bool enableHairOutlineCorrection,
             float hairTipOutlineWidth,
             float hairTipRange,
+            bool useToonStandardFallback,
             IDictionary<Material, Material> convertedBySource,
             IList<(Material hair, Material fake)> fakeShadowPairs,
             IList<Material> mergedHairMaterials,
@@ -288,7 +299,7 @@ namespace NdmfMToon10ToLilToon
                 }
 
                 var canMerge = selectedForMerge.Contains(source);
-                if (MToonToLilToonMapper.TryConvert(source, lilToonShader, globalOverrides, out var converted, report))
+                if (MToonToLilToonMapper.TryConvert(source, lilToonShader, globalOverrides, useToonStandardFallback, out var converted, report))
                 {
                     result.Add(converted);
                     report.ConvertedMaterialCount++;
@@ -350,11 +361,12 @@ namespace NdmfMToon10ToLilToon
                     lilToonShader,
                     globalOverrides,
                     enableFakeShadow,
-                    fakeShadowDirection,
-                    fakeShadowOffset,
-                    generatedAssetScopeId,
-                    verboseLog,
-                    useHairMergeCache,
+                        fakeShadowDirection,
+                        fakeShadowOffset,
+                        useToonStandardFallback,
+                        generatedAssetScopeId,
+                        verboseLog,
+                        useHairMergeCache,
                     renderer,
                     report,
                     out mergedMaterial,
@@ -416,6 +428,7 @@ namespace NdmfMToon10ToLilToon
             bool enableFakeShadow,
             Vector3 fakeShadowDirection,
             float fakeShadowOffset,
+            bool useToonStandardFallback,
             string generatedAssetScopeId,
             bool verboseLog,
             bool useHairMergeCache,
@@ -443,7 +456,7 @@ namespace NdmfMToon10ToLilToon
                 ? mergedRepresentativeIndex
                 : mergedIndices[0];
 
-            if (!MToonToLilToonMapper.TryConvert(original[baseIndex], lilToonShader, overrides, out mergedMaterial, report))
+            if (!MToonToLilToonMapper.TryConvert(original[baseIndex], lilToonShader, overrides, useToonStandardFallback, out mergedMaterial, report))
             {
                 return false;
             }
@@ -768,13 +781,53 @@ namespace NdmfMToon10ToLilToon
 
             if (disableBacklightStrengthForFace)
             {
-                SetFloatIfAnyExists(faceMaterial, new[] { "_UseBacklight", "_BacklightMainStrength" }, 0f);
-                if (faceMaterial.HasProperty("_BacklightColor"))
-                {
-                    var backlightColor = faceMaterial.GetColor("_BacklightColor");
-                    backlightColor.a = 0f;
-                    faceMaterial.SetColor("_BacklightColor", backlightColor);
-                }
+                DisableBacklightOnMaterial(faceMaterial);
+            }
+        }
+
+        private static void ApplyBacklightExclusionToMouthMaterials(IEnumerable<Material> materials)
+        {
+            if (materials == null) return;
+
+            foreach (var material in materials)
+            {
+                if (material == null) continue;
+                if (material.name.IndexOf("mouth", System.StringComparison.OrdinalIgnoreCase) < 0) continue;
+                DisableBacklightOnMaterial(material);
+            }
+        }
+
+        private static void DisableBacklightOnMaterial(Material material)
+        {
+            if (material == null) return;
+
+            SetFloatIfAnyExists(material, new[] { "_UseBacklight", "_BacklightMainStrength" }, 0f);
+            if (!material.HasProperty("_BacklightColor")) return;
+
+            var backlightColor = material.GetColor("_BacklightColor");
+            backlightColor.a = 0f;
+            material.SetColor("_BacklightColor", backlightColor);
+        }
+
+        private static void ApplyToonStandardFallbackRampToMaterials(IEnumerable<Material> materials)
+        {
+            if (materials == null) return;
+
+            var path = AssetDatabase.GUIDToAssetPath("348500adef1d2da428abc7b720b8b699");
+            var ramp = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+            if (ramp == null)
+            {
+                Debug.LogWarning("[MToon10ToLilToon] Toon Standard Realistic ramp was not found.");
+                return;
+            }
+
+            foreach (var material in materials)
+            {
+                if (material == null) continue;
+                if (!material.HasProperty("_Ramp")) continue;
+
+                material.SetTexture("_Ramp", ramp);
+                EditorUtility.SetDirty(material);
             }
         }
 

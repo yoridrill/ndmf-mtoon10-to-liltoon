@@ -273,7 +273,7 @@ namespace NdmfMToon10ToLilToon
             "normal map",
         };
 
-        public static bool TryConvert(Material source, Shader lilToonShader, LilToonGlobalOverrides overrides, out Material converted, ConversionReport report)
+        public static bool TryConvert(Material source, Shader lilToonShader, LilToonGlobalOverrides overrides, bool useToonStandardFallback, out Material converted, ConversionReport report)
         {
             converted = null;
             if (source == null || lilToonShader == null) return false;
@@ -312,7 +312,7 @@ namespace NdmfMToon10ToLilToon
                 ApplyRimState(source, converted);
                 ApplyUvAnimationMapping(source, converted);
                 ApplyFeatureEnables(source, converted);
-                ApplyFallback(converted, renderType);
+                ApplyFallback(converted, renderType, hasOutline, useToonStandardFallback);
                 ApplyRenderQueue(source, converted, renderType);
                 ApplyTransparentMode(converted, renderType);
                 ApplyTransparentZWrite(converted, renderType, transparentWithZWrite);
@@ -693,15 +693,41 @@ namespace NdmfMToon10ToLilToon
             SetIfExists(destination, "_OutlineVertexR2Width", 0f);
         }
 
-        private static void ApplyFallback(Material destination, RenderType renderType)
+        private static void ApplyFallback(Material destination, RenderType renderType, bool hasOutline, bool useToonStandardFallback)
         {
-            var fallback = renderType switch
+            var cullMode = CullModeResolver.ResolveFromMaterial(destination);
+
+            if (useToonStandardFallback)
+            {
+                destination.SetOverrideTag("VRCFallback", BuildToonStandardFallbackTag(renderType, hasOutline, cullMode));
+                return;
+            }
+
+            destination.SetOverrideTag("VRCFallback", BuildUnlitFallbackTag(renderType, cullMode));
+        }
+
+        private static string BuildUnlitFallbackTag(RenderType renderType, CullMode cullMode)
+        {
+            var baseTag = renderType switch
             {
                 RenderType.Cutout => "UnlitCutout",
-                RenderType.Transparent => "Unlit/Transparent",
+                RenderType.Transparent => "UnlitTransparent",
                 _ => "Unlit"
             };
-            destination.SetOverrideTag("VRCFallback", fallback);
+            return cullMode == CullMode.Off ? $"{baseTag}DoubleSided" : baseTag;
+        }
+
+        private static string BuildToonStandardFallbackTag(RenderType renderType, bool hasOutline, CullMode cullMode)
+        {
+            var baseTag = hasOutline ? "toonstandardoutline" : "toonstandard";
+            var modeSuffix = renderType switch
+            {
+                RenderType.Cutout => "Cutout",
+                RenderType.Transparent => "Transparent",
+                _ => string.Empty
+            };
+            var sidedSuffix = cullMode == CullMode.Off ? "DoubleSided" : string.Empty;
+            return $"{baseTag}{modeSuffix}{sidedSuffix}";
         }
 
         private static void ApplyRenderQueue(Material source, Material destination, RenderType renderType)
