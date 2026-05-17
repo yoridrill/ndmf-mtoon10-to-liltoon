@@ -774,15 +774,14 @@ namespace NdmfMToon10ToLilToon
                 useToonStandardFallbackProp.boolValue = EditorGUILayout.ToggleLeft(
                     T("Custom Safety FallbackをToon Standardにする", "Use Toon Standard for Custom Safety Fallback"),
                     useToonStandardFallbackProp.boolValue);
-                EditorGUILayout.HelpBox(
-                    T(
-                        "Toon Standardは、CutoutやTransparentは非対応です。 事前にメッシュをトリミングしたり、頬染めなどは削除しておく必要があります。",
-                        "Toon Standard does not support Cutout or Transparent. You need to trim meshes and remove blush-like transparent effects beforehand."),
-                    MessageType.Warning);
-
-                var verboseLogProp = serializedObject.FindProperty(nameof(MToonLilToonComponent.verboseLog));
-                verboseLogProp.boolValue = EditorGUILayout.ToggleLeft("Verbose Log", verboseLogProp.boolValue);
-                EditorGUILayout.Space(4f);
+                if (useToonStandardFallbackProp.boolValue)
+                {
+                    EditorGUILayout.HelpBox(
+                        T(
+                            "Toon Standardは、CutoutやTransparentは非対応です。 事前にメッシュをトリミングしたり、頬染めなどは削除しておく必要があります。",
+                            "Toon Standard does not support Cutout or Transparent. You need to trim meshes and remove blush-like transparent effects beforehand."),
+                        MessageType.Warning);
+                }
 
                 var rawButtonRect = EditorGUILayout.GetControlRect(false, EditorGUIUtility.singleLineHeight);
                 var buttonRect = EditorGUI.IndentedRect(rawButtonRect);
@@ -798,6 +797,10 @@ namespace NdmfMToon10ToLilToon
                         "モデルが重複したり、見えない場合に押してください。\nPreview オブジェクトを削除し、Renderer を再表示します。",
                         "Use this if the avatar stays hidden, frozen, or stuck after Preview.\nThis removes temporary Preview objects and re-enables renderers."),
                     MessageType.Warning);
+
+                var verboseLogProp = serializedObject.FindProperty(nameof(MToonLilToonComponent.verboseLog));
+                verboseLogProp.boolValue = EditorGUILayout.ToggleLeft("Verbose Log", verboseLogProp.boolValue);
+                EditorGUILayout.Space(4f);
             }
 
             return changed;
