@@ -4,6 +4,9 @@ using System.Linq;
 using UnityEngine;
 using UnityEngine.Serialization;
 using UnityEngine.Rendering;
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
 
 namespace NdmfMToon10ToLilToon
 {
@@ -695,20 +698,40 @@ namespace NdmfMToon10ToLilToon
 
         private static void ApplyFallback(Material destination, RenderType renderType, bool hasOutline, bool useToonStandardFallback)
         {
+            var cullMode = CullModeResolver.ResolveFromMaterial(destination);
+
             if (useToonStandardFallback)
             {
-                destination.SetOverrideTag("VRCFallback", hasOutline ? "toonstandardoutline" : "toonstandard");
+                destination.SetOverrideTag("VRCFallback", BuildToonStandardFallbackTag(renderType, hasOutline, cullMode));
                 ApplyToonStandardFallbackControlParameters(destination, renderType);
                 return;
             }
 
-            var fallback = renderType switch
+            destination.SetOverrideTag("VRCFallback", BuildUnlitFallbackTag(renderType, cullMode));
+        }
+
+        private static string BuildUnlitFallbackTag(RenderType renderType, CullMode cullMode)
+        {
+            var baseTag = renderType switch
             {
                 RenderType.Cutout => "UnlitCutout",
-                RenderType.Transparent => "Unlit/Transparent",
+                RenderType.Transparent => "UnlitTransparent",
                 _ => "Unlit"
             };
-            destination.SetOverrideTag("VRCFallback", fallback);
+            return cullMode == CullMode.Off ? $"{baseTag}DoubleSided" : baseTag;
+        }
+
+        private static string BuildToonStandardFallbackTag(RenderType renderType, bool hasOutline, CullMode cullMode)
+        {
+            var baseTag = hasOutline ? "toonstandardoutline" : "toonstandard";
+            var modeSuffix = renderType switch
+            {
+                RenderType.Cutout => "Cutout",
+                RenderType.Transparent => "Transparent",
+                _ => string.Empty
+            };
+            var sidedSuffix = cullMode == CullMode.Off ? "DoubleSided" : string.Empty;
+            return $"{baseTag}{modeSuffix}{sidedSuffix}";
         }
 
         private static void ApplyToonStandardFallbackControlParameters(Material destination, RenderType renderType)
@@ -733,6 +756,12 @@ namespace NdmfMToon10ToLilToon
             SetIfExists(destination, "_ShadingMode", 0f);
             SetIfExists(destination, "_Shading", 0f);
             SetIfExists(destination, "_ShadingType", 0f);
+
+#if UNITY_EDITOR
+            destination.SetTexture("_Ramp", AssetDatabase.LoadAssetAtPath<Texture2D>(
+                AssetDatabase.GUIDToAssetPath("348500adef1d2da428abc7b720b8b699")
+            ));
+#endif
         }
 
         private static void ApplyRenderQueue(Material source, Material destination, RenderType renderType)
