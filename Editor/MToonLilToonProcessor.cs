@@ -781,13 +781,7 @@ namespace NdmfMToon10ToLilToon
 
             if (disableBacklightStrengthForFace)
             {
-                SetFloatIfAnyExists(faceMaterial, new[] { "_UseBacklight", "_BacklightMainStrength" }, 0f);
-                if (faceMaterial.HasProperty("_BacklightColor"))
-                {
-                    var backlightColor = faceMaterial.GetColor("_BacklightColor");
-                    backlightColor.a = 0f;
-                    faceMaterial.SetColor("_BacklightColor", backlightColor);
-                }
+                DisableBacklightOnMaterial(faceMaterial);
             }
         }
 
@@ -799,14 +793,20 @@ namespace NdmfMToon10ToLilToon
             {
                 if (material == null) continue;
                 if (material.name.IndexOf("mouth", System.StringComparison.OrdinalIgnoreCase) < 0) continue;
-                SetFloatIfAnyExists(material, new[] { "_UseBacklight", "_BacklightMainStrength" }, 0f);
-                if (material.HasProperty("_BacklightColor"))
-                {
-                    var backlightColor = material.GetColor("_BacklightColor");
-                    backlightColor.a = 0f;
-                    material.SetColor("_BacklightColor", backlightColor);
-                }
+                DisableBacklightOnMaterial(material);
             }
+        }
+
+        private static void DisableBacklightOnMaterial(Material material)
+        {
+            if (material == null) return;
+
+            SetFloatIfAnyExists(material, new[] { "_UseBacklight", "_BacklightMainStrength" }, 0f);
+            if (!material.HasProperty("_BacklightColor")) return;
+
+            var backlightColor = material.GetColor("_BacklightColor");
+            backlightColor.a = 0f;
+            material.SetColor("_BacklightColor", backlightColor);
         }
 
         private static void ApplyToonStandardFallbackRampToMaterials(IEnumerable<Material> materials)
