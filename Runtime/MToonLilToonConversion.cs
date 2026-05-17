@@ -703,7 +703,7 @@ namespace NdmfMToon10ToLilToon
             if (useToonStandardFallback)
             {
                 destination.SetOverrideTag("VRCFallback", BuildToonStandardFallbackTag(renderType, hasOutline, cullMode));
-                ApplyToonStandardFallbackControlParameters(destination, renderType);
+                ApplyToonStandardFallbackControlParameters(destination);
                 return;
             }
 
@@ -734,19 +734,9 @@ namespace NdmfMToon10ToLilToon
             return $"{baseTag}{modeSuffix}{sidedSuffix}";
         }
 
-        private static void ApplyToonStandardFallbackControlParameters(Material destination, RenderType renderType)
+        private static void ApplyToonStandardFallbackControlParameters(Material destination)
         {
             if (destination == null) return;
-
-            // Rendering Mode: MToon の分類に合わせる
-            // 0: Opaque, 1: Cutout, 2: Fade, 3: Transparent
-            var mode = renderType switch
-            {
-                RenderType.Cutout => 1f,
-                RenderType.Transparent => 3f,
-                _ => 0f
-            };
-            SetIfExists(destination, "_Mode", mode);
 
 #if UNITY_EDITOR
             destination.SetTexture("_Ramp", AssetDatabase.LoadAssetAtPath<Texture2D>(
